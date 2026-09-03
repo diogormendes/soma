@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  soma:
+    image: drmspidi/soma:latest
+    container_name: soma-app
+    restart: unless-stopped
+    ports:
+      - "3456:3456"
+    environment:
+      # ==========================================
+      # OBRIGATÓRIOS
+      # ==========================================
+      # A string de conexão com o banco de dados Neon (PostgreSQL)
+      - DATABASE_URL=postgres://user:password@ep-wandering-sun-123456.us-east-2.aws.neon.tech/neondb?sslmode=require
+      
+      # Uma string aleatória de 32 caracteres para criptografia de sessão. 
+      # Você pode gerar uma rodando o comando `openssl rand -base64 32` no terminal ou em sites de gerador de senhas.
+      - AUTH_SECRET=sua_chave_secreta_aqui
+      
+      # A URL base onde o app vai rodar (ex: http://ip-do-seu-nas:3456)
+      - NEXT_PUBLIC_BASE_URL=http://192.168.X.X:3456
+      
+      # O seu username do GitHub para garantir que só VOCÊ tenha acesso ao app
+      - GITHUB_OWNER_USERNAME=diogormendes
+      
+      # ==========================================
+      # GITHUB (Para o botão "Sync Now" e Login)
+      # ==========================================
+      # Crie um OAuth App no GitHub: https://github.com/settings/developers
+      # Homepage URL: http://ip-do-seu-nas:3456
+      # Callback URL: http://ip-do-seu-nas:3456/api/auth/callback/github
+      - GITHUB_CLIENT_ID=seu_client_id_do_github
+      - GITHUB_CLIENT_SECRET=seu_client_secret_do_github
+      
+      # Personal Access Token do GitHub (com escopo repo:workflow). Necessário para o botão de Sync manual.
+      - GITHUB_PAT=seu_github_pat_aqui
+      
+      # ==========================================
+      # STRAVA (Opcional - para enviar dados ao Strava)
+      # ==========================================
+      # Crie em https://www.strava.com/settings/api
+      - STRAVA_CLIENT_ID=seu_client_id_do_strava
+      - STRAVA_CLIENT_SECRET=seu_client_secret_do_strava
