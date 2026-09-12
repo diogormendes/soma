@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { GarminAuth, DBTokenStore } from "garmin-auth";
 import { getDb } from "@/lib/db";
 import { pushPlanToGarmin } from "@/lib/garmin-workout-builder";
+import { getLivePlan } from "@/lib/live-plan";
 
 // garmin-auth needs Node APIs (fetch/pg).
 export const runtime = "nodejs";
@@ -24,9 +25,12 @@ export async function GET(req: Request): Promise<Response> {
   if (!databaseUrl) return NextResponse.json({ error: "DATABASE_URL not set" }, { status: 500 });
   const sql = getDb();
   try {
-    const planRows = await sql`SELECT id FROM training_plan WHERE status = 'active' LIMIT 1`;
-    if (!planRows.length) return NextResponse.json({ ok: true, activePlan: null, pushed: 0, failed: 0 });
-    const planId = Number(planRows[0].id);
+    // Only a LIVE plan reaches the watch (soma#926): a paused, finished or
+    // dropped one pushes nothing, and a plan far ahead starts pushing once it
+    // has a session within a week.
+    const live = await getLivePlan(sql);
+    if (!live.plan) return NextResponse.json({ ok: true, activePlan: null, pushed: 0, failed: 0, engagement: live.engagement });
+    const planId = live.plan.id;
 
     const auth = new GarminAuth({ store: new DBTokenStore(databaseUrl) });
     const client = await auth.client();

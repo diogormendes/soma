@@ -30,9 +30,11 @@ export interface CreatePlanResult { planId: number; days: number; pushed?: PushR
  */
 export async function createPlan(
   sql: QueryFn, client: GarminClient | null,
-  opts: { raceDate: string; raceDistanceKm?: number; goalTimeSeconds?: number; vdot?: number; push?: boolean },
+  opts: { raceDate: string; raceDistanceKm?: number; goalTimeSeconds?: number; vdot?: number; push?: boolean; name?: string },
 ): Promise<CreatePlanResult> {
   const plan = generatePlan(opts.raceDate, opts.raceDistanceKm ?? 21.1, opts.goalTimeSeconds ?? 5700, opts.vdot ?? PLAN_VDOT);
+  // The generator carries a fixed name; a plan is named by the user or by its race (soma#926).
+  plan.plan_name = (opts.name ?? "").trim() || defaultPlanName(opts.raceDistanceKm ?? 21.1, opts.raceDate);
   const planId = await storePlan(sql, plan);
   // Single active plan: deactivate any others, activate this one.
   await sql`UPDATE training_plan SET status = 'inactive' WHERE status = 'active' AND id != ${planId}`;
@@ -106,4 +108,47 @@ export async function regenerateWorkoutSteps(sql: QueryFn): Promise<RegenResult>
     updated += 1;
   }
   return { updated, skipped };
+}
+
+/** "Half marathon · Oct 18, 2026", or the distance when it is not a standard one. */
+export function defaultPlanName(distanceKm: number, raceDate: string): string {
+  const named: [number, string][] = [[5, "5K"], [10, "10K"], [21.1, "Half marathon"], [42.2, "Marathon"]];
+  const label = named.find(([d]) => Math.abs(d - distanceKm) < 0.15)?.[1] ?? `${distanceKm} km`;
+  const [y, m, d] = raceDate.split("-").map(Number);
+  const when = new Date(y, (m ?? 1) - 1, d ?? 1).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return `${label} · ${when}`;
+}
+
+export interface DropPlanResult { planId: number; removed: number; failed: number }
+
+/** The part of GarminClient a drop needs (garmin-auth 0.7.1 and later). */
+export type GarminDeleter = Pick<GarminClient, "delete">;
+
+/**
+ * Drop the current plan (soma#926): mark it dropped, keep every row as history,
+ * and take its pushed workouts dated today or later off the Garmin calendar.
+ * Past workouts stay: they happened, or were skipped, and both are history.
+ * DB + EXTERNAL Garmin deletes. Without a client only the mark is made.
+ */
+export async function dropPlan(sql: QueryFn, client: GarminDeleter | null, planId: number, today: string): Promise<DropPlanResult> {
+  await sql`UPDATE training_plan SET status = 'dropped', dropped_at = now() WHERE id = ${planId} AND dropped_at IS NULL`;
+  let removed = 0, failed = 0;
+  if (client) {
+    const rows = await sql`
+      SELECT id, garmin_workout_id FROM training_plan_day
+      WHERE plan_id = ${planId} AND garmin_push_status = 'pushed' AND garmin_workout_id IS NOT NULL
+        AND day_date >= ${today}::date
+      ORDER BY day_date`;
+    for (const row of rows) {
+      try {
+        await client.delete(`/workout-service/workout/${row.garmin_workout_id}`);
+        await sql`UPDATE training_plan_day SET garmin_push_status = 'removed' WHERE id = ${row.id}`;
+        removed += 1;
+      } catch (e) {
+        console.error(`Failed to remove workout ${row.garmin_workout_id} for day ${row.id}: ${(e as Error).message}`);
+        failed += 1;
+      }
+    }
+  }
+  return { planId, removed, failed };
 }

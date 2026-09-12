@@ -6,6 +6,7 @@ import type { SlotBudgets } from "@/lib/nutrition-types";
 import { computeAdaptiveContext } from "@/lib/adaptive-tdee";
 import { computeWeeklyAdherence } from "@/lib/adherence";
 import { isObservedDay } from "@/lib/observed-day";
+import { getLivePlan } from "@/lib/live-plan";
 import { reconcile, type DayIn } from "@/lib/energy-reconcile";
 import { nutritionEngagement, WEEK_ENGAGEMENT_FLOOR_DAYS } from "@/lib/engagement";
 import { getWeightTrend } from "@/lib/weight-trend";
@@ -274,19 +275,16 @@ export async function GET(req: NextRequest) {
     //   1. Ad-hoc planned run (nutrition_day.planned_run_km) — user-set
     //      via the Today's Activity panel for unplanned/ad-hoc runs.
     //   2. Coach plan (training_plan_day.target_distance_km) — fallback
-    //      when no ad-hoc value but an active training plan exists.
+    //      when no ad-hoc value and the plan is LIVE for that day (soma#926):
+    //      a paused, finished or dropped plan prescribes nothing.
     //   3. 0 — no planned run.
     const adhocRunKm = Number(plan?.planned_run_km) || 0;
     if (adhocRunKm > 0) {
       runDistanceKm = adhocRunKm;
     } else {
-      const runDistanceRows = await sql`
-        SELECT target_distance_km FROM training_plan_day d
-        JOIN training_plan p ON d.plan_id = p.id
-        WHERE p.status = 'active' AND d.day_date = ${date}
-        LIMIT 1
-      `;
-      runDistanceKm = Number(runDistanceRows[0]?.target_distance_km) || 0;
+      const live = await getLivePlan(sql, date);
+      const planDay = live.days.find((d) => d.day_date === date);
+      runDistanceKm = Number(planDay?.target_distance_km) || 0;
     }
 
     if (runEnabled && runDistanceKm > 0) {

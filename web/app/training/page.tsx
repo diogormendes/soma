@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { Card, CardContent } from "@/components/ui/card";
 import { TrainingDashboard } from "@/components/training-dashboard";
 import { getDb } from "@/lib/db";
 import { getLivePlan, getTrailingLoad, type LivePlan } from "@/lib/live-plan";
-import { Target } from "lucide-react";
 import { TrainingControls } from "@/components/training-controls";
+import { PlanLifecycleCard } from "@/components/plan-lifecycle-card";
+import { getPlanLifecycle } from "@/lib/live-plan";
 import { projectVdotSeries, DEFAULT_BANISTER, type DatedLoad } from "banister";
 import { vdotFromHmSeconds } from "banister";
 import { todayAthlete } from "@/lib/athlete-tz";
@@ -353,7 +353,7 @@ async function getTrajectoryData(
 
 export default async function TrainingPage() {
   const today = todayAthlete();
-  const [planForPage, readiness, pmcLatest, fitnessLatest, referenceData, banisterParams, trailingLoad] = await Promise.all([
+  const [planForPage, readiness, pmcLatest, fitnessLatest, referenceData, banisterParams, trailingLoad, lifecycle] = await Promise.all([
     getPlanForPage(),
     getReadiness(),
     getPMCLatest(),
@@ -361,6 +361,7 @@ export default async function TrainingPage() {
     getReferenceData(),
     getBanisterParams(),
     getTrailingLoad(getDb(), today, 28),
+    getPlanLifecycle(getDb(), today),
   ]);
   const { planDays, raceInfo, live } = planForPage;
   const engagement = live.engagement;
@@ -415,10 +416,15 @@ export default async function TrainingPage() {
 
   // Header subtitle. Never present a dormant or unfollowed plan as live: the
   // engagement basis says exactly what the situation is, in plain words.
+  const cur = lifecycle.current;
   const planSubtitle = !planLive
-    ? engagement.state === "absent"
-      ? `No training plan · ${fallback.activeDays} sessions in the last ${fallback.windowDays} days`
-      : `${engagement.basis} · ${fallback.activeDays} sessions in the last ${fallback.windowDays} days`
+    ? cur?.state === "finished"
+      ? `${cur.name} · finished ${cur.raceDate} · ${cur.sessionsDone} of ${cur.sessionsPlanned} sessions done`
+      : cur?.state === "dropped"
+        ? `${cur.name} · dropped · ${fallback.activeDays} sessions in the last ${fallback.windowDays} days`
+        : engagement.state === "absent"
+          ? `No training plan · ${fallback.activeDays} sessions in the last ${fallback.windowDays} days`
+          : `${engagement.basis} · ${fallback.activeDays} sessions in the last ${fallback.windowDays} days`
     : racePast
       ? `${raceInfo?.plan_name || "Training Plan"} · race completed ${Math.abs(rawDaysUntilRace as number)}d ago`
       : `${raceInfo?.plan_name || "Training Plan"} · ${daysUntilRace}d to race${todayEntry ? ` · Week ${currentWeek}/${totalWeeks}` : ""}`;
@@ -435,22 +441,8 @@ export default async function TrainingPage() {
       </div>
 
       <div className="space-y-6">
-        {!planLive && (
-          <Card data-testid="training-no-live-plan">
-            <CardContent className="py-6 flex items-start gap-4">
-              <Target className="h-8 w-8 mt-0.5 text-muted-foreground opacity-50 shrink-0" />
-              <div className="space-y-1">
-                <h2 className="text-[1rem] font-semibold text-foreground" data-testid="training-no-live-plan-title">
-                  {engagement.state === "dormant" ? "Plan is dormant" : engagement.state === "partial" ? "Plan exists, not being followed" : "No training plan"}
-                </h2>
-                <p className="text-sm text-muted-foreground">{engagement.basis}.</p>
-                <p className="text-sm text-muted-foreground">
-                  Everything below is from what you actually did. Projections assume {fallback.label}.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* The plan's lifecycle in plain words, with Drop, Past plans and New plan (soma#926). */}
+        <PlanLifecycleCard lifecycle={lifecycle} fallbackLabel={fallback.label} />
         {/* Training Dashboard — client component managing graph, trajectory, and plan */}
         <TrainingDashboard
           planDays={planDays as any}
