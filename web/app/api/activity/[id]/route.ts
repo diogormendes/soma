@@ -25,7 +25,7 @@ export async function GET(
 
   // Extract time-series from details endpoint
   const detailsRow = data["details"];
-  let timeSeries: Array<{
+  const timeSeries: Array<{
     elapsed_sec: number;
     hr: number | null;
     speed: number | null;

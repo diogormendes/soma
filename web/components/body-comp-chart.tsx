@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  ReferenceLine, ComposedChart, Area, Bar, Cell,
-} from "recharts";
+  ReferenceLine, ComposedChart, Bar, Cell } from "recharts";
 
 interface BodyCompData {
   profile: {
@@ -69,7 +68,7 @@ export function BodyCompChart() {
   // the empty state instead of destructuring a null profile.
   if (!data || !data.profile || !data.weights?.length) return <div className="text-center text-muted-foreground py-8">No data available</div>;
 
-  const { profile, weights, goalLine, trendPrediction, calPredicted, dailyDeficits, goalDeficit } = data;
+  const { profile, weights, goalLine, trendPrediction: _trendPrediction, calPredicted, dailyDeficits, goalDeficit } = data;
 
   // Merge weights and projection into one dataset for the chart
   // Only show weights from last 3 months
@@ -159,7 +158,7 @@ export function BodyCompChart() {
     return Math.round((fat / w) * 1000) / 10;
   };
 
-  const showCalPredicted = (calPredicted?.length ?? 0) >= 7;
+  const _showCalPredicted = (calPredicted?.length ?? 0) >= 7;
 
   // Format date for X axis
   const formatDate = (date: string) => {
@@ -391,8 +390,7 @@ export function BodyCompChart() {
           goalLine: Math.max(0, d.totalBurn - goalDeficit),
           eatenDot: d.consumed, // separate key for scatter overlay
           // A day outside the current window is context, not a sum: fade it (#728).
-          barOpacity: d.inWindow === false ? 0.3 : 1,
-        }));
+          barOpacity: d.inWindow === false ? 0.3 : 1 }));
         const outside = chartData.filter(d => d.inWindow === false).length;
         return (
         <Card>
@@ -442,8 +440,7 @@ export function BodyCompChart() {
                           borderRadius: "8px",
                           padding: "10px 14px",
                           fontSize: "12px",
-                          minWidth: 220,
-                        }}>
+                          minWidth: 220 }}>
                           <div style={{ fontWeight: "bold", marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
                             <span>{dayLabel}</span>
                             <span style={{ fontSize: 10, opacity: 0.5 }}>{day.source === "extrapolated" ? "ESTIMATED" : day.source === "partial" ? "PARTLY LOGGED" : day.isToday ? "IN PROGRESS" : day.closed ? "CLOSED" : "OPEN"}</span>
@@ -547,7 +544,7 @@ export function BodyCompChart() {
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={(() => {
                   // Build cumulative data matching weight chart X-axis range
-                  const totalDeficitNeeded = -Math.round((profile.fatToLose || 5.5) * 7700);
+                  const _totalDeficitNeeded = -Math.round((profile.fatToLose || 5.5) * 7700);
                   const deficitData: { date: string; cumulative: number | null; goalPace: number | null; source?: string }[] = [];
                   // Add actual deficit data points
                   for (const d of dailyDeficits) {

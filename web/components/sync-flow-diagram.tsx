@@ -2,12 +2,10 @@
 
 import { useState } from "react";
 import { Watch, Dumbbell, Bike, Wind, Zap, ChevronRight, ChevronDown, Send } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  TooltipTrigger } from "@/components/ui/tooltip";
 
 interface PlatformNode {
   platform: string;
@@ -34,36 +32,31 @@ const platformIcons: Record<string, React.ComponentType<{ className?: string }>>
   hevy: Dumbbell,
   strava: Bike,
   telegram: Send,
-  surfr: Wind,
-};
+  surfr: Wind };
 
 const platformLabels: Record<string, string> = {
   garmin: "Garmin",
   hevy: "Hevy",
   strava: "Strava",
   telegram: "Telegram",
-  surfr: "Surfr",
-};
+  surfr: "Surfr" };
 
 const connectionTypeLabels: Record<string, string> = {
   oauth: "OAuth",
   "sync-service": "Sync service",
-  planned: "Planned",
-};
+  planned: "Planned" };
 
 // What each source provides (hardcoded — these are the data types each platform sends to Soma)
 const sourceDataTypes: Record<string, string[]> = {
   garmin: ["Health", "Activities"],
-  hevy: ["Workouts"],
-};
+  hevy: ["Workouts"] };
 
 const activityTypeLabels: Record<string, string> = {
   "*": "All",
   strength: "Strength",
   running: "Running",
   cycling: "Cycling",
-  kite: "Kite",
-};
+  kite: "Kite" };
 
 function FlowNode({
   label,
@@ -71,8 +64,7 @@ function FlowNode({
   isConnected,
   isHub,
   subtitle,
-  dimmed,
-}: {
+  dimmed }: {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   isConnected: boolean;
@@ -124,8 +116,7 @@ function ArrowLine({
   isActive,
   badges,
   tooltipText,
-  dimmed,
-}: {
+  dimmed }: {
   isActive: boolean;
   badges?: { label: string; enabled: boolean }[];
   tooltipText: string;

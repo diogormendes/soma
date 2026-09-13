@@ -27,7 +27,7 @@ function formatPace(sec: number): string {
 }
 
 export function TodaysRecommendation({
-  trafficLight, runType, runTitle, targetKm, adjustedPace, compositeScore, legDayConflict, adaptation,
+  trafficLight, runType, runTitle, targetKm, adjustedPace, compositeScore: _compositeScore, legDayConflict, adaptation,
 }: RecommendationProps) {
   if (!runType) return null;
 

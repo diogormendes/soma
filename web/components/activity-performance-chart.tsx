@@ -196,7 +196,7 @@ export function ActivityPerformanceChart({
 
   // Right Y-axis domain (HR / Power / Respiration — NOT cadence)
   const rightDomain = useMemo(() => {
-    let allVals: number[] = [];
+    const allVals: number[] = [];
     for (const p of chartData) {
       if (enabled.has("hr") && p.hr != null) allVals.push(p.hr);
       if (enabled.has("power") && p.power != null) allVals.push(p.power);

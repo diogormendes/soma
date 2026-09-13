@@ -2,7 +2,6 @@
 "use client";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import PlaylistTopBar from "./playlist-top-bar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -261,8 +260,7 @@ export default function PlaylistBuilder() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ segments: segs, excluded_track_ids: Array.from(excludedIds), genre_selection: genres, genre_threshold: genreThreshold, source_playlist_ids: sources, garmin_activity_id: garminActivityIdRef.current }),
-        signal,
-      });
+        signal });
       if (!res.body) return;
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -363,10 +361,8 @@ export default function PlaylistBuilder() {
           genre_selection: genres,
           genre_threshold: genreThreshold,
           source_playlist_ids: sources,
-          garmin_activity_id: garminActivityIdRef.current,
-        }),
-        signal: ac.signal,
-      });
+          garmin_activity_id: garminActivityIdRef.current }),
+        signal: ac.signal });
       if (!res.body) return;
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -463,9 +459,7 @@ export default function PlaylistBuilder() {
             track_ids: allTracks,
             song_assignments: Object.fromEntries(
               Object.entries(assignments).map(([k, v]) => [k, v.songs])
-            ),
-          }),
-        });
+            ) }) });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error((errData as { error?: string }).error ?? "Update failed");
@@ -483,9 +477,7 @@ export default function PlaylistBuilder() {
             track_ids: allTracks,
             song_assignments: Object.fromEntries(
               Object.entries(assignments).map(([k, v]) => [k, v.songs])
-            ),
-          }),
-        });
+            ) }) });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error((errData as { error?: string }).error ?? "Save failed");
@@ -526,8 +518,7 @@ export default function PlaylistBuilder() {
     fetch("/api/playlist/blacklist", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ track_id: trackId }),
-    })
+      body: JSON.stringify({ track_id: trackId }) })
       .then(r => r.json())
       .then((data: { count: number }) => {
         if (data.count >= 3) {
@@ -539,17 +530,14 @@ export default function PlaylistBuilder() {
                 void fetch("/api/playlist/blacklist/confirm", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ track_id: trackId, name: songName, artist_name: artistName }),
-                })
+                  body: JSON.stringify({ track_id: trackId, name: songName, artist_name: artistName }) })
                   .then(r => {
                     if (r.ok) toast.success("Permanently blocked — won't appear again");
                     else toast.error("Failed to block song");
                   })
                   .catch(() => { toast.error("Failed to block song"); });
-              },
-            },
-            duration: 8000,
-          });
+              } },
+            duration: 8000 });
         }
       })
       .catch(() => {});
@@ -566,8 +554,7 @@ export default function PlaylistBuilder() {
     if (!bankSongs.length) {
       toast("Pump-up bank is empty", {
         description: "Add songs by clicking ⚡ on any song card",
-        duration: 4000,
-      });
+        duration: 4000 });
       return;
     }
     // Collect all currently placed track IDs across all segments
@@ -579,8 +566,7 @@ export default function PlaylistBuilder() {
     if (!song) {
       toast("No bank songs available", {
         description: "All pump-up songs are already placed or excluded in this playlist",
-        duration: 4000,
-      });
+        duration: 4000 });
       return;
     }
     // Inject pump-up song before skip song, after other placed songs
@@ -595,8 +581,7 @@ export default function PlaylistBuilder() {
         tempo: song.tempo ?? 0,
         energy: song.energy ?? 0,
         duration_ms: song.duration_ms ?? 0,
-        is_skip: false,
-      };
+        is_skip: false };
       return { ...prev, [flatIdx]: { ...prev[flatIdx], songs: [...nonSkip, pumpSong, ...skip] } };
     });
     toast.success(`Added "${song.name}"`, { description: song.artist_name, duration: 3000 });
@@ -612,9 +597,7 @@ export default function PlaylistBuilder() {
         ...v,
         songs: v.songs.map(song => ({
           ...song,
-          has_genre_warning: !!song.genres?.length && !song.genres.some(g => genres.includes(g)),
-        })),
-      };
+          has_genre_warning: !!song.genres?.length && !song.genres.some(g => genres.includes(g)) })) };
     }
     return result;
   }, [assignments, genres]);
@@ -625,8 +608,7 @@ export default function PlaylistBuilder() {
       if (!entry) return prev;
       return {
         ...prev,
-        [segIdx]: { ...entry, songs: entry.songs.map(s => s.track_id === targetTrackId ? { ...newSong, is_skip: s.is_skip } : s) },
-      };
+        [segIdx]: { ...entry, songs: entry.songs.map(s => s.track_id === targetTrackId ? { ...newSong, is_skip: s.is_skip } : s) } };
     });
   }
 
@@ -682,9 +664,7 @@ export default function PlaylistBuilder() {
                     sport_type: "running",
                     total_duration_s: flat.reduce((s, seg) => s + seg.duration_s, 0),
                     source: "builder",
-                    garmin_activity_id: garminActivityIdRef.current,
-                  }),
-                });
+                    garmin_activity_id: garminActivityIdRef.current }) });
                 if (!res.ok) throw new Error("Server error saving plan");
               }}
               onChange={(newItems) => {

@@ -9,9 +9,7 @@ import {
   readinessFactorCalc,
   fatigueFactorCalc,
   colorForNode,
-  getTooltip,
-  computeAdjustedPace,
-} from "@/lib/training-engine";
+  getTooltip } from "@/lib/training-engine";
 import { getBasePace } from "banister";
 import { hmSecondsFromVdot } from "banister";
 import { todayAthlete } from "@/lib/athlete-tz";
@@ -102,11 +100,11 @@ export async function GET(request: Request) {
     ?? date;
 
   // Extract raw values
-  const hrvRaw = health ? Number(health.avg_overnight_hrv) || null : null;
+  const _hrvRaw = health ? Number(health.avg_overnight_hrv) || null : null;
   const sleepSec = health ? Number(health.sleep_time_seconds) || null : null;
-  const sleepHours = sleepSec != null ? sleepSec / 3600 : null;
+  const _sleepHours = sleepSec != null ? sleepSec / 3600 : null;
   const rhrRaw = health ? Number(health.resting_heart_rate) || null : null;
-  const bbRaw = health ? Number(health.body_battery_at_wake) || null : null;
+  const _bbRaw = health ? Number(health.body_battery_at_wake) || null : null;
   // Same-day inputs for the hard overrides AND the raw HRV/sleep/body-battery nodes
   // (#647): the model computation for a date must show that date's inputs, and a
   // safety rule must never fire from a night that is days old. Missing today → the rule stays off and no_sleep_data
@@ -140,8 +138,7 @@ export async function GET(request: Request) {
     hrv: 0.25,
     sleep: 0.25,
     rhr: 0.25,
-    bb: 0.25,
-  };
+    bb: 0.25 };
   const calibPhase = calib ? Number(calib.phase) || 1 : 1;
   const calibDataDays = calib ? Number(calib.data_days) || 0 : 0;
   const calibForceEqual = calib?.force_equal ?? false;
@@ -154,7 +151,7 @@ export async function GET(request: Request) {
   const todayPlanDay = livePlan.days.find((d) => d.day_date === todayStr);
   const runType = todayPlanDay?.run_type || "easy";
   const currentVdot = vdotAdj ?? 0;
-  const basePace = getBasePace(currentVdot, runType);
+  const _basePace = getBasePace(currentVdot, runType);
 
   // Base HM pace from VDOT (Daniels equation)
   const baseHmPace = Math.round(hmSecondsFromVdot(currentVdot) / 21.0975);
@@ -175,8 +172,7 @@ export async function GET(request: Request) {
     return {
       short: t.short,
       ...(t.formula ? { formula: t.formula } : {}),
-      ...(t.source ? { source: t.source } : {}),
-    };
+      ...(t.source ? { source: t.source } : {}) };
   };
 
   // Helper: compute normalizedValue (0 = neutral, 1 = extreme) per node type
@@ -225,20 +221,17 @@ export async function GET(request: Request) {
         id: "banister_tau1", column: "pmc", label: `τ1=${Number(bp.tau1).toFixed(0)}d`,
         value: Number(bp.tau1), unit: "days",
         color: "oklch(0.7 0.12 200)", normalizedValue: 0,
-        tooltip: { short: "Personal fitness decay: " + Number(bp.tau1).toFixed(0) + " days (population default: 42). Fitted from " + Number(bp.n_anchors) + " anchor runs.", formula: "", source: "Banister 1991", inputs: [] },
-      },
+        tooltip: { short: "Personal fitness decay: " + Number(bp.tau1).toFixed(0) + " days (population default: 42). Fitted from " + Number(bp.n_anchors) + " anchor runs.", formula: "", source: "Banister 1991", inputs: [] } },
       {
         id: "banister_tau2", column: "pmc", label: `τ2=${Number(bp.tau2).toFixed(0)}d`,
         value: Number(bp.tau2), unit: "days",
         color: "oklch(0.7 0.12 200)", normalizedValue: 0,
-        tooltip: { short: "Personal fatigue decay: " + Number(bp.tau2).toFixed(0) + " days (population default: 7). Fitted from " + Number(bp.n_anchors) + " anchor runs.", formula: "", source: "Banister 1991", inputs: [] },
-      },
+        tooltip: { short: "Personal fatigue decay: " + Number(bp.tau2).toFixed(0) + " days (population default: 7). Fitted from " + Number(bp.n_anchors) + " anchor runs.", formula: "", source: "Banister 1991", inputs: [] } },
       {
         id: "banister_p0", column: "pmc", label: `p₀=${Number(bp.p0).toFixed(1)}`,
         value: Number(bp.p0), unit: "VDOT",
         color: "oklch(0.7 0.12 200)", normalizedValue: 0,
-        tooltip: { short: "Baseline VDOT: " + Number(bp.p0).toFixed(1) + " before any training effect.", formula: "", source: "Banister 1991", inputs: [] },
-      },
+        tooltip: { short: "Baseline VDOT: " + Number(bp.p0).toFixed(1) + " before any training effect.", formula: "", source: "Banister 1991", inputs: [] } },
     );
   }
 
@@ -313,38 +306,32 @@ export async function GET(request: Request) {
       rule: "no_sleep_data",
       triggered: sleepHoursToday == null,
       message: `No sleep data for ${date}${sleepDataDate ? ` (last night recorded: ${sleepDataDate})` : ""} — readiness unknown.`,
-      severity: "yellow",
-    },
+      severity: "yellow" },
     {
       rule: "sleep_under_5h",
       triggered: sleepHoursToday != null && sleepHoursToday < 5.0,
       message: `Sleep under 5 hours (${sleepHoursToday != null ? sleepHoursToday.toFixed(1) : "?"}h) — forced RED.`,
-      severity: "red",
-    },
+      severity: "red" },
     {
       rule: "body_battery_critical",
       triggered: bbToday != null && bbToday < 25,
       message: `Body Battery at wake < 25 (${bbToday ?? "?"}) — forced RED.`,
-      severity: "red",
-    },
+      severity: "red" },
     {
       rule: "hrv_below_swc",
       triggered: flags.includes("hrv_below_swc"),
       message: "HRV dropped below smallest worthwhile change (z < -0.5).",
-      severity: "yellow",
-    },
+      severity: "yellow" },
     {
       rule: "majority_3_of_4",
       triggered: flags.includes("3_of_4_flagged"),
       message: "3 of 4 readiness signals flagged (z < -1) — forced RED.",
-      severity: "red",
-    },
+      severity: "red" },
     {
       rule: "majority_2_of_4",
       triggered: flags.includes("2_of_4_flagged"),
       message: "2 of 4 readiness signals flagged (z < -1) — YELLOW.",
-      severity: "yellow",
-    },
+      severity: "yellow" },
   ];
 
   // ─── Assemble response ────────────────────────────────────
@@ -359,9 +346,7 @@ export async function GET(request: Request) {
       phase: calibPhase,
       dataDays: calibDataDays,
       weights: calibWeights,
-      forceEqual: calibForceEqual,
-    },
-  });
+      forceEqual: calibForceEqual } });
 }
 
 // ─── Helpers ──────────────────────────────────────────────

@@ -54,7 +54,7 @@ function getWorkingSets(exercises: any[]): { totalSets: number; totalVolume: num
 
 function WorkoutRow({
   w,
-  unit,
+  unit: _unit,
   fmtVol,
   onClick,
 }: {

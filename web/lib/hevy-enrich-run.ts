@@ -42,7 +42,7 @@ export function selectToEnrich(
   return { newWorkouts, staleWorkouts };
 }
 
-const FIXED_COLS = [
+const _FIXED_COLS = [
   "hr_source", "avg_hr", "max_hr", "min_hr", "hr_samples", "hr_sample_count",
   "calories", "duration_s", "exercise_count", "total_sets", "hevy_title", "workout_date", "status",
 ] as const;

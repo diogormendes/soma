@@ -17,7 +17,7 @@ interface ScoreEntry {
   score: number;
 }
 
-function getScoreColor(score: number) {
+function _getScoreColor(score: number) {
   if (score >= 80) return "text-green-400";
   if (score >= 60) return "text-yellow-400";
   return "text-red-400";

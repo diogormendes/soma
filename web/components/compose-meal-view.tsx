@@ -81,7 +81,7 @@ interface Goalpost {
 export function ComposeMealView({
   portions: initialPortions,
   ingredients,
-  budget,
+  budget: _budget,
   dayTargets,
   dayConsumed,
   weightKg,
@@ -257,7 +257,8 @@ export function ComposeMealView({
                     className="text-[10px] text-muted-foreground ml-0.5 hover:text-foreground"
                     onClick={() => setGramMode((prev) => {
                       const next = new Set(prev);
-                      next.has(p.ingredient_id) ? next.delete(p.ingredient_id) : next.add(p.ingredient_id);
+                      if (next.has(p.ingredient_id)) next.delete(p.ingredient_id);
+                      else next.add(p.ingredient_id);
                       return next;
                     })}
                   >

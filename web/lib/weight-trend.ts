@@ -1,7 +1,7 @@
 /** Weight trend, DB half: read the weigh-ins and hand them to banister's computeWeightTrend. */
 import type { QueryFn } from "./db";
 import type { WeightTrend } from "banister";
-import { WEIGHT_TREND_WINDOW_DAYS, WEIGHT_TREND_MIN_POINTS, computeWeightTrend } from "banister";
+import { WEIGHT_TREND_WINDOW_DAYS, computeWeightTrend } from "banister";
 export { WEIGHT_TREND_WINDOW_DAYS, WEIGHT_TREND_MIN_POINTS, computeWeightTrend } from "banister";
 export type { WeighInPoint, WeightTrend } from "banister";
 

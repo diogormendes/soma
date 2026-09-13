@@ -22,14 +22,9 @@ const eslintConfig = defineConfig([
     rules: {
       "@typescript-eslint/no-explicit-any": "warn", // 506
       "@typescript-eslint/no-unused-vars": [
-        "warn", // 119; the underscore prefix marks an intentionally unused binding
+        "error", // the underscore prefix marks an intentionally unused binding
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
       ],
-      "@next/next/no-img-element": "warn", // 11
-      "jsx-a11y/alt-text": "warn", // 8
-      "prefer-const": "warn", // 7
-      "react/no-unescaped-entities": "warn", // 2
-      "@typescript-eslint/no-unused-expressions": "warn", // 1
     },
   },
 ]);
