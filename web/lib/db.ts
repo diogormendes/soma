@@ -8,19 +8,30 @@ export type QueryFn = (
 ) => Promise<Record<string, any>[]>;
 
 /**
+ * The driver is chosen from the connection string, never from the code (soma#939).
+ *
  * Neon's serverless driver is not a Postgres client. It turns the host in the connection
- * string into an HTTPS endpoint and posts SQL to it, so pointed at a local database it builds
- * `https://api.0.0.1/sql` and fails with ERR_INVALID_URL. That is why the same DATABASE_URL
- * cannot simply be swapped for a local one: the driver has to change with it.
+ * string into an HTTPS endpoint (the first DNS label becomes `api.`) and posts SQL to it. Two
+ * kinds of host speak that shape: a real Neon host (`*.neon.tech`) and the estate's gateway,
+ * whose connection strings name `pg.<domain>` on purpose: `pg.gkos.dev` is not a hostname, it
+ * exists so the driver derives `https://api.gkos.dev/sql` from it. Handing that URL to a socket
+ * driver resolves the host and dies with `getaddrinfo ENOTFOUND pg.gkos.dev`, which is what
+ * every production build of soma-personal did from 2026-09-09 to 2026-09-13 (soma#938).
+ * `bridge/src/db.ts` has made the same choice since the cutover; this is the web copy of it.
+ * Anything else (127.0.0.1, localhost, a real Postgres host) gets a `pg` Pool.
  */
-function isNeon(url: string): boolean {
+export type DbDriver = "http" | "pool";
+
+export function driverFor(url: string): DbDriver {
+  let host: string;
   try {
-    return new URL(url).hostname.endsWith(".neon.tech");
+    host = new URL(url).hostname;
   } catch {
     // A DATABASE_URL that will not parse is a configuration mistake, not a hint to try the other
     // driver: falling through to pg turns a typo into a confusing connection error much later.
     throw new Error("DATABASE_URL is not a valid connection string");
   }
+  return host.endsWith(".neon.tech") || host.startsWith("pg.") ? "http" : "pool";
 }
 
 // One pool per process, created on first use. `next start` is long-lived, so a pool is right
@@ -86,7 +97,7 @@ export function getDb(): QueryFn {
     }
     throw new Error("DATABASE_URL is not set");
   }
-  return isNeon(url) ? (neon(url) as QueryFn) : localDb(url);
+  return driverFor(url) === "http" ? (neon(url) as QueryFn) : localDb(url);
 }
 
 /** Retry once on a transport hiccup: a Neon cold start, or the gateway between a request
