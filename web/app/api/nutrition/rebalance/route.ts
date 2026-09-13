@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-
-/** One logged ingredient inside a meal's `items` JSON. Extra fields are kept as they come. */
-interface MealItem {
-  ingredient_id?: string;
-  name?: string;
-  grams?: number;
-  calories?: number;
-  protein?: number;
-  carbs?: number;
-  fat?: number;
-  fiber?: number;
-  [key: string]: unknown;
-}
+import type { MealItem } from "@/lib/meal-types";
 
 export async function POST(req: NextRequest) {
   const { date, changedSlot, lockedSlots = [] } = await req.json();

@@ -73,14 +73,14 @@ export function FitnessScoresChart({ data }: { data: FitnessScorePoint[] }) {
             fontSize: "12px",
             color: "var(--card-foreground)",
           }}
-          labelFormatter={(d: any) =>
+          labelFormatter={(d) =>
             new Date(String(d)).toLocaleDateString("en-US", {
               weekday: "short",
               month: "short",
               day: "numeric",
             })
           }
-          formatter={(value: any, name: any) => {
+          formatter={(value, name) => {
             const label = name === "endurance" ? "Endurance Score" : "Hill Score";
             return [Number(value).toLocaleString(), label];
           }}

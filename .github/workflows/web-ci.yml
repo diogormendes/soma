@@ -47,8 +47,8 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Install
         run: npm ci
-      - name: eslint (warning cap 420, lowered by every campaign PR)
-        run: npx eslint . --max-warnings 420
+      - name: eslint (warning cap 347, lowered by every campaign PR)
+        run: npx eslint . --max-warnings 347
 
   build-without-db:
     # `next build` must never need a database (soma#940). The production DATABASE_URL names the

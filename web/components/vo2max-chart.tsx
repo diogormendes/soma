@@ -63,7 +63,7 @@ export function VO2MaxChart({ data }: { data: VO2Entry[] }) {
           />
         )}
         <Tooltip
-          formatter={(value: any) => [`${value} ml/kg/min`, "VO2max"]}
+          formatter={(value) => [`${value} ml/kg/min`, "VO2max"]}
           labelFormatter={(label) =>
             new Date(label).toLocaleDateString("en-US", {
               month: "long",

@@ -462,7 +462,7 @@ function TrainingDaysExpanded({
               contentStyle={tooltipStyle}
               itemStyle={{ color: "var(--card-foreground)" }}
               labelStyle={{ color: "var(--card-foreground)" }}
-              formatter={(value: any) => [`${value} activities`, "Count"]}
+              formatter={(value) => [`${value} activities`, "Count"]}
             />
             <Bar dataKey="count" radius={[4, 4, 0, 0]}>
               {chartData.map((entry, index) => (
@@ -559,11 +559,11 @@ function TrainingTimeExpanded({ todCounts }: { todCounts: number[] }) {
               contentStyle={tooltipStyle}
               itemStyle={{ color: "var(--card-foreground)" }}
               labelStyle={{ color: "var(--card-foreground)" }}
-              labelFormatter={(_: any, payload: any) => {
+              labelFormatter={(_, payload) => {
                 const item = payload?.[0]?.payload;
                 return item?.label || "";
               }}
-              formatter={(value: any) => [`${value} activities`, "Count"]}
+              formatter={(value) => [`${value} activities`, "Count"]}
             />
             <Bar dataKey="count" radius={[3, 3, 0, 0]}>
               {chartData.map((entry, index) => (
@@ -794,12 +794,12 @@ function GymFrequencyExpanded({
               contentStyle={tooltipStyle}
               itemStyle={{ color: "var(--card-foreground)" }}
               labelStyle={{ color: "var(--card-foreground)" }}
-              labelFormatter={(m: any) => {
+              labelFormatter={(m) => {
                 const [year, month] = String(m).split("-");
                 const months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
                 return `${months[parseInt(month)]} ${year}`;
               }}
-              formatter={(value: any, name: any) => {
+              formatter={(value, name) => {
                 if (name === "avg") return [`${Number(value).toFixed(1)}`, "3-month avg"];
                 return [`${value} workouts`, "Count"];
               }}
@@ -906,8 +906,8 @@ function GymFrequencyMiniChart({ data }: { data: { month: string; workouts: numb
         <YAxis hide />
         <Tooltip
           cursor={{ fill: "var(--muted)", opacity: 0.3 }}
-          formatter={(value: any) => [`${value} workouts`, "Count"]}
-          labelFormatter={(m: any) => {
+          formatter={(value) => [`${value} workouts`, "Count"]}
+          labelFormatter={(m) => {
             const [year, month] = String(m).split("-");
             const months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
             return `${months[parseInt(month)]} ${year}`;

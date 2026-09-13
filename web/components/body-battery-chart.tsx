@@ -65,7 +65,7 @@ export function BodyBatteryChart({ data }: { data: BodyBatteryPoint[] }) {
               day: "numeric",
             })
           }
-          formatter={(value: any, name: any) => {
+          formatter={(value, name) => {
             const label = name === "charged" ? "Charged" : "Drained";
             return [`${Math.abs(Number(value))} pts`, label];
           }}

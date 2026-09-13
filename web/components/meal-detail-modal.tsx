@@ -3,17 +3,8 @@
 import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Ingredient } from "@/lib/portion-solver";
+import type { MealItem } from "@/lib/meal-types";
 
-interface MealItem {
-  ingredient_id?: string;
-  grams?: number;
-  cooked_grams?: number;
-  calories?: number;
-  protein?: number;
-  carbs?: number;
-  fat?: number;
-  fiber?: number;
-}
 
 interface MealDetailModalProps {
   open: boolean;
@@ -25,7 +16,7 @@ interface MealDetailModalProps {
     carbs: number;
     fat: number;
     fiber: number;
-    items: any;
+    items: MealItem[];
     portion_multiplier: number;
   } | null;
   ingredients: Ingredient[];
@@ -36,7 +27,7 @@ export function MealDetailModal({ open, onClose, meal, ingredients, onEdit }: Me
   if (!meal) return null;
 
   const ingMap = new Map(ingredients.map((i) => [i.id, i]));
-  const itemsList: MealItem[] = Array.isArray(meal.items) ? meal.items : (meal.items?.items ?? []);
+  const itemsList: MealItem[] = meal.items ?? [];
 
   // Sort: veggies first
   const order: Record<string, number> = { vegetable: 0, protein: 1, carbs: 2, fruit: 3, dairy: 4, fat: 5, sauce: 6, supplement: 7 };

@@ -14,9 +14,10 @@ import { MealDetailModal } from "@/components/meal-detail-modal";
 import { type Ingredient, type PortionResult, solvePortions, computeItemMacros } from "@/lib/portion-solver";
 import { ProteinQualityPill } from "@/lib/per-meal-protein";
 import type { SlotBudget } from "@/lib/nutrition-types";
+import type { MealItem, PresetItems } from "@/lib/meal-types";
 
 /** Generate a readable name from meal items, e.g. "Salmon, Broccoli & Yogurt" */
-function autoMealName(items: any[]): string {
+function autoMealName(items: MealItem[]): string {
   if (!items || items.length === 0) return "Custom meal";
   // Sort by food type priority (solids first, supplements last), then by calories
   const namePriority = (id: string) => {
@@ -87,7 +88,7 @@ interface Meal {
   /** Logged on a future date: a plan, not a record (soma#873). */
   planned?: boolean;
   portion_multiplier: number;
-  items: any;
+  items: MealItem[];
   calories: number;
   protein: number;
   carbs: number;
@@ -101,7 +102,8 @@ interface Meal {
 interface Preset {
   id: string;
   name: string;
-  items: any;
+  /** The preset_meals.items column: a bare list, or a list plus precomputed totals. */
+  items: PresetItems;
   tags: string[] | null;
 }
 
@@ -113,7 +115,7 @@ interface MealCardProps {
   disabled: boolean;
   skipped?: boolean;
   slotBudget?: SlotBudget | null;
-  ingredients?: any[];
+  ingredients?: Ingredient[];
   /** Daily P/C/F/Fi/kcal targets — drives goalposts in compose view. */
   dayTargets?: { protein: number; carbs: number; fat: number; fiber: number; calories: number } | null;
   /** Daily P/C/F/Fi/kcal consumed today across all slots, raw (no live preview). */
@@ -131,7 +133,7 @@ interface MealCardProps {
 
 // Read pre-computed macro totals from the preset JSONB blob.
 // The preset_meals.items column stores: {items: [...], calories, protein, carbs, fat, fiber}
-function estimatePresetMacros(itemsBlob: any): {
+function estimatePresetMacros(itemsBlob: PresetItems): {
   calories: number;
   protein: number;
   carbs: number;
@@ -185,8 +187,8 @@ export function MealCard({
   const [composedPortions, setComposedPortions] = useState<PortionResult[] | null>(null);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [savePresetName, setSavePresetName] = useState("");
-  const [lastComposedItems, setLastComposedItems] = useState<any[] | null>(null);
-  const [lastComposedTotals, setLastComposedTotals] = useState<any | null>(null);
+  const [lastComposedItems, setLastComposedItems] = useState<MealItem[] | null>(null);
+  const [lastComposedTotals, setLastComposedTotals] = useState<Record<string, number> | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [detailMeal, setDetailMeal] = useState<Meal | null>(null);
@@ -438,19 +440,19 @@ export function MealCard({
   const handleCustomizePreset = () => {
     if (!selectedPreset || !ingredients?.length) return;
     const blob = selectedPreset.items;
-    const presetItems: { ingredient_id: string; grams: number }[] =
-      Array.isArray(blob) ? blob : blob?.items ?? [];
+    const presetItems: MealItem[] = Array.isArray(blob) ? blob : blob?.items ?? [];
     const ingLookup = new Map(
       (ingredients as Ingredient[]).map((i) => [i.id, i]),
     );
     const portions: PortionResult[] = presetItems
       .map((item) => {
-        const ing = ingLookup.get(item.ingredient_id);
-        if (!ing) return null;
-        const macros = computeItemMacros(ing, item.grams);
+        const ing = item.ingredient_id ? ingLookup.get(item.ingredient_id) : undefined;
+        if (!ing || !item.ingredient_id) return null;
+        const grams = item.grams ?? 0;
+        const macros = computeItemMacros(ing, grams);
         return {
           ingredient_id: item.ingredient_id,
-          grams: item.grams,
+          grams,
           increment:
             { protein: 25, carbs: 10, vegetable: 25, fat: 5, dairy: 25, sauce: 10, fruit: 25, supplement: 5 }[ing.category] ?? 10,
           ...macros,
@@ -531,8 +533,7 @@ export function MealCard({
         <CardContent className="pt-0 space-y-2">
           {/* Logged meals */}
           {meals.map((meal) => {
-            const itemsList: { ingredient_id?: string; grams?: number; cooked_grams?: number; name?: string }[] =
-              Array.isArray(meal.items) ? meal.items : (meal.items?.items ?? []);
+            const itemsList: MealItem[] = meal.items ?? [];
             const ingLookup = new Map(
               ((ingredients ?? []) as Ingredient[]).map((i) => [i.id, i]),
             );
@@ -761,8 +762,7 @@ export function MealCard({
           {!disabled && selectedPreset && (() => {
             // Parse preset items
             const blob = selectedPreset.items;
-            const presetItems: { ingredient_id: string; grams: number }[] =
-              Array.isArray(blob) ? blob : blob?.items ?? [];
+            const presetItems: MealItem[] = Array.isArray(blob) ? blob : blob?.items ?? [];
 
             return (
             <div className="space-y-3 rounded-md border p-3">
@@ -788,7 +788,7 @@ export function MealCard({
               <div className="space-y-1">
                 {presetItems.map((item) => {
                   const ing = (ingredients as Ingredient[])?.find(i => i.id === item.ingredient_id);
-                  const scaledGrams = Math.round(item.grams * multiplier);
+                  const scaledGrams = Math.round((item.grams ?? 0) * multiplier);
                   const m = ing ? computeItemMacros(ing, scaledGrams) : null;
                   return (
                     <div key={item.ingredient_id} className="flex items-center justify-between text-xs">
@@ -974,9 +974,8 @@ export function MealCard({
             ingredients={(ingredients ?? []) as Ingredient[]}
             onEdit={detailMeal && !disabled ? () => {
               // Load meal into compose view for editing
-              const itemsList: { ingredient_id: string; grams: number }[] =
-                Array.isArray(detailMeal.items) ? detailMeal.items : (detailMeal.items?.items ?? []);
-              const ids = new Set(itemsList.map((i) => i.ingredient_id));
+              const itemsList: MealItem[] = detailMeal.items ?? [];
+              const ids = new Set(itemsList.map((i) => i.ingredient_id).filter((id): id is string => !!id));
               setSelectedIngredients(ids);
               // Create portions from the meal's items
               const ingLookup = new Map(
@@ -984,12 +983,13 @@ export function MealCard({
               );
               const portions: PortionResult[] = itemsList
                 .map((item) => {
-                  const ing = ingLookup.get(item.ingredient_id);
-                  if (!ing) return null;
-                  const macros = computeItemMacros(ing, item.grams);
+                  const ing = item.ingredient_id ? ingLookup.get(item.ingredient_id) : undefined;
+                  if (!ing || !item.ingredient_id) return null;
+                  const grams = item.grams ?? 0;
+                  const macros = computeItemMacros(ing, grams);
                   return {
                     ingredient_id: item.ingredient_id,
-                    grams: item.grams,
+                    grams,
                     increment: { protein: 25, carbs: 10, vegetable: 25, fat: 5, dairy: 25, sauce: 10, fruit: 25, supplement: 5 }[ing.category] ?? 10,
                     ...macros,
                   };

@@ -11,6 +11,7 @@ import { DrinkLogger } from "@/components/drink-logger";
 import { ActivitySelector } from "@/components/activity-selector";
 import { PrepSummary } from "@/components/prep-summary";
 import type { SlotBudgets } from "@/lib/nutrition-types";
+import type { MealItem } from "@/lib/meal-types";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -45,7 +46,7 @@ interface Meal {
   preset_name: string | null;
   preset_tags: string[] | null;
   portion_multiplier: number;
-  items: any;
+  items: MealItem[];
   calories: number;
   protein: number;
   carbs: number;
@@ -73,7 +74,7 @@ interface Drink {
 interface _Preset {
   id: string;
   name: string;
-  items: any;
+  items: MealItem[];
   tags: string[] | null;
 }
 
