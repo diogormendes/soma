@@ -29,3 +29,28 @@ jobs:
         run: npx tsc --noEmit
       - name: Unit tests
         run: npx vitest run
+
+  build-without-db:
+    # `next build` must never need a database (soma#940). The production DATABASE_URL names the
+    # estate gateway host, which no socket can resolve; a build-time query took every production
+    # deploy down from 2026-09-09 to 2026-09-13 while the PR checks (no DATABASE_URL) stayed green.
+    # This job builds with an unreachable host so a build-time query fails the PR, not production.
+    name: Build without a database
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Build against an unreachable gateway host
+        env:
+          DATABASE_URL: postgresql://soma_ro:x@pg.example.invalid/soma
+          AUTH_SECRET: ci-build-only
+          NEXT_PUBLIC_BASE_URL: http://localhost:3000
+        run: npm run build
