@@ -147,14 +147,28 @@ export function ComposeMealView({
   const setG = (id: string, v: number) => setGrams((g) => ({ ...g, [id]: Math.max(0, Math.round(v)) }));
   // Every keystroke lands (Android does not blur a field when the keyboard hides, so a commit on blur
   // alone can lose the typed value); the draft only keeps what is shown while typing.
+  // A cleared field or a leading "0" (on the way to "0.5") must not zero the row: zero grams deselects the
+  // ingredient, the field unmounts, and the next keystrokes land in the next row (seen on the device tour).
+  const parseQty = (raw: string): number | null => {
+    const t = raw.trim().replace(",", ".");
+    if (t === "") return null;
+    const v = Number(t);
+    return Number.isFinite(v) && v >= 0 ? v : null;
+  };
   const applyQty = (id: string, ing: Ingredient, asCount: boolean, asCooked: boolean, raw: string) => {
-    const v = Number(raw.trim().replace(",", "."));
-    if (!Number.isFinite(v) || v < 0) return;
+    const v = parseQty(raw);
+    if (v == null || v <= 0) return;
     if (asCount) setG(id, countToGrams(ing, v));
     else if (asCooked) setG(id, cookedToRaw(ing, v));
     else setG(id, v);
   };
-  const clearDraft = (id: string) => setDraft((d) => { if (!(id in d)) return d; const n = { ...d }; delete n[id]; return n; });
+  /** Leaving the field: an explicit 0 removes the row; an empty field keeps the last value. */
+  const finishQty = (id: string, ing: Ingredient, asCount: boolean, asCooked: boolean) => {
+    const raw = draft[id];
+    if (raw != null && parseQty(raw) === 0) setG(id, 0);
+    else if (raw != null) applyQty(id, ing, asCount, asCooked, raw);
+    setDraft((d) => { if (!(id in d)) return d; const n = { ...d }; delete n[id]; return n; });
+  };
   const remove = (id: string) => setGrams((g) => { const n = { ...g }; delete n[id]; return n; });
   const toggleSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>) => (id: string) =>
     setter((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -363,8 +377,8 @@ export function ComposeMealView({
                         testID={`qty-${id}`}
                         value={draft[id] ?? String(qty)}
                         onChangeText={(t) => { setDraft((d) => ({ ...d, [id]: t })); applyQty(id, ing, asCount, asCooked, t); }}
-                        onEndEditing={() => clearDraft(id)}
-                        onSubmitEditing={() => clearDraft(id)}
+                        onEndEditing={() => finishQty(id, ing, asCount, asCooked)}
+                        onSubmitEditing={() => finishQty(id, ing, asCount, asCooked)}
                         keyboardType="decimal-pad"
                         selectTextOnFocus
                         className="min-w-[34px] text-center text-text tabular-nums"
