@@ -145,15 +145,16 @@ export function ComposeMealView({
   });
   const add = (id: string) => addWith(id, byId);
   const setG = (id: string, v: number) => setGrams((g) => ({ ...g, [id]: Math.max(0, Math.round(v)) }));
-  const commitQty = (id: string, ing: Ingredient, asCount: boolean, asCooked: boolean) => {
-    const raw = draft[id]; if (raw == null) return;
-    setDraft((d) => { const n = { ...d }; delete n[id]; return n; });
+  // Every keystroke lands (Android does not blur a field when the keyboard hides, so a commit on blur
+  // alone can lose the typed value); the draft only keeps what is shown while typing.
+  const applyQty = (id: string, ing: Ingredient, asCount: boolean, asCooked: boolean, raw: string) => {
     const v = Number(raw.trim().replace(",", "."));
     if (!Number.isFinite(v) || v < 0) return;
     if (asCount) setG(id, countToGrams(ing, v));
     else if (asCooked) setG(id, cookedToRaw(ing, v));
     else setG(id, v);
   };
+  const clearDraft = (id: string) => setDraft((d) => { if (!(id in d)) return d; const n = { ...d }; delete n[id]; return n; });
   const remove = (id: string) => setGrams((g) => { const n = { ...g }; delete n[id]; return n; });
   const toggleSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>) => (id: string) =>
     setter((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -361,9 +362,9 @@ export function ComposeMealView({
                       <TextInput
                         testID={`qty-${id}`}
                         value={draft[id] ?? String(qty)}
-                        onChangeText={(t) => setDraft((d) => ({ ...d, [id]: t }))}
-                        onEndEditing={() => commitQty(id, ing, asCount, asCooked)}
-                        onSubmitEditing={() => commitQty(id, ing, asCount, asCooked)}
+                        onChangeText={(t) => { setDraft((d) => ({ ...d, [id]: t })); applyQty(id, ing, asCount, asCooked, t); }}
+                        onEndEditing={() => clearDraft(id)}
+                        onSubmitEditing={() => clearDraft(id)}
                         keyboardType="decimal-pad"
                         selectTextOnFocus
                         className="min-w-[34px] text-center text-text tabular-nums"
