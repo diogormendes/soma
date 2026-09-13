@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
+import type { ChartValue } from "@/lib/chart-types";
 
 interface VolumeEntry {
   week: string;
@@ -63,7 +64,7 @@ export function VolumeChart({ data }: { data: VolumeEntry[] }) {
         />
         <Tooltip
           cursor={{ fill: "var(--muted)", opacity: 0.3 }}
-          formatter={(value: any, name?: string) => [
+          formatter={(value: ChartValue, name?: string) => [
             `${Number(value).toLocaleString()} kg`,
             name === "avg" ? "4-week avg" : "Volume",
           ]}

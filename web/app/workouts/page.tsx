@@ -76,6 +76,12 @@ interface MonthlyMuscleRow {
   volume: Numeric;
 }
 
+interface ProgressionRow {
+  exercise: string;
+  workout_date: string;
+  max_weight: number;
+}
+
 interface WeeklyVolumeRow {
   week: string | Date;
   total_volume: Numeric;
@@ -432,7 +438,8 @@ async function getConfigurableProgression(cutoff: string) {
       exercise: String(e.exercise),
       count: Number(e.count),
     })),
-    progression };
+    progression: progression as ProgressionRow[],
+  };
 }
 
 async function getWorkoutFrequencyByWeekDetailed(cutoff: string) {

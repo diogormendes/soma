@@ -18,6 +18,7 @@ import {
   Tooltip,
   ResponsiveContainer } from "recharts";
 import { Trophy, TrendingUp, Dumbbell, Heart } from "lucide-react";
+import type { ChartTooltipProps } from "@/lib/chart-types";
 
 interface ExerciseData {
   name: string;
@@ -31,17 +32,20 @@ interface ExerciseData {
     maxVolume: { value: number; date: string; weight: number; reps: number };
     estimated1RM: { value: number; date: string; weight: number; reps: number };
   };
-  progression: {
-    date: string;
-    workoutId: string;
-    program: string;
-    maxWeight: number;
-    totalVolume: number;
-    maxReps: number;
-    estimated1RM: number;
-    avgHr: number | null;
-    sets: { weight: number; reps: number; type: string }[];
-  }[];
+  progression: ProgressionPoint[];
+}
+
+/** One session of this exercise, as the progression chart plots it. */
+interface ProgressionPoint {
+  date: string;
+  workoutId: string;
+  program: string;
+  maxWeight: number;
+  totalVolume: number;
+  maxReps: number;
+  estimated1RM: number;
+  avgHr: number | null;
+  sets: { weight: number; reps: number; type: string }[];
 }
 
 type ChartMetric = "maxWeight" | "totalVolume" | "estimated1RM" | "maxReps";
@@ -84,9 +88,9 @@ function RecordCard({ label, value, unit, context, icon }: {
   );
 }
 
-function ChartTooltipContent({ active, payload }: any) {
-  if (!active || !payload?.[0]) return null;
-  const data = payload[0].payload;
+function ChartTooltipContent({ active, payload }: ChartTooltipProps<ProgressionPoint>) {
+  const data = payload?.[0]?.payload;
+  if (!active || !data) return null;
   return (
     <div className="bg-popover border border-border rounded-lg p-2 text-xs shadow-md">
       <div className="font-medium mb-1">{formatDate(data.date)}</div>

@@ -22,7 +22,7 @@ import {
   adjustStepTargets,
   colorForNode } from "@/lib/training-engine";
 import { hmSecondsFromVdot } from "banister";
-import { normalizeSteps } from "@/lib/normalize-steps";
+import { normalizeSteps, type NormalizedStep } from "@/lib/normalize-steps";
 import type { PlanDayWithPlan } from "@/lib/live-plan";
 import { runForwardSimulation, type ProjectedDay, type SimulationSeeds } from "banister";
 
@@ -274,7 +274,7 @@ export function TrainingDashboard({
   const [forwardSimSeeds, setForwardSimSeeds] = useState<SimulationSeeds | null>(null);
 
   // Edited workout steps (dayId -> modified steps) from inline editing
-  const [editedSteps, setEditedSteps] = useState<Map<number, any[]>>(new Map());
+  const [editedSteps, setEditedSteps] = useState<Map<number, NormalizedStep[]>>(new Map());
 
   // Cache of fetched graph data per date (avoids re-fetching on re-hover)
   const graphCacheRef = useRef<Map<string, ComputationGraph>>(new Map());
@@ -587,7 +587,7 @@ export function TrainingDashboard({
 
     try {
       // Merge delta workouts + edited steps into a single payload
-      const workoutMap = new Map<number, { dayId: number; newDistance?: number; newType?: string; workoutSteps?: any }>();
+      const workoutMap = new Map<number, { dayId: number; newDistance?: number; newType?: string; workoutSteps?: NormalizedStep[] }>();
 
       // Add slider-derived delta workouts
       for (const w of deltaWorkouts) {

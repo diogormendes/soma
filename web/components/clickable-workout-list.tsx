@@ -10,6 +10,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { WorkoutDetailModal } from "./workout-detail-modal";
+import type { HevyExercise } from "@/lib/hevy-types";
 
 const KG_TO_LBS = 2.20462;
 type WeightUnit = "kg" | "lbs";
@@ -20,7 +21,7 @@ interface Workout {
   start_time: string;
   end_time: string;
   exercise_count: number;
-  exercises: any[];
+  exercises: HevyExercise[];
   avg_hr?: number;
   max_hr?: number;
   garmin_calories?: number;
@@ -37,15 +38,17 @@ function formatDuration(startTime: string, endTime: string): string {
   return `${min}m`;
 }
 
-function getWorkingSets(exercises: any[]): { totalSets: number; totalVolume: number } {
+function getWorkingSets(exercises: HevyExercise[]): { totalSets: number; totalVolume: number } {
   let totalSets = 0;
   let totalVolume = 0;
   for (const ex of exercises) {
-    const sets = Array.isArray(ex.sets) ? ex.sets : [];
-    for (const s of sets) {
-      if (s.type === "normal" && s.weight_kg > 0 && s.reps > 0) {
+    for (const s of ex.sets ?? []) {
+      // Hevy can omit either field on a set; a set with neither is not a working set.
+      const kg = s.weight_kg ?? 0;
+      const reps = s.reps ?? 0;
+      if (s.type === "normal" && kg > 0 && reps > 0) {
         totalSets++;
-        totalVolume += s.weight_kg * s.reps;
+        totalVolume += kg * reps;
       }
     }
   }

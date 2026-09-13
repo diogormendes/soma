@@ -31,8 +31,8 @@ jobs:
         run: npx vitest run
 
   lint:
-    # Lint-to-zero campaign (soma#958): every backlog rule reports as a warning and this cap
-    # only ever goes down. A PR that adds a finding fails here.
+    # The lint-to-zero campaign (soma#958) is finished: the cap is 0, every rule is an error,
+    # and a PR that adds a finding fails here.
     name: Lint
     runs-on: ubuntu-latest
     defaults:
@@ -47,8 +47,8 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Install
         run: npm ci
-      - name: eslint (warning cap lowered by every campaign PR)
-        run: npx eslint . --max-warnings 91
+      - name: eslint (zero findings)
+        run: npx eslint . --max-warnings 0
 
   build-without-db:
     # `next build` must never need a database (soma#940). The production DATABASE_URL names the

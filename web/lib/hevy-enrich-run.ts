@@ -7,8 +7,14 @@ import { calcCalories, DEFAULT_PROFILE } from "hevy2garmin";
 import type { QueryFn } from "./db";
 import { getDailyHrForWindow, resolveHrDecision, MIN_EXERCISE_HR, FALLBACK_HR_WINDOW } from "./hevy-enrich";
 import { populateGarminIds, toUtcDate } from "./hevy-match";
+import type { HevyWorkout } from "./hevy-types";
 
-export interface HevyWorkoutRow { hevyId: string; hevyTitle: string | null; workout: any; date: string; }
+export interface HevyWorkoutRow {
+  hevyId: string;
+  hevyTitle: string | null;
+  workout: HevyWorkout;
+  date: string;
+}
 export interface ExistingEnrichment { hrSource: string | null; garminActivityId: number | null; }
 
 /** Load all Hevy workouts from hevy_raw_data, newest-first. */
@@ -120,7 +126,7 @@ export async function enrichNewWorkouts(sql: QueryFn, now: Date = new Date()): P
       const durationS = (endDt.getTime() - startDt.getTime()) / 1000;
       const calories = calcCalories(hr, durationS, startDt.getUTCFullYear(), DEFAULT_PROFILE);
 
-      const exercises: any[] = hw.exercises ?? [];
+      const exercises = hw.exercises ?? [];
       const totalSets = exercises.reduce((s, ex) => s + (ex.sets?.length ?? 0), 0);
       const avgHr = hr.length ? pyRound(mean(hr)) : null;
 

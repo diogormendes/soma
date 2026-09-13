@@ -7,7 +7,7 @@ import {
   Tooltip,
   ResponsiveContainer } from "recharts";
 
-interface ProgressEntry {
+export interface ProgressEntry {
   exercise: string;
   workout_date: string;
   max_weight: number;
