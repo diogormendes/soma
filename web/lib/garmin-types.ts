@@ -30,6 +30,7 @@ export interface GarminActivitySummary {
   waterEstimated?: number;
   anaerobicTrainingEffect?: number;
   averagePower?: number;
+  averageSwolf?: number;
   [key: string]: unknown;
 }
 
@@ -77,5 +78,16 @@ export interface GarminGear {
   customMakeModel?: string;
   maximumMeters?: number;
   gearStatusName?: string;
+  [key: string]: unknown;
+}
+
+/** One entry of an activity's strength "exercise sets" block. */
+export interface GarminExerciseSet {
+  duration?: number;
+  exercises?: Array<{
+    category?: string;
+    name?: string | null;
+    sets?: Array<{ weight?: number; repetitionCount?: number }>;
+  }>;
   [key: string]: unknown;
 }

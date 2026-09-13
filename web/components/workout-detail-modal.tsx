@@ -9,11 +9,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { HRZoneChart } from "@/components/hr-zone-chart";
+import { HRZoneChart, type HRZone } from "@/components/hr-zone-chart";
 import { WorkoutHrTimeline } from "@/components/workout-hr-timeline";
 import { HeartPulse, Dumbbell, Download } from "lucide-react";
 import { MuscleBodyMap } from "./muscle-body-map";
 import { getExerciseMuscles, ALL_MUSCLE_GROUPS } from "@/lib/muscle-groups";
+import type { HevyExercise } from "@/lib/hevy-types";
+import { num } from "@/lib/json";
+import type { ExerciseSet, HrPoint, HrZone } from "@/components/workout-hr-timeline";
 
 const KG_TO_LBS = 2.20462;
 
@@ -34,8 +37,19 @@ interface WorkoutDetailModalProps {
   onClose: () => void;
 }
 
+/** What /api/workout/[id] returns: the Hevy workout plus the enrichment the web adds. */
+interface WorkoutDetail {
+  title?: string;
+  start_time?: string;
+  end_time?: string;
+  exercises?: HevyExercise[];
+  garmin?: Record<string, unknown> | null;
+  enrichment?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
 export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalProps) {
-  const [fetched, setData] = useState<any>(null);
+  const [fetched, setData] = useState<WorkoutDetail | null>(null);
   // Nothing is shown for a closed modal, so the effect never has to clear it.
   const data = workoutId ? fetched : null;
   const [loading, setLoading] = useState(false);
@@ -53,11 +67,14 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
       .finally(() => setLoading(false));
   }, [workoutId]);
 
-  const exercises: any[] = data?.exercises || [];
-  const durationMin = data
-    ? Math.round(
-        (new Date(data.end_time).getTime() - new Date(data.start_time).getTime()) / 60000
-      )
+  const exercises: HevyExercise[] = data?.exercises ?? [];
+  // The Garmin enrichment the route attaches; each list read once with its own shape.
+  const hrTimeline = (data?.garmin?.hr_timeline ?? []) as HrPoint[];
+  const garminExerciseSets = (data?.garmin?.exercise_sets ?? []) as ExerciseSet[];
+  const garminHrZones = (data?.garmin?.hr_zones ?? []) as HrZone[];
+  // Hevy always sends both, but a partial row would otherwise render NaN minutes.
+  const durationMin = data?.start_time && data?.end_time
+    ? Math.round((new Date(data.end_time).getTime() - new Date(data.start_time).getTime()) / 60000)
     : 0;
 
   // Calculate totals (null-safe: sets may be missing)
@@ -67,10 +84,10 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
   for (const ex of exercises) {
     const sets = Array.isArray(ex.sets) ? ex.sets : [];
     for (const s of sets) {
-      if (s.type === "normal" && s.weight_kg > 0 && s.reps > 0) {
+      if (s.type === "normal" && (s.weight_kg ?? 0) > 0 && (s.reps ?? 0) > 0) {
         totalSets++;
-        totalReps += s.reps;
-        totalVolume += s.weight_kg * s.reps;
+        totalReps += (s.reps ?? 0);
+        totalVolume += (s.weight_kg ?? 0) * (s.reps ?? 0);
       }
     }
   }
@@ -85,8 +102,8 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
     let exVol = 0;
     const exSets = Array.isArray(ex.sets) ? ex.sets : [];
     for (const s of exSets) {
-      if (s.type === "normal" && s.weight_kg > 0 && s.reps > 0) {
-        exVol += s.weight_kg * s.reps;
+      if (s.type === "normal" && (s.weight_kg ?? 0) > 0 && (s.reps ?? 0) > 0) {
+        exVol += (s.weight_kg ?? 0) * (s.reps ?? 0);
       }
     }
     if (exVol === 0) exVol = 1; // bodyweight exercises still show up
@@ -108,7 +125,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
           <SheetTitle className="text-lg">
             {loading ? "Loading..." : data?.title || "Workout"}
           </SheetTitle>
-          {data && (
+          {!!data?.start_time && (
             <div className="text-sm text-muted-foreground">
               {new Date(data.start_time).toLocaleDateString("en-US", {
                 weekday: "long",
@@ -150,14 +167,14 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                     <p className="text-sm">No exercise data recorded</p>
                   </div>
                 )}
-                {exercises.map((ex: any, ei: number) => {
+                {exercises.map((ex, ei: number) => {
                   const sets = Array.isArray(ex.sets) ? ex.sets : [];
                   const maxWeight = Math.max(
-                    ...sets.filter((s: any) => s.weight_kg > 0).map((s: any) => s.weight_kg),
+                    ...sets.filter((s) => (s.weight_kg ?? 0) > 0).map((s) => (s.weight_kg ?? 0)),
                     0
                   );
-                  const normalSets = sets.filter((s: any) => s.type !== "warmup");
-                  const setsAtMax = normalSets.filter((s: any) => s.weight_kg === maxWeight);
+                  const normalSets = sets.filter((s) => s.type !== "warmup");
+                  const setsAtMax = normalSets.filter((s) => (s.weight_kg ?? 0) === maxWeight);
                   const showTopBadge = maxWeight > 0 && setsAtMax.length < normalSets.length;
                   return (
                     <div key={ei} className="border border-border/50 rounded-lg p-3">
@@ -170,7 +187,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                         )}
                       </div>
                       <div className="space-y-1">
-                        {sets.map((s: any, si: number) => (
+                        {sets.map((s, si: number) => (
                           <div
                             key={si}
                             className={`flex items-center gap-3 text-xs py-1 px-1.5 -mx-1.5 rounded transition-colors ${
@@ -181,22 +198,22 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                             title={s.avg_hr != null ? `Estimated HR: ${s.avg_hr} bpm` : undefined}
                           >
                             <span className="w-6">
-                              {s.type === "warmup" ? "W" : si + 1 - sets.filter((ss: any, ssi: number) => ssi < si && ss.type === "warmup").length}
+                              {s.type === "warmup" ? "W" : si + 1 - sets.filter((ss, ssi: number) => ssi < si && ss.type === "warmup").length}
                             </span>
                             <span className="w-20">
-                              {s.weight_kg > 0
-                                ? formatWeight(s.weight_kg, unit)
+                              {(s.weight_kg ?? 0) > 0
+                                ? formatWeight((s.weight_kg ?? 0), unit)
                                 : "BW"}
                             </span>
                             <span className="w-14 whitespace-nowrap">
-                              {s.reps > 0 ? `${s.reps} reps` : "—"}
+                              {(s.reps ?? 0) > 0 ? `${(s.reps ?? 0)} reps` : "—"}
                             </span>
                             {s.type === "warmup" && (
                               <Badge variant="secondary" className="text-[10px] h-4">
                                 warmup
                               </Badge>
                             )}
-                            {showTopBadge && s.weight_kg === maxWeight && s.type !== "warmup" && (
+                            {showTopBadge && (s.weight_kg ?? 0) === maxWeight && s.type !== "warmup" && (
                               <Badge className="text-[10px] h-4 bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
                                 top
                               </Badge>
@@ -233,7 +250,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                   {data.garmin?.calories ? (
                     <MetricBox
                       label="Calories (Garmin)"
-                      value={`${Math.round(data.garmin.calories)} kcal`}
+                      value={`${Math.round(num(data.garmin?.calories) ?? 0)} kcal`}
                     />
                   ) : (
                     <MetricBox
@@ -261,13 +278,13 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                     Volume by Exercise
                   </h4>
                   <div className="space-y-2">
-                    {exercises.map((ex: any, i: number) => {
+                    {exercises.map((ex, i: number) => {
                       let vol = 0;
                       let sets = 0;
                       const exSets = Array.isArray(ex.sets) ? ex.sets : [];
                       for (const s of exSets) {
-                        if (s.type === "normal" && s.weight_kg > 0 && s.reps > 0) {
-                          vol += s.weight_kg * s.reps;
+                        if (s.type === "normal" && (s.weight_kg ?? 0) > 0 && (s.reps ?? 0) > 0) {
+                          vol += (s.weight_kg ?? 0) * (s.reps ?? 0);
                           sets++;
                         }
                       }
@@ -290,38 +307,38 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                     <div className="grid grid-cols-4 gap-2">
                       <MetricBox
                         label="Avg HR"
-                        value={data.garmin.avg_hr ? `${Math.round(data.garmin.avg_hr)}` : "—"}
+                        value={num(data.garmin?.avg_hr) ? `${Math.round(num(data.garmin?.avg_hr) ?? 0)}` : "—"}
                         suffix="bpm"
                       />
                       <MetricBox
                         label="Max HR"
-                        value={data.garmin.max_hr ? `${Math.round(data.garmin.max_hr)}` : "—"}
+                        value={num(data.garmin?.max_hr) ? `${Math.round(num(data.garmin?.max_hr) ?? 0)}` : "—"}
                         suffix="bpm"
                       />
                       <MetricBox
                         label="Min HR"
-                        value={data.garmin.min_hr ? `${Math.round(data.garmin.min_hr)}` : "—"}
+                        value={num(data.garmin?.min_hr) ? `${Math.round(num(data.garmin?.min_hr) ?? 0)}` : "—"}
                         suffix="bpm"
                       />
                       <MetricBox
                         label="Calories"
-                        value={data.garmin.calories ? `${Math.round(data.garmin.calories)}` : "—"}
+                        value={num(data.garmin?.calories) ? `${Math.round(num(data.garmin?.calories) ?? 0)}` : "—"}
                         suffix="kcal"
                       />
                     </div>
 
-                    {data.garmin.hr_timeline && data.garmin.hr_timeline.length > 0 ? (
+                    {hrTimeline.length > 0 ? (
                       <WorkoutHrTimeline
-                        hrTimeline={data.garmin.hr_timeline}
-                        exerciseSets={data.garmin.exercise_sets}
-                        hrZones={data.garmin.hr_zones}
+                        hrTimeline={hrTimeline}
+                        exerciseSets={garminExerciseSets}
+                        hrZones={garminHrZones}
                       />
-                    ) : data.garmin.hr_zones && data.garmin.hr_zones.length > 0 ? (
+                    ) : garminHrZones.length > 0 ? (
                       <div>
                         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
                           HR Zones
                         </h4>
-                        <HRZoneChart zones={data.garmin.hr_zones} />
+                        <HRZoneChart zones={garminHrZones as unknown as HRZone[]} />
                         <p className="text-xs text-muted-foreground mt-2 italic">
                           Detailed HR data not available for this workout.
                         </p>

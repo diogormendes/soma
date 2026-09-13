@@ -20,7 +20,7 @@ const eslintConfig = defineConfig([
     // an error here. Nothing new may join this list. The react-hooks rules are gone from it: the
     // behavioural group was fixed first and they are errors again.
     rules: {
-      "@typescript-eslint/no-explicit-any": "warn", // 334, in slices per directory
+      "@typescript-eslint/no-explicit-any": "warn", // 317, in slices per directory
       "@typescript-eslint/no-unused-vars": [
         "error", // the underscore prefix marks an intentionally unused binding
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },

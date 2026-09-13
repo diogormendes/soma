@@ -18,6 +18,8 @@ export interface HevyExercise {
   title?: string;
   exercise_template_id?: string;
   superset_id?: string | number | null;
+  /** The web's own enrichment: the muscle group the exercise maps to. */
+  muscle_group?: string;
   notes?: string | null;
   sets?: HevySet[];
 }
