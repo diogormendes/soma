@@ -460,15 +460,15 @@ export function TrainingDashboard({
     const combined = rf * ff * wf;
     const delta = combined - 1.0;
 
-    const todayIdx = planDays.findIndex((d: any) => d.day_date >= today);
+    const todayIdx = planDays.findIndex((d) => d.day_date >= today);
     const futureDays = todayIdx >= 0 ? planDays.slice(todayIdx) : [];
 
     const origPace = DEFAULT_BASE_PACE * combined;
     const newPace = DEFAULT_BASE_PACE * (1.0 + delta * sliderValue);
 
     return futureDays
-      .filter((d: any) => d.run_type !== "rest")
-      .map((d: any) => {
+      .filter((d) => d.run_type !== "rest")
+      .map((d) => {
         const distFactor = sliderValue > 1.0 ? 1.0 + (sliderValue - 1.0) * 0.3 : 1.0 - (1.0 - sliderValue) * 0.3;
 
         // Adjust per-step targets (pace/HR) using the day-level pace ratio

@@ -89,7 +89,7 @@ export function StressChart({ data }: { data: StressPoint[] }) {
               day: "numeric",
             })
           }
-          formatter={(value: any, name: any) => {
+          formatter={(value, name) => {
             const label = name === "avg" ? "Average" : "Peak";
             return [value, label];
           }}

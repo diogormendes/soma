@@ -54,7 +54,7 @@ export function SleepScoreChart({ data }: { data: ScoreEntry[] }) {
         <YAxis className="text-xs" domain={[0, 100]} />
         <ReferenceLine y={80} stroke="var(--muted-foreground)" strokeDasharray="3 3" label={{ value: "Good", position: "insideTopRight", fontSize: 9, fill: "var(--muted-foreground)" }} />
         <Tooltip
-          formatter={(value: any) => [`${value}`, "Sleep Score"]}
+          formatter={(value) => [`${value}`, "Sleep Score"]}
           labelFormatter={(label) =>
             new Date(label).toLocaleDateString("en-US", {
               weekday: "short",
