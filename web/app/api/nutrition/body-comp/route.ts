@@ -4,9 +4,32 @@ import { deficitWindow, windowLabel } from "@/lib/deficit-window";
 import { todayAthlete } from "@/lib/athlete-tz";
 import { isObservedDay } from "@/lib/observed-day";
 import { reconcile, type DayIn, type DaySource } from "@/lib/energy-reconcile";
+import { isMissingRelation, warnMissingRelationOnce } from "@/lib/missing-relation";
 
+
+/** What the trajectory looks like before any nutrition table exists. */
+const EMPTY_TRAJECTORY = {
+  profile: null,
+  weights: [],
+  goalLine: [],
+  trendPrediction: [],
+  calPredicted: [],
+  dailyDeficits: [],
+  goalDeficit: 0,
+};
 
 export async function GET() {
+  try {
+    return await trajectory();
+  } catch (err) {
+    // No nutrition tables (a fresh fork, an unseeded demo): an empty trajectory, not a 500 (soma#947).
+    if (!isMissingRelation(err)) throw err;
+    warnMissingRelationOnce("nutrition/body-comp", err);
+    return NextResponse.json(EMPTY_TRAJECTORY);
+  }
+}
+
+async function trajectory() {
   const sql = getDb();
 
   const [profileRows, weightRows] = await Promise.all([

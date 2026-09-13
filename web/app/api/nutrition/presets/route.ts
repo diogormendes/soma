@@ -1,19 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { listIngredients } from "@/lib/ingredient-catalog";
+import { isMissingRelation, warnMissingRelationOnce } from "@/lib/missing-relation";
 
 
 export async function GET() {
   const sql = getDb();
 
-  const [presets, ingredients] = await Promise.all([
-    sql`SELECT id, name, items, tags, meal_slot, total_calories, total_protein,
-               total_carbs, total_fat, total_fiber, is_system, use_count, created_at
-        FROM preset_meals ORDER BY name`,
-    listIngredients(sql),
-  ]);
-
-  return NextResponse.json({ presets, ingredients });
+  try {
+    const [presets, ingredients] = await Promise.all([
+      sql`SELECT id, name, items, tags, meal_slot, total_calories, total_protein,
+                 total_carbs, total_fat, total_fiber, is_system, use_count, created_at
+          FROM preset_meals ORDER BY name`,
+      listIngredients(sql),
+    ]);
+    return NextResponse.json({ presets, ingredients });
+  } catch (err) {
+    // No nutrition tables (a fresh fork, an unseeded demo): an empty catalog, not a 500.
+    if (!isMissingRelation(err)) throw err;
+    warnMissingRelationOnce("nutrition/presets", err);
+    return NextResponse.json({ presets: [], ingredients: [] });
+  }
 }
 
 export async function DELETE(req: NextRequest) {

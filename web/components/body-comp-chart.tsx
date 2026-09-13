@@ -65,7 +65,9 @@ export function BodyCompChart() {
   }, []);
 
   if (loading) return <div className="text-center text-muted-foreground py-8 animate-pulse">Loading trajectory...</div>;
-  if (!data) return <div className="text-center text-muted-foreground py-8">No data available</div>;
+  // An empty trajectory (no profile yet, or the nutrition tables missing on a fresh fork) renders
+  // the empty state instead of destructuring a null profile.
+  if (!data || !data.profile || !data.weights?.length) return <div className="text-center text-muted-foreground py-8">No data available</div>;
 
   const { profile, weights, goalLine, trendPrediction, calPredicted, dailyDeficits, goalDeficit } = data;
 
