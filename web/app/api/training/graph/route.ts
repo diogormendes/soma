@@ -94,9 +94,9 @@ export async function GET(request: Request) {
   const fitness = fitnessRows[0] ?? null;
   const health = healthRows[0] ?? null;
   const calib = calibRows[0] ?? null;
-  const dataDate = (readiness as any)?.data_date
-    ?? (pmc as any)?.data_date
-    ?? (health as any)?.data_date
+  const dataDate = readiness?.data_date
+    ?? pmc?.data_date
+    ?? health?.data_date
     ?? date;
 
   // Extract raw values
@@ -113,7 +113,7 @@ export async function GET(request: Request) {
   const sleepSecToday = health ? Number(health.sleep_time_seconds_today) || null : null;
   const sleepHoursToday = sleepSecToday != null ? sleepSecToday / 3600 : null;
   const bbToday = health ? Number(health.body_battery_at_wake_today) || null : null;
-  const sleepDataDate: string | null = (health as any)?.sleep_data_date ?? null;
+  const sleepDataDate: string | null = (health?.sleep_data_date as string | null) ?? null;
   const epocRaw = pmc ? Number(pmc.daily_load) || null : null;
   const weightKg = fitness ? Number(fitness.weight_kg) || null : null;
 
@@ -130,7 +130,7 @@ export async function GET(request: Request) {
   const tsb = pmc ? Number(pmc.tsb) || 0 : 0;
 
   // Extract VDOT from Banister model — no Garmin fallback
-  const banisterVdot = banisterRows[0] ? Number((banisterRows[0] as any).current_vdot) || null : null;
+  const banisterVdot = banisterRows[0] ? Number(banisterRows[0].current_vdot) || null : null;
   const vdotAdj = banisterVdot;
 
   // Calibration weights (default equal)
@@ -300,7 +300,7 @@ export async function GET(request: Request) {
   // ─── Build overrides ──────────────────────────────────────
 
   // Flags only count when the readiness row is the requested day's (#647).
-  const flags: string[] = (readiness as any)?.data_date === date ? (readiness?.flags ?? []) : [];
+  const flags: string[] = readiness?.data_date === date ? (readiness?.flags ?? []) : [];
   const overrides: Override[] = [
     {
       rule: "no_sleep_data",
