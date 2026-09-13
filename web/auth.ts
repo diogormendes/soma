@@ -12,7 +12,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn({ profile }) {
       const owner = process.env.GITHUB_OWNER_USERNAME;
       if (!owner) return false;
-      return (profile as any)?.login === owner;
+      return (profile as { login?: unknown } | undefined)?.login === owner;
     },
   },
   pages: {

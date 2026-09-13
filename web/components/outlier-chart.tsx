@@ -19,27 +19,20 @@ import {
   CardAction,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import type { ChartPoint, Outlier } from "@/lib/outlier-types";
+import type { ChartTooltipProps } from "@/lib/chart-types";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
 /* ------------------------------------------------------------------ */
 
-interface SetPoint {
-  date: string;
-  weight: number;
-  reps: number;
-  workoutId: string;
-  workoutTitle: string;
-  exerciseIndex: number;
-  setIndex: number;
-  localMedianWt: number | null;
-  isOutlier: boolean;
-}
+// The detector's own shapes, so this chart and /api/outliers cannot drift apart.
+type SetPoint = ChartPoint;
 
 interface ExerciseData {
   name: string;
   chartData: SetPoint[];
-  outliers: any[];
+  outliers: Outlier[];
 }
 
 interface OutlierChartProps {
@@ -88,9 +81,9 @@ function buildTicks(
 /* Custom tooltip                                                      */
 /* ------------------------------------------------------------------ */
 
-function ChartTooltip({ active, payload }: any) {
-  if (!active || !payload?.[0]) return null;
-  const p: SetPoint = payload[0].payload;
+function ChartTooltip({ active, payload }: ChartTooltipProps<SetPoint>) {
+  const p = payload?.[0]?.payload;
+  if (!active || !p) return null;
   const dateStr = new Date(p.date).toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
@@ -171,10 +164,10 @@ export function OutlierChart({
   const ticks = buildTicks(sorted, 10);
 
   const handleClick = useCallback(
-    (_: any, __: any, _e: any) => {
-      // Recharts Scatter onClick gives (entry, index, event)
-      // But the shape of args varies; we handle both patterns.
-      const point = _ as SetPoint | undefined;
+    (entry: unknown) => {
+      // Recharts' Scatter onClick passes (entry, index, event), and the entry's shape varies
+      // between versions, so this reads it defensively rather than trusting a signature.
+      const point = entry as SetPoint | undefined;
       if (point && point.workoutId) {
         onPointClick(point);
       }

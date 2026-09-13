@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import Map, { Source, Layer } from "react-map-gl/maplibre";
 import type { LayerProps } from "react-map-gl/maplibre";
+import type { ExpressionSpecification } from "maplibre-gl";
 import type { FeatureCollection, Feature, LineString, Point } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -22,7 +23,10 @@ interface RunMapProps {
 }
 
 // Pace color expression: red (fast) → amber (medium) → cyan (slow), min/km scale
-const paceColorExpr = [
+// A maplibre style expression. The library types `line-color` as its own DataDrivenPropertyValue
+// union, which an inline array literal does not match without a cast, so the array is typed here
+// and each layer's cast names that type rather than `any`.
+const paceColorExpr: ExpressionSpecification = [
   "interpolate",
   ["linear"],
   ["coalesce", ["get", "pace"], 5.5],
@@ -38,7 +42,7 @@ const glowOuterLayer: LayerProps = {
   paint: {
     "line-width": 10,
     "line-opacity": 0.06,
-    "line-color": paceColorExpr as any,
+    "line-color": paceColorExpr,
     "line-blur": 6,
   },
   layout: { "line-cap": "round", "line-join": "round" },
@@ -50,7 +54,7 @@ const glowMidLayer: LayerProps = {
   paint: {
     "line-width": 4,
     "line-opacity": 0.22,
-    "line-color": paceColorExpr as any,
+    "line-color": paceColorExpr,
     "line-blur": 2,
   },
   layout: { "line-cap": "round", "line-join": "round" },
@@ -63,7 +67,7 @@ const coreLayers: LayerProps = {
   paint: {
     "line-width": 2.5,
     "line-opacity": 1.0,
-    "line-color": paceColorExpr as any,
+    "line-color": paceColorExpr,
   },
   layout: { "line-cap": "round", "line-join": "round" },
 };

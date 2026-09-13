@@ -101,6 +101,14 @@ interface Spo2Row {
   sleep_spo2: Numeric;
 }
 
+interface WeekdayWeekendRow {
+  day_type: string;
+  avg_hours: Numeric;
+  avg_score: Numeric;
+  avg_deep_pct: Numeric;
+  nights: Numeric;
+}
+
 interface SleepScheduleRow {
   date: string;
   start_ts: Numeric;
@@ -374,8 +382,8 @@ async function getWeekdayWeekendSleep(cutoff: string) {
       AND date >= ${cutoff}
     GROUP BY day_type
   `;
-  const result: Record<string, any> = {};
-  for (const r of rows) result[r.day_type] = r;
+  const result: Record<string, WeekdayWeekendRow> = {};
+  for (const r of rows as WeekdayWeekendRow[]) result[r.day_type] = r;
   return result;
 }
 

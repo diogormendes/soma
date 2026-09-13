@@ -17,7 +17,7 @@ import type { MealItem } from "@/lib/meal-types";
 
 interface _NutritionPlan {
   date: string;
-  plan: Record<string, any> | null;
+  plan: Record<string, unknown> | null;
   target_calories: number | null;
   target_protein: number | null;
   target_carbs: number | null;
@@ -30,7 +30,7 @@ interface _NutritionPlan {
   adjustment_reason: string | null;
   sleep_quality_score: number | null;
   training_day_type: string | null;
-  planned_workouts: any | null;
+  planned_workouts: unknown;
   step_goal: number | null;
   is_refeed: boolean;
   is_diet_break: boolean;

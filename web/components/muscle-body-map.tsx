@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import Model from "react-body-highlighter";
-import type { IExerciseData, IMuscleStats } from "react-body-highlighter";
+import type { IExerciseData, IMuscleStats, Muscle } from "react-body-highlighter";
 import {
   type MuscleGroup,
   MUSCLE_LABELS,
@@ -22,7 +22,9 @@ interface Props {
   compact?: boolean;
 }
 
-const MUSCLE_TO_LIBRARY: Record<MuscleGroup, string[]> = {
+// The library names its own muscles; typing the map with them means a typo here is a build
+// error rather than a body part that silently never highlights.
+const MUSCLE_TO_LIBRARY: Record<MuscleGroup, Muscle[]> = {
   chest: ["chest"],
   back: ["upper-back", "lower-back", "trapezius"],
   shoulders: ["front-deltoids", "back-deltoids"],
@@ -108,7 +110,7 @@ export function MuscleBodyMap({ volumes, onMuscleClick, hoveredMuscle: externalH
       if (total > 0) {
         exercises.push({
           name: MUSCLE_LABELS[mg],
-          muscles: MUSCLE_TO_LIBRARY[mg] as any[],
+          muscles: [...MUSCLE_TO_LIBRARY[mg]],
           frequency: index + 1,
         });
         pcts[mg] = Math.round((total / maxTotal) * 100);

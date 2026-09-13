@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { partitionWorkouts, syncAllWorkouts, type KnownTimestamps } from "./hevy-ingest";
 import type { QueryFn } from "./db";
+import type { HevyWorkout } from "./hevy-types";
+import type { HevyClient } from "hevy2garmin";
 
 describe("partitionWorkouts", () => {
   it("saves unseen + changed, skips exact-version matches", () => {
@@ -25,7 +27,7 @@ describe("partitionWorkouts", () => {
 });
 
 // Mock sql: known-timestamps query returns seeded rows; upserts are recorded.
-function mockSql(knownRows: any[], saved: string[]): QueryFn {
+function mockSql(knownRows: unknown[], saved: string[]): QueryFn {
   return ((strings: TemplateStringsArray, ...vals: unknown[]) => {
     const text = strings.join(" ");
     if (text.includes("SELECT hevy_id")) return Promise.resolve(knownRows);
@@ -35,11 +37,13 @@ function mockSql(knownRows: any[], saved: string[]): QueryFn {
 }
 
 // Mock HevyClient with a fixed set of pages.
-function mockClient(pages: any[][], count: number): any {
+// The stub implements only the two methods the sync calls, so it is cast to the client type
+// rather than declaring one; the cast is the honest statement that this is a partial double.
+function mockClient(pages: HevyWorkout[][], count: number): HevyClient {
   return {
     getWorkoutCount: async () => count,
     getWorkouts: async (page: number) => ({ workouts: pages[page - 1] ?? [], page_count: pages.length }),
-  };
+  } as unknown as HevyClient;
 }
 
 describe("syncAllWorkouts — incremental early-stop", () => {

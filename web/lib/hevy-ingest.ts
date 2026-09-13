@@ -6,6 +6,7 @@
  */
 import { HevyClient } from "hevy2garmin";
 import type { QueryFn } from "./db";
+import type { HevyWorkout } from "./hevy-types";
 
 export type KnownTimestamps = Record<string, string>;
 
@@ -23,7 +24,7 @@ export async function getHevyApiKey(sql: QueryFn): Promise<string | null> {
 
 export interface PagePartition {
   /** Workouts new or changed since the DB copy (wid + full workout). */
-  toSave: Array<{ wid: string; updatedAt: string; workout: any }>;
+  toSave: Array<{ wid: string; updatedAt: string; workout: HevyWorkout }>;
   /** True when every workout on the page is already known and unchanged. */
   allKnown: boolean;
 }
@@ -33,7 +34,7 @@ export interface PagePartition {
  * sync_all_workouts: save when unseen or updated_at changed; a page is "all
  * known" only if none needed saving.
  */
-export function partitionWorkouts(workouts: any[], known: KnownTimestamps): PagePartition {
+export function partitionWorkouts(workouts: HevyWorkout[], known: KnownTimestamps): PagePartition {
   const toSave: PagePartition["toSave"] = [];
   let allKnown = true;
   for (const workout of workouts) {
@@ -86,7 +87,7 @@ export async function syncAllWorkouts(
 
   let saved = 0, skipped = 0, pagesScanned = 0;
   while (true) {
-    let data: { workouts?: any[]; page_count?: number };
+    let data: { workouts?: HevyWorkout[]; page_count?: number };
     try {
       data = await client.getWorkouts(page, pageSize);
     } catch (e) {

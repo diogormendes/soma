@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { ChartName, ChartValue } from "@/lib/chart-types";
 import {
   Dialog,
   DialogContent,
@@ -666,7 +667,11 @@ function ActivityBreakdownExpanded({
               contentStyle={tooltipStyle}
               itemStyle={{ color: "var(--card-foreground)" }}
               labelStyle={{ color: "var(--card-foreground)" }}
-              formatter={(value: any, _name: any, props: any) => {
+              formatter={(
+                value: ChartValue,
+                _name: ChartName,
+                props: { payload?: { label?: string } },
+              ) => {
                 const pct = totalActivities > 0 ? ((Number(value) / totalActivities) * 100).toFixed(1) : "0";
                 return [`${value} activities (${pct}%)`, props?.payload?.label || ""];
               }}
