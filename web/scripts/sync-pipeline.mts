@@ -15,6 +15,7 @@ import { enrichNewWorkouts } from "../lib/hevy-enrich-run";
 import { computeHevyLoads } from "../lib/training-load";
 import { backfillLoadFromHistory, computeAndStorePmc } from "../lib/pmc-stream";
 import { pushPlanToGarmin } from "../lib/garmin-workout-builder";
+import { getLivePlan } from "../lib/live-plan";
 import { enrichGarminRunActivities } from "../lib/garmin-run-enrich";
 import { uploadEnrichedToGarmin } from "../lib/hevy-upload";
 import { notifyPendingWorkouts } from "../lib/notify";
@@ -97,10 +98,10 @@ try {
 
 if (garminClient) {
   await step("plan-push", async () => {
-    const rows = await sql`SELECT id FROM training_plan WHERE status = 'active' LIMIT 1`;
-    if (!rows.length) return { activePlan: null, pushed: 0 };
-    const planId = Number(rows[0].id);
-    return { activePlan: planId, ...(await pushPlanToGarmin(sql, garminClient!, planId)) };
+    // Only a LIVE plan reaches the watch (soma#926).
+    const live = await getLivePlan(sql);
+    if (!live.plan) return { activePlan: null, pushed: 0, engagement: live.engagement.state };
+    return { activePlan: live.plan.id, ...(await pushPlanToGarmin(sql, garminClient!, live.plan.id)) };
   });
   await step("garmin-enrich", () => enrichGarminRunActivities(sql, garminClient!, webBaseUrl));
   // Upload newly-enriched Hevy workouts to Garmin as strength activities, so they then

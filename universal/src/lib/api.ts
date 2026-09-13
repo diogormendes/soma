@@ -370,6 +370,37 @@ export interface ForwardSim {
 }
 
 /** The full forward-simulation payload: schedule + PMC + readiness + fitness + comparison. */
+/** The plan lifecycle (soma#926): every plan with its state, sessions done out of planned, pushed workouts ahead. */
+export type PlanState = "none" | "live" | "paused" | "finished" | "dropped";
+export interface PlanSummary {
+  id: number; name: string | null; raceDate: string | null; goalTimeSeconds: number | null;
+  createdAt: string | null; droppedAt: string | null; state: PlanState;
+  sessionsPlanned: number; sessionsDone: number; pushedAhead: number; basis: string;
+}
+export interface PlanLifecycle { current: PlanSummary | null; past: PlanSummary[] }
+export function usePlanLifecycle() {
+  const [data, setData] = useState<PlanLifecycle | null>(null);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    fetchJson<PlanLifecycle>("/api/training/plan").then((d) => alive && setData(d)).catch(() => alive && setData({ current: null, past: [] }));
+    return () => { alive = false; };
+  }, [reload]);
+  return { data, refetch: () => setReload((n) => n + 1) };
+}
+/** Drop the current plan; its pushed upcoming workouts leave Garmin. */
+export async function dropPlan(): Promise<{ ok: boolean; removed?: number; error?: string }> {
+  const res = await fetch(`${API_BASE}/api/training/plan`, { method: "POST", headers: { ...AUTH_HEADERS, "Content-Type": "application/json" }, body: JSON.stringify({ action: "drop" }) });
+  const j = await res.json().catch(() => ({}));
+  return { ok: res.ok, removed: j.removed, error: j.error };
+}
+/** A new plan from the generator becomes the one current plan. */
+export async function createPlan(raceDate: string, raceDistanceKm: number, goalTimeSeconds: number, name?: string): Promise<{ ok: boolean; days?: number; error?: string }> {
+  const res = await fetch(`${API_BASE}/api/training/plan`, { method: "POST", headers: { ...AUTH_HEADERS, "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", raceDate, raceDistanceKm, goalTimeSeconds, name }) });
+  const j = await res.json().catch(() => ({}));
+  return { ok: res.ok, days: j.days, error: j.error };
+}
+
 export function useForwardSim(date: string) {
   const [data, setData] = useState<ForwardSim | null>(null);
   const [error, setError] = useState<string | null>(null);

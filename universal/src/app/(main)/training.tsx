@@ -17,6 +17,7 @@ import {
   type PlanDay,
 } from "../../lib/api";
 import { TrainingSchedule } from "../../components/training-schedule";
+import { PlanLifecycleCard } from "../../components/plan-lifecycle-card";
 import { projectDays } from "../../lib/project-days";
 import { RaceHeader } from "../../components/race-header";
 import { WhatIfSlider } from "../../components/whatif-slider";
@@ -193,25 +194,13 @@ export default function TrainingScreen() {
             without a script and Garmin records every session either way, so
             load, readiness and fitness stay; only the schedule goes. Say why in
             plain words, and label what the projections assume instead. */}
-        {sim?.engagement && !sim.engagement.planLive ? (
-          <Card className="gap-1" testID="training-no-live-plan">
-            <Text variant="eyebrow">Plan</Text>
-            <Text variant="body" className="text-text" testID="training-no-live-plan-title">
-              {sim.engagement.state === "dormant"
-                ? "Plan is dormant"
-                : sim.engagement.state === "partial"
-                  ? "Plan exists, not being followed"
-                  : "No training plan"}
-            </Text>
-            <Text variant="caption" className="text-text-secondary" testID="training-no-live-plan-basis">
-              {sim.engagement.basis}.
-            </Text>
-            {sim.fallback ? (
-              <Text variant="micro" testID="training-fallback-note">
-                Everything below is from what you actually did. Projections assume {sim.fallback.label}: about {Math.round(sim.fallback.meanDailyLoad)} load/day.
-              </Text>
-            ) : null}
-          </Card>
+        {/* The plan's lifecycle in plain words, with Drop, Past plans and New plan (soma#926, parity with web). */}
+        {sim?.engagement ? (
+          <PlanLifecycleCard
+            planLive={sim.engagement.planLive}
+            fallbackLabel={sim.fallback ? `${sim.fallback.label}: about ${Math.round(sim.fallback.meanDailyLoad)} load/day` : null}
+            onChanged={() => { refetch(); refetchSim(); }}
+          />
         ) : null}
 
         {/* Safety-rail overrides — hard readiness rules that force RED/YELLOW */}

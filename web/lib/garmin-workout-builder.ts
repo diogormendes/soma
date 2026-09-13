@@ -193,6 +193,7 @@ export async function pushPlanToGarmin(sql: QueryFn, client: GarminClient, planI
     WHERE plan_id = ${planId}
       AND garmin_push_status IN ('none', 'pending')
       AND workout_steps IS NOT NULL
+      AND day_date >= CURRENT_DATE
     ORDER BY day_date`;
 
   let pushed = 0, failed = 0;
