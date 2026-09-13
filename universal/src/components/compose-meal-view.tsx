@@ -74,6 +74,9 @@ export function ComposeMealView({
   const [sourceErr, setSourceErr] = useState<string | null>(null);
   const [added, setAdded] = useState<Ingredient[]>([]);
   const [editPick, setEditPick] = useState<IngredientProposal | null>(null);
+  // Typed portions (soma#934): the quantity is a field, not only a stepper. A draft holds the keystrokes
+  // until the field is left, so "1" on the way to "120" never lands as 1 g.
+  const [draft, setDraft] = useState<Record<string, string>>({});
   const [grams, setGrams] = useState<Record<string, number>>(initialGrams ?? {});
   const [busy, setBusy] = useState(false);
   const [cookedMode, setCookedMode] = useState<Set<string>>(new Set());
@@ -142,6 +145,15 @@ export function ComposeMealView({
   });
   const add = (id: string) => addWith(id, byId);
   const setG = (id: string, v: number) => setGrams((g) => ({ ...g, [id]: Math.max(0, Math.round(v)) }));
+  const commitQty = (id: string, ing: Ingredient, asCount: boolean, asCooked: boolean) => {
+    const raw = draft[id]; if (raw == null) return;
+    setDraft((d) => { const n = { ...d }; delete n[id]; return n; });
+    const v = Number(raw.trim().replace(",", "."));
+    if (!Number.isFinite(v) || v < 0) return;
+    if (asCount) setG(id, countToGrams(ing, v));
+    else if (asCooked) setG(id, cookedToRaw(ing, v));
+    else setG(id, v);
+  };
   const remove = (id: string) => setGrams((g) => { const n = { ...g }; delete n[id]; return n; });
   const toggleSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>) => (id: string) =>
     setter((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -223,7 +235,7 @@ export function ComposeMealView({
             <Text variant="micro" className={est ? "text-warm" : "text-teal"}>{sourceLabel(p)} · {Math.round(p.confidence * 100)}%{flags.length ? ` · ${flags.join(", ")}` : ""}</Text>
           </View>
           <View className="items-end gap-1">
-            <Pressable testID={`add-${p.id}`} onPress={() => quickAdd(p)} disabled={adding != null}>
+            <Pressable testID={est ? "estimate-add" : `add-${p.id}`} onPress={() => quickAdd(p)} disabled={adding != null}>
               <Button label={adding === p.id ? "…" : canQuickAdd(p) ? "Add" : "Fill in…"} variant="primary" size="sm" disabled={adding != null} onPress={() => quickAdd(p)} />
             </Pressable>
             <Pressable testID={`edit-${p.id}`} onPress={() => { setEditPick(p); setResearchOpen(true); }} hitSlop={6}><Text variant="micro" className="text-text-muted">edit</Text></Pressable>
@@ -313,22 +325,23 @@ export function ComposeMealView({
             const canCook = hasRawCookedToggle(ing);
             const asCooked = canCook && cookedMode.has(id);
 
+            let qty: number;
             let displayVal: string;
             let onMinus: () => void;
             let onPlus: () => void;
             if (asCount) {
               const count = gramsToCount(ing, g);
               const step = Number(ing.unit_step) || 1;
-              displayVal = `${count} ${ing.unit || "pcs"}`;
+              displayVal = `${count} ${ing.unit || "pcs"}`; qty = count;
               onMinus = () => setG(id, countToGrams(ing, Math.max(0, count - step)));
               onPlus = () => setG(id, countToGrams(ing, count + step));
             } else if (asCooked) {
               const cooked = rawToCooked(ing, g);
-              displayVal = `${cooked} g`;
+              displayVal = `${cooked} g`; qty = cooked;
               onMinus = () => setG(id, cookedToRaw(ing, Math.max(0, cooked - 10)));
               onPlus = () => setG(id, cookedToRaw(ing, cooked + 10));
             } else {
-              displayVal = `${g} g`;
+              displayVal = `${g} g`; qty = g;
               onMinus = () => setG(id, g - 10);
               onPlus = () => setG(id, g + 10);
             }
@@ -343,10 +356,23 @@ export function ComposeMealView({
                     </Text>
                   </View>
                   <View className="flex-row items-center gap-1">
-                    <Button label="−" variant="ghost" size="sm" onPress={onMinus} />
-                    <Text variant="caption" className="w-16 text-center tabular-nums">{displayVal}</Text>
-                    <Button label="+" variant="ghost" size="sm" onPress={onPlus} />
-                    <Button label="✕" variant="ghost" size="sm" onPress={() => remove(id)} />
+                    <Pressable testID={`minus-${id}`} onPress={onMinus}><Button label="−" variant="ghost" size="sm" onPress={onMinus} /></Pressable>
+                    <View className="w-20 flex-row items-center justify-center" accessibilityLabel={displayVal}>
+                      <TextInput
+                        testID={`qty-${id}`}
+                        value={draft[id] ?? String(qty)}
+                        onChangeText={(t) => setDraft((d) => ({ ...d, [id]: t }))}
+                        onEndEditing={() => commitQty(id, ing, asCount, asCooked)}
+                        onSubmitEditing={() => commitQty(id, ing, asCount, asCooked)}
+                        keyboardType="decimal-pad"
+                        selectTextOnFocus
+                        className="min-w-[34px] text-center text-text tabular-nums"
+                        style={{ padding: 0, fontSize: 13 }}
+                      />
+                      <Text variant="caption" className="text-text-muted"> {asCount ? ing.unit || "pcs" : "g"}</Text>
+                    </View>
+                    <Pressable testID={`plus-${id}`} onPress={onPlus}><Button label="+" variant="ghost" size="sm" onPress={onPlus} /></Pressable>
+                    <Pressable testID={`remove-${id}`} onPress={() => remove(id)}><Button label="✕" variant="ghost" size="sm" onPress={() => remove(id)} /></Pressable>
                   </View>
                 </View>
                 {canCook || isCountBased(ing) ? (
@@ -393,13 +419,14 @@ export function ComposeMealView({
             <Text variant="caption" className="font-semibold tabular-nums">
               {Math.round(totals.calories)} kcal · P{Math.round(totals.protein)} C{Math.round(totals.carbs)} F{Math.round(totals.fat)}
             </Text>
-            <Button label={busy ? "…" : editMealId != null ? "Save changes" : "Log meal"} variant="primary" size="sm" disabled={busy || selectedIds.length === 0} onPress={onLog} />
+            <Pressable testID="log-meal" onPress={onLog} disabled={busy || selectedIds.length === 0}><Button label={busy ? "…" : editMealId != null ? "Save changes" : "Log meal"} variant="primary" size="sm" disabled={busy || selectedIds.length === 0} onPress={onLog} /></Pressable>
           </View>
         </View>
       ) : null}
 
       {/* Search + category-grouped ingredient picker */}
       <TextInput
+        testID="compose-search"
         placeholder="Search ingredients…"
         placeholderTextColor="#5a7a8a"
         value={search}
