@@ -30,6 +30,26 @@ jobs:
       - name: Unit tests
         run: npx vitest run
 
+  lint:
+    # Lint-to-zero campaign (soma#958): every backlog rule reports as a warning and this cap
+    # only ever goes down. A PR that adds a finding fails here.
+    name: Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: eslint (warning cap 688, lowered by every campaign PR)
+        run: npx eslint . --max-warnings 688
+
   build-without-db:
     # `next build` must never need a database (soma#940). The production DATABASE_URL names the
     # estate gateway host, which no socket can resolve; a build-time query took every production
