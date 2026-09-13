@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { View, ScrollView, TextInput, Pressable, ActivityIndicator } from "react-native";
 import { IngredientResearchSheet } from "./ingredient-research-sheet";
 import { Text, Button } from "soma-style";
@@ -77,11 +77,9 @@ export function ComposeMealView({
   // Typed portions (soma#934): the quantity is a field, not only a stepper. A draft holds the keystrokes
   // until the field is left, so "1" on the way to "120" never lands as 1 g.
   const [draft, setDraft] = useState<Record<string, string>>({});
-  // Fields just focused: the first keystroke replaces the old value, in JS, with no native selection.
-  // Android applies select-on-focus after the focus event, so a fast tap-and-type landed the first digit
-  // before the selection and the select-all that followed ate it (broccoli "120" became "20", a typed
-  // "100" became "00" and removed the row). Without the native selection there is no race.
-  const fresh = useRef<Set<string>>(new Set());
+  // The field is controlled with exactly the text the keyboard produced: rewriting the value while typing
+  // (tried once, to replace the first keystroke in JS) makes Android move the caret and duplicate digits.
+  // Selection on focus stays native; a person taps and then types, and the selection is in place by then.
   const [grams, setGrams] = useState<Record<string, number>>(initialGrams ?? {});
   const [busy, setBusy] = useState(false);
   const [cookedMode, setCookedMode] = useState<Set<string>>(new Set());
@@ -381,22 +379,11 @@ export function ComposeMealView({
                       <TextInput
                         testID={`qty-${id}`}
                         value={draft[id] ?? String(qty)}
-                        onFocus={() => { fresh.current.add(id); }}
-                        onChangeText={(raw) => {
-                          let t = raw;
-                          if (fresh.current.has(id)) {
-                            fresh.current.delete(id);
-                            const old = String(qty);
-                            // One character inserted anywhere into the old value: that character is the new draft.
-                            if (t.length === old.length + 1) {
-                              for (let i = 0; i < t.length; i++) { if (t.slice(0, i) + t.slice(i + 1) === old) { t = t[i]; break; } }
-                            }
-                          }
-                          setDraft((d) => ({ ...d, [id]: t })); applyQty(id, ing, asCount, asCooked, t);
-                        }}
-                        onEndEditing={() => { fresh.current.delete(id); finishQty(id, ing, asCount, asCooked); }}
+                        onChangeText={(t) => { setDraft((d) => ({ ...d, [id]: t })); applyQty(id, ing, asCount, asCooked, t); }}
+                        onEndEditing={() => finishQty(id, ing, asCount, asCooked)}
                         onSubmitEditing={() => finishQty(id, ing, asCount, asCooked)}
                         keyboardType="decimal-pad"
+                        selectTextOnFocus
                         className="min-w-[34px] text-center text-text tabular-nums"
                         style={{ padding: 0, fontSize: 13 }}
                       />
