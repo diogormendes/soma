@@ -77,9 +77,10 @@ export function ComposeMealView({
   // Typed portions (soma#934): the quantity is a field, not only a stepper. A draft holds the keystrokes
   // until the field is left, so "1" on the way to "120" never lands as 1 g.
   const [draft, setDraft] = useState<Record<string, string>>({});
-  // Fields just focused: the first keystroke replaces the old value whatever the native selection did.
-  // Android applies select-on-focus after the focus event, so a fast tap-and-type could land the first
-  // digit before the selection and lose it to the select-all that followed (broccoli "120" became "20").
+  // Fields just focused: the first keystroke replaces the old value, in JS, with no native selection.
+  // Android applies select-on-focus after the focus event, so a fast tap-and-type landed the first digit
+  // before the selection and the select-all that followed ate it (broccoli "120" became "20", a typed
+  // "100" became "00" and removed the row). Without the native selection there is no race.
   const fresh = useRef<Set<string>>(new Set());
   const [grams, setGrams] = useState<Record<string, number>>(initialGrams ?? {});
   const [busy, setBusy] = useState(false);
@@ -386,14 +387,16 @@ export function ComposeMealView({
                           if (fresh.current.has(id)) {
                             fresh.current.delete(id);
                             const old = String(qty);
-                            if (t !== old) { if (t.startsWith(old)) t = t.slice(old.length); else if (t.endsWith(old)) t = t.slice(0, t.length - old.length); }
+                            // One character inserted anywhere into the old value: that character is the new draft.
+                            if (t.length === old.length + 1) {
+                              for (let i = 0; i < t.length; i++) { if (t.slice(0, i) + t.slice(i + 1) === old) { t = t[i]; break; } }
+                            }
                           }
                           setDraft((d) => ({ ...d, [id]: t })); applyQty(id, ing, asCount, asCooked, t);
                         }}
                         onEndEditing={() => { fresh.current.delete(id); finishQty(id, ing, asCount, asCooked); }}
                         onSubmitEditing={() => finishQty(id, ing, asCount, asCooked)}
                         keyboardType="decimal-pad"
-                        selectTextOnFocus
                         className="min-w-[34px] text-center text-text tabular-nums"
                         style={{ padding: 0, fontSize: 13 }}
                       />
