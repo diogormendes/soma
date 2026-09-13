@@ -20,6 +20,16 @@ export interface GarminActivitySummary {
   averageRunningCadenceInStepsPerMinute?: number;
   aerobicTrainingEffect?: number;
   vO2MaxValue?: number;
+  elevationLoss?: number;
+  avgStrideLength?: number;
+  avgGroundContactTime?: number;
+  avgVerticalOscillation?: number;
+  avgVerticalRatio?: number;
+  minTemperature?: number;
+  maxTemperature?: number;
+  waterEstimated?: number;
+  anaerobicTrainingEffect?: number;
+  averagePower?: number;
   [key: string]: unknown;
 }
 
@@ -43,5 +53,29 @@ export interface KiteJump {
   distance_m?: number;
   lat?: number | null;
   lng?: number | null;
+  [key: string]: unknown;
+}
+
+/** One lap of an activity's splits. */
+export interface GarminLap {
+  distance?: number;
+  averageRunCadence?: number;
+  duration?: number;
+  movingDuration?: number;
+  averageSpeed?: number;
+  maxSpeed?: number;
+  averageHR?: number;
+  maxHR?: number;
+  elevationGain?: number;
+  [key: string]: unknown;
+}
+
+/** One gear entry (shoes, board) attached to an activity. */
+export interface GarminGear {
+  gearTypeName?: string;
+  displayName?: string;
+  customMakeModel?: string;
+  maximumMeters?: number;
+  gearStatusName?: string;
   [key: string]: unknown;
 }
