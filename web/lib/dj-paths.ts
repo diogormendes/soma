@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { homedir, platform } from "node:os";
+import { homedir, platform, tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
@@ -36,8 +36,22 @@ export function djPaths(dir: string = djStateDir()): DjPaths {
   };
 }
 
-/** djPaths() with the directory created (idempotent). */
+/**
+ * djPaths() with the directory created (idempotent). When the directory cannot be created, the
+ * state goes under the OS temp dir instead of the whole route module failing to load: the DJ
+ * routes call this at import, and on Vercel the home directory is not writable, so soma-demo
+ * answered 500 (and then could not even render its 500 page) for `/api/playlist/dj/status`
+ * (soma#938 pass, 2026-09-13). No daemon runs on such a host anyway; a status read there
+ * finds an empty directory and reports "stopped", which is the truth.
+ */
 export function ensureDjPaths(dir: string = djStateDir()): DjPaths {
-  mkdirSync(dir, { recursive: true });
-  return djPaths(dir);
+  try {
+    mkdirSync(dir, { recursive: true });
+    return djPaths(dir);
+  } catch (err) {
+    const fallback = join(tmpdir(), "soma", "dj");
+    console.warn(`[dj-paths] cannot create ${dir} (${(err as NodeJS.ErrnoException).code ?? err}); using ${fallback}`);
+    mkdirSync(fallback, { recursive: true });
+    return djPaths(fallback);
+  }
 }
