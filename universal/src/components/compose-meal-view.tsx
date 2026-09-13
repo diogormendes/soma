@@ -368,13 +368,13 @@ export function ComposeMealView({
             return (
               <View key={id} className="border-b border-border-subtle pb-1.5">
                 <View className="flex-row items-center gap-2">
-                  <View className="flex-1">
-                    <View className="flex-row items-center gap-1.5"><Text variant="caption" className="text-text" numberOfLines={1}>{ing.name}</Text>{isEstimated(ing) ? estBadge : null}</View>
+                  <View className="min-w-0 flex-1">
+                    <View className="flex-row items-center gap-1.5"><Text variant="caption" className="shrink text-text" numberOfLines={1}>{ing.name}</Text>{isEstimated(ing) ? estBadge : null}</View>
                     <Text variant="micro" className="text-text-muted tabular-nums">
                       {Math.round(m.calories)} kcal · P{Math.round(m.protein)} C{Math.round(m.carbs)} F{Math.round(m.fat)}
                     </Text>
                   </View>
-                  <View className="flex-row items-center gap-1">
+                  <View className="shrink-0 flex-row items-center gap-1">
                     <Pressable testID={`minus-${id}`} onPress={onMinus}><Button label="−" variant="ghost" size="sm" onPress={onMinus} /></Pressable>
                     <View className="w-20 flex-row items-center justify-center" accessibilityLabel={displayVal}>
                       <TextInput
