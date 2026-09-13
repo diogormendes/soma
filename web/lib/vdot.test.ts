@@ -4,7 +4,16 @@ import {
 } from "./vdot";
 import golden from "./vdot.golden.json";
 
-const g = golden as any;
+// The fixture's shape, stated once: each case is an input and the Python result.
+const g = golden as {
+  vdot_from_race: { d: number; t: number; v: number }[];
+  time_from_vdot: { vdot: number; d: number; v: number }[];
+  velocity_at_vo2max: { vdot: number; v: number }[];
+  pace_for_zone: { vdot: number; z: string; v: number | [number, number] }[];
+  all_paces: { vdot: number; v: Record<string, number[]> }[];
+  hm_goal_paces: { vdot: number; v: Record<string, number> }[];
+  adjust: { vdot: number; o: number; n: number; v: number }[];
+};
 
 describe("VDOT engine — Python parity", () => {
   it("vdotFromRace", () => {
@@ -25,7 +34,7 @@ describe("VDOT engine — Python parity", () => {
   });
   it("allPaces", () => {
     for (const c of g.all_paces) {
-      const out = allPaces(c.vdot) as any;
+      const out = allPaces(c.vdot) as unknown as Record<string, unknown>;
       for (const k of ["E", "M", "T", "I", "R"]) expect(out[k]).toEqual(c.v[k]);
     }
   });

@@ -10,6 +10,7 @@ import {
   parseDailyHealth, parseWeightEntries, parseSleep, parseHrv, parseTrainingReadiness,
   type DailyHealth,
 } from "garmin-auth/health-parsers";
+import { num, rec } from "@/lib/json";
 
 /** Upsert the merged daily-health row. Base fields overwrite; merged fields
  * (hrv/readiness/race) use COALESCE so a later run without them doesn't clobber. */
@@ -59,7 +60,7 @@ async function upsertDailyHealth(sql: QueryFn, d: DailyHealth): Promise<void> {
 /** Parse the raw data for one date and populate the structured tables. */
 export async function processDay(sql: QueryFn, date: string): Promise<{ health: boolean; weights: number; sleep: boolean }> {
   const rows = await sql`SELECT endpoint_name, raw_json FROM garmin_raw_data WHERE date = ${date}`;
-  const raw: Record<string, any> = {};
+  const raw: Record<string, unknown> = {};
   for (const r of rows) raw[r.endpoint_name] = typeof r.raw_json === "string" ? JSON.parse(r.raw_json) : r.raw_json;
 
   let health = false, weights = 0, sleep = false;
@@ -75,16 +76,16 @@ export async function processDay(sql: QueryFn, date: string): Promise<{ health: 
       }
     }
     if (raw.training_readiness) Object.assign(parsed, parseTrainingReadiness(raw.training_readiness));
-    const rp = raw.race_predictions;
-    if (rp && typeof rp === "object" && rp.timeHalfMarathon) parsed.garmin_hm_prediction_seconds = Math.trunc(rp.timeHalfMarathon);
+    const hm = num(rec(raw.race_predictions)?.timeHalfMarathon);
+    if (hm) parsed.garmin_hm_prediction_seconds = Math.trunc(hm);
 
     await upsertDailyHealth(sql, parsed);
     health = true;
 
-    const goal = raw.user_summary.dailyStepGoal;
-    if (goal && Number(goal) > 0) {
-      await sql`UPDATE nutrition_profile SET step_goal = ${Math.trunc(Number(goal))}
-                WHERE id = 1 AND (step_goal IS NULL OR step_goal != ${Math.trunc(Number(goal))})`;
+    const goal = num(rec(raw.user_summary)?.dailyStepGoal);
+    if (goal && goal > 0) {
+      await sql`UPDATE nutrition_profile SET step_goal = ${Math.trunc(goal)}
+                WHERE id = 1 AND (step_goal IS NULL OR step_goal != ${Math.trunc(goal)})`;
     }
   }
 
