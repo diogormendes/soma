@@ -19,7 +19,7 @@ export const maxDuration = 120;
  *      → a new plan from the generator becomes the one current plan; the
  *        previous one reads finished or dropped by its race date. Its workouts
  *        reach the watch through the plan-push step once the plan is live.
- * Auth is the normal session or bearer (middleware); admin/plan stays CRON-gated.
+ * Auth is the normal session or bearer (proxy.ts); admin/plan stays CRON-gated.
  */
 export async function GET(): Promise<Response> {
   const sql = getDb();
