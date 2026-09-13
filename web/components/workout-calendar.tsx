@@ -6,7 +6,8 @@ import { WorkoutDetailModal } from "./workout-detail-modal";
 
 interface CalendarDay {
   day: string | Date; // YYYY-MM-DD or Date from pg
-  program: string;
+  // Hevy can return a workout with no title, and the colour map below already guards on it.
+  program: string | null;
   hevy_id: string;
 }
 

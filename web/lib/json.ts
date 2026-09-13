@@ -26,3 +26,12 @@ export function rec(v: unknown): JsonRecord | null {
 export function arr(v: unknown): unknown[] {
   return Array.isArray(v) ? v : [];
 }
+
+/**
+ * A numeric column as a driver hands it back.
+ *
+ * `pg` returns bigint and numeric as strings, the Neon HTTP driver returns them as numbers, and
+ * a `SUM()` over no rows is null in both. Every caller already wraps these in `Number(...)`, so
+ * the type says what is actually there rather than claiming a number.
+ */
+export type Numeric = number | string | null;

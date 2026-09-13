@@ -23,6 +23,7 @@ import {
   colorForNode } from "@/lib/training-engine";
 import { hmSecondsFromVdot } from "banister";
 import { normalizeSteps } from "@/lib/normalize-steps";
+import type { PlanDayWithPlan } from "@/lib/live-plan";
 import { runForwardSimulation, type ProjectedDay, type SimulationSeeds } from "banister";
 
 // ── Types ─────────────────────────────────────────────────────
@@ -53,9 +54,10 @@ export interface TrajectoryNorms {
 }
 
 interface TrainingDashboardProps {
-  planDays: any[];
+  planDays: PlanDayWithPlan[];
   today: string;
-  raceInfo: { race_date: string; goal_time_seconds: number; plan_name: string } | null;
+  // A plan can exist without a goal time or a name; only the race date is required to be here.
+  raceInfo: { race_date: string; goal_time_seconds: number | null; plan_name: string | null } | null;
   trajectoryData: { date: string; optimal: number; actual: number | null; projectedVdot?: number | null; ctl: number | null; readiness: number | null; weightEffect: number | null }[];
   trajectoryNorms: TrajectoryNorms | null;
   currentVdot: number;
@@ -473,22 +475,26 @@ export function TrainingDashboard({
 
         // Adjust per-step targets (pace/HR) using the day-level pace ratio
         let adjustedSteps: import("@/lib/normalize-steps").NormalizedStep[] | undefined;
-        if (d.workout_steps && Array.isArray(d.workout_steps) && d.workout_steps.length > 0) {
+        if (Array.isArray(d.workout_steps) && d.workout_steps.length > 0) {
           const baseSteps = normalizeSteps(d.workout_steps);
           adjustedSteps = adjustStepTargets(baseSteps, sliderValue, newPace, origPace);
         }
 
+        // A plan day can carry no distance and no run type; a delta over nothing is zero, and
+        // the label falls back to the empty string rather than rendering "null".
+        const originalDistance = d.target_distance_km ?? 0;
         return {
           dayId: d.id,
           dayDate: d.day_date,
           originalPace: Math.round(origPace * 10) / 10,
           newPace: Math.round(newPace * 10) / 10,
-          originalDistance: d.target_distance_km,
-          newDistance: Math.round(d.target_distance_km * distFactor * 10) / 10,
-          originalType: d.run_type,
-          newType: d.run_type,
+          originalDistance,
+          newDistance: Math.round(originalDistance * distFactor * 10) / 10,
+          originalType: d.run_type ?? "",
+          newType: d.run_type ?? "",
           changed: sliderValue !== 1.0,
-          adjustedSteps };
+          adjustedSteps,
+        };
       });
   }, [sliderValue, graphData, planDays, today]);
 

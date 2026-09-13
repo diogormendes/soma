@@ -15,27 +15,9 @@ import { normalizeSteps } from "@/lib/normalize-steps";
 import type { NormalizedStep } from "@/lib/normalize-steps";
 import type { DeltaWorkout } from "@/lib/training-engine";
 import type { ProjectedDay } from "banister";
+import type { PlanDayWithPlan } from "@/lib/live-plan";
 
-interface TrainingDay {
-  id: number;
-  day_date: string;
-  week_number: number;
-  day_of_week: number;
-  run_type: string;
-  run_title: string;
-  run_description: string;
-  target_distance_km: number;
-  workout_steps: any;
-  gym_workout: string | null;
-  gym_notes: string | null;
-  load_level: string;
-  actual_distance_km: number | null;
-  completed: boolean;
-  garmin_push_status: string;
-  plan_name: string;
-  race_date: string;
-  goal_time_seconds: number;
-}
+type TrainingDay = PlanDayWithPlan;
 
 export interface ActivityMatch {
   dayId: number;
@@ -152,9 +134,11 @@ export function TrainingPlanView({
   // Group days by week
   const weeks = new Map<number, TrainingDay[]>();
   for (const day of days) {
-    const existing = weeks.get(day.week_number) || [];
+    // A day with no week number is grouped under week 0 rather than dropped.
+    const week = day.week_number ?? 0;
+    const existing = weeks.get(week) || [];
     existing.push(day);
-    weeks.set(day.week_number, existing);
+    weeks.set(week, existing);
   }
 
   // Determine current week from today's date
@@ -327,7 +311,7 @@ export function TrainingPlanView({
                       const isPast = day.day_date < today;
                       const isFuture = day.day_date >= today;
                       const runColor =
-                        runTypeColors[day.run_type] || runTypeColors.easy;
+                        runTypeColors[day.run_type ?? ""] || runTypeColors.easy;
                       const match = matchByDayId.get(day.id);
                       const delta = deltaByDayId.get(day.id);
                       const projected = projectedDays?.find(p => p.dayId === day.id);
@@ -389,7 +373,7 @@ export function TrainingPlanView({
                           {/* Title & description */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
-                              <WorkoutCompletionButton dayId={day.id} completed={day.completed} />
+                              <WorkoutCompletionButton dayId={day.id} completed={day.completed ?? false} />
                               <span
                                 className={cn(
                                   "text-sm font-medium truncate",
@@ -427,7 +411,7 @@ export function TrainingPlanView({
                                 {day.run_description}
                               </p>
                             )}
-                            {day.workout_steps && Array.isArray(day.workout_steps) && day.workout_steps.length > 0 && (
+                            {Array.isArray(day.workout_steps) && day.workout_steps.length > 0 && (
                               <WorkoutStepEditor
                                 steps={
                                   modifiedSteps.get(day.id)
@@ -542,23 +526,23 @@ export function TrainingPlanView({
                               </div>
                             )}
                             {/* Gym notes (badge is in the header row) */}
-                            {day.gym_workout && day.gym_notes && (
+                            {Boolean(day.gym_workout) && day.gym_notes && (
                               <p className="text-xs text-muted-foreground mt-2 border-t border-border/30 pt-2">{day.gym_notes}</p>
                             )}
                           </div>
 
                           {/* Distance */}
                           <div className="hidden sm:block w-[60px] shrink-0 text-right">
-                            {day.target_distance_km > 0 && (
+                            {(day.target_distance_km ?? 0) > 0 && (
                               <span className="text-xs text-muted-foreground">
-                                {day.target_distance_km.toFixed(1)} km
+                                {(day.target_distance_km ?? 0).toFixed(1)} km
                               </span>
                             )}
                           </div>
 
                           {/* Gym badge */}
                           <div className="hidden sm:block w-[48px] shrink-0">
-                            {day.gym_workout && (
+                            {typeof day.gym_workout === "string" && day.gym_workout !== "" && (
                               <Badge
                                 variant="secondary"
                                 className="text-[10px] bg-violet-500/10 text-violet-400"
@@ -574,7 +558,7 @@ export function TrainingPlanView({
                           <div className="w-[20px] shrink-0 flex justify-center">
                             <GarminPushButton
                               dayId={day.id}
-                              status={day.garmin_push_status}
+                              status={day.garmin_push_status ?? ""}
                               hasSteps={Array.isArray(day.workout_steps) && day.workout_steps.length > 0}
                             />
                           </div>

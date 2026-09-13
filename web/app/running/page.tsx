@@ -17,6 +17,7 @@ import { TrainingLoadChart } from "@/components/training-load-chart";
 import { TimeRangeSelector } from "@/components/time-range-selector";
 import { rangeToDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
+import type { Numeric } from "@/lib/json";
 import { loadRunStatus } from "@/lib/run-status-query";
 import {
   Timer,
@@ -39,6 +40,102 @@ function formatPace(mins: number) {
   const m = Math.floor(t / 60);
   const s = t % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/** The shapes the queries below select. `Numeric` is a column the driver may return as a string. */
+interface PaceRow {
+  date: string;
+  pace: Numeric;
+  distance: Numeric;
+}
+
+interface MileageRow {
+  month: string;
+  runs: Numeric;
+  km: Numeric;
+}
+
+interface Vo2MaxRow {
+  date: string;
+  vo2max: Numeric;
+}
+
+interface HrPaceRow {
+  date: string;
+  name: string;
+  pace: Numeric;
+  hr: Numeric;
+  distance: Numeric;
+}
+
+interface CadenceStrideRow {
+  date: string;
+  cadence: Numeric;
+  stride: Numeric;
+}
+
+interface HillScoreRow {
+  date: string;
+  score: Numeric;
+  strength: Numeric;
+  endurance: Numeric;
+}
+
+interface TrainingLoadRow {
+  date: string;
+  acute: Numeric;
+  chronic: Numeric;
+  acwr: Numeric;
+}
+
+interface HrZoneRow {
+  zone: string;
+  count: Numeric;
+  avg_duration: Numeric;
+  avg_km: Numeric;
+  sort_order: Numeric;
+}
+
+interface RecentRunRow {
+  activity_id: string;
+  date: string;
+  name: string;
+  distance: Numeric;
+  duration_min: Numeric;
+  pace: Numeric;
+  avg_hr: Numeric;
+  calories: Numeric;
+  elev_gain: Numeric;
+  temp_f: string | null;
+  weather_desc: string | null;
+}
+
+interface ShoeRow {
+  gear_pk: string;
+  shoe_name: string | null;
+  status: string | null;
+  max_km: Numeric;
+  runs: Numeric;
+  total_km: Numeric;
+  shortest_km: Numeric;
+  longest_km: Numeric;
+}
+
+interface SplitRow {
+  km: Numeric;
+  runs: Numeric;
+  avg_pace: Numeric;
+  avg_hr: Numeric;
+  avg_cadence: Numeric;
+  avg_power: Numeric;
+  fast_pace: Numeric;
+}
+
+interface BestSplitRow {
+  km: Numeric;
+  pace: Numeric;
+  date: string;
+  activity_name: string;
 }
 
 async function getRunningStats(cutoff: string) {
@@ -73,7 +170,7 @@ async function getPaceHistory(cutoff: string) {
       AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
   `;
-  return rows;
+  return rows as PaceRow[];
 }
 
 async function getMonthlyMileage(cutoff: string) {
@@ -89,7 +186,7 @@ async function getMonthlyMileage(cutoff: string) {
       AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     GROUP BY month ORDER BY month ASC
   `;
-  return rows;
+  return rows as MileageRow[];
 }
 
 async function getVO2MaxTrend(cutoff: string) {
@@ -106,7 +203,7 @@ async function getVO2MaxTrend(cutoff: string) {
     ORDER BY LEFT((raw_json->>'startTimeLocal')::text, 10),
              (raw_json->>'startTimeLocal')::text DESC
   `;
-  return rows;
+  return rows as Vo2MaxRow[];
 }
 
 async function getHRPaceData(cutoff: string) {
@@ -127,7 +224,7 @@ async function getHRPaceData(cutoff: string) {
       AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
   `;
-  return rows;
+  return rows as HrPaceRow[];
 }
 
 async function getCadenceStride(cutoff: string) {
@@ -146,7 +243,7 @@ async function getCadenceStride(cutoff: string) {
       AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
   `;
-  return rows;
+  return rows as CadenceStrideRow[];
 }
 
 async function getFitnessScores() {
@@ -185,7 +282,7 @@ async function getFitnessScores() {
   }
 
   const latestEndurance = endurance[endurance.length - 1] || null;
-  const latestHill = hill[hill.length - 1] || null;
+  const latestHill = (hill as HillScoreRow[])[hill.length - 1] || null;
 
   return {
     trend: Array.from(dateMap.entries())
@@ -248,7 +345,7 @@ async function getTrainingLoadTrend(cutoff: string) {
       AND date >= ${cutoff}::date
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as TrainingLoadRow[];
 }
 
 async function getPersonalRecords() {
@@ -382,7 +479,7 @@ async function getOverallHRDistribution(cutoff: string) {
     GROUP BY zone, sort_order
     ORDER BY sort_order ASC
   `;
-  return rows;
+  return rows as HrZoneRow[];
 }
 
 async function getRecentRuns(cutoff: string) {
@@ -412,7 +509,7 @@ async function getRecentRuns(cutoff: string) {
     ORDER BY (s.raw_json->>'startTimeLocal')::text DESC
     LIMIT 20
   `;
-  return rows;
+  return rows as RecentRunRow[];
 }
 
 async function getShoeMileage() {
@@ -447,7 +544,7 @@ async function getShoeMileage() {
     GROUP BY gear_pk, shoe_name, status, max_km
     ORDER BY total_km DESC
   `;
-  return rows;
+  return rows as ShoeRow[];
 }
 
 async function getSplitAnalysis(cutoff: string) {
@@ -491,7 +588,7 @@ async function getSplitAnalysis(cutoff: string) {
     HAVING COUNT(*) >= 10
     ORDER BY lap_index ASC
   `;
-  return rows;
+  return rows as SplitRow[];
 }
 
 async function getBestSplits(cutoff: string) {
@@ -538,7 +635,7 @@ async function getBestSplits(cutoff: string) {
     ORDER BY wp.pace ASC
     LIMIT 5
   `;
-  return rows;
+  return rows as BestSplitRow[];
 }
 
 export default async function RunningPage({
@@ -708,7 +805,7 @@ export default async function RunningPage({
       )}
 
       {/* Training Load Trend */}
-      {(trainingLoadTrend as any[]).length > 2 && (
+      {trainingLoadTrend.length > 2 && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -721,7 +818,7 @@ export default async function RunningPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <TrainingLoadChart data={(trainingLoadTrend as any[]).map((d: any) => ({
+            <TrainingLoadChart data={trainingLoadTrend.map((d) => ({
               date: d.date,
               acute: d.acute ? Number(d.acute) : null,
               chronic: d.chronic ? Number(d.chronic) : null,
@@ -734,11 +831,23 @@ export default async function RunningPage({
       {/* Pace + Monthly Mileage */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <ExpandableChartCard title="Pace Progression">
-          <PaceChart data={paceHistory as any} />
+          <PaceChart
+            data={paceHistory.map((r) => ({
+              date: r.date,
+              pace: Number(r.pace ?? 0),
+              distance: Number(r.distance ?? 0),
+            }))}
+          />
         </ExpandableChartCard>
 
         <ExpandableChartCard title="Monthly Mileage">
-          <MileageChart data={mileage as any} />
+          <MileageChart
+            data={mileage.map((r) => ({
+              month: r.month,
+              km: Number(r.km ?? 0),
+              runs: Number(r.runs ?? 0),
+            }))}
+          />
         </ExpandableChartCard>
       </div>
 
@@ -770,7 +879,9 @@ export default async function RunningPage({
       {/* VO2max + HR vs Pace */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <ExpandableChartCard title="VO2max Trend">
-          <VO2MaxChart data={vo2max as any} />
+          <VO2MaxChart
+            data={vo2max.map((r) => ({ date: r.date, vo2max: Number(r.vo2max ?? 0) }))}
+          />
         </ExpandableChartCard>
 
         <Card>
@@ -781,7 +892,15 @@ export default async function RunningPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <HRPaceChart data={hrPaceData as any} />
+            <HRPaceChart
+              data={hrPaceData.map((r) => ({
+                date: r.date,
+                name: r.name,
+                pace: Number(r.pace ?? 0),
+                hr: Number(r.hr ?? 0),
+                distance: Number(r.distance ?? 0),
+              }))}
+            />
           </CardContent>
         </Card>
       </div>
@@ -789,7 +908,7 @@ export default async function RunningPage({
       {/* Cadence & Stride */}
       <ExpandableChartCard title="Cadence & Stride Length" className="mb-6">
         <CadenceStrideChart
-          data={(cadenceStride as any[]).map((c: any) => ({
+          data={cadenceStride.map((c) => ({
             date: c.date,
             cadence: Number(c.cadence),
             stride: Number(c.stride),
@@ -798,7 +917,7 @@ export default async function RunningPage({
       </ExpandableChartCard>
 
       {/* Training Intensity Distribution */}
-      {(hrDistribution as any[]).length > 0 && (
+      {hrDistribution.length > 0 && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -808,15 +927,15 @@ export default async function RunningPage({
           </CardHeader>
           <CardContent>
             {(() => {
-              const zones = hrDistribution as any[];
-              const total = zones.reduce((s: number, z: any) => s + Number(z.count), 0);
+              const zones = hrDistribution;
+              const total = zones.reduce((s: number, z) => s + Number(z.count), 0);
               const zoneColors = [
                 "bg-blue-400", "bg-green-400", "bg-yellow-400", "bg-orange-400", "bg-red-400",
               ];
               return (
                 <div className="space-y-3">
                   <div className="flex h-6 rounded-full overflow-hidden">
-                    {zones.map((z: any, i: number) => {
+                    {zones.map((z, i: number) => {
                       const pct = total > 0 ? (Number(z.count) / total) * 100 : 0;
                       if (pct < 1) return null;
                       return (
@@ -832,7 +951,7 @@ export default async function RunningPage({
                     })}
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    {zones.map((z: any, i: number) => (
+                    {zones.map((z, i: number) => (
                       <div key={z.zone} className="text-center">
                         <div className="flex items-center justify-center gap-1.5 mb-1">
                           <span className={`w-2.5 h-2.5 rounded-full ${zoneColors[i]}`} />
@@ -853,7 +972,7 @@ export default async function RunningPage({
       )}
 
       {/* Per-KM Split Analysis */}
-      {(splitAnalysis as any[]).length > 0 && (
+      {splitAnalysis.length > 0 && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -869,13 +988,13 @@ export default async function RunningPage({
               {/* Split pace bars */}
               <div className="space-y-1.5">
                 {(() => {
-                  const splits = splitAnalysis as any[];
-                  const paces = splits.map((s: any) => Number(s.avg_pace));
+                  const splits = splitAnalysis;
+                  const paces = splits.map((s) => Number(s.avg_pace));
                   const minPace = Math.min(...paces);
                   const maxPace = Math.max(...paces);
                   const range = maxPace - minPace || 1;
 
-                  return splits.map((s: any) => {
+                  return splits.map((s) => {
                     const pace = Number(s.avg_pace);
                     const hr = s.avg_hr ? Math.round(Number(s.avg_hr)) : null;
                     const cadence = s.avg_cadence ? Math.round(Number(s.avg_cadence)) : null;
@@ -917,11 +1036,11 @@ export default async function RunningPage({
               </div>
 
               {/* Best single KM splits */}
-              {(bestSplits as any[]).length > 0 && (
+              {bestSplits.length > 0 && (
                 <div className="pt-3 border-t border-border/50">
                   <div className="text-xs font-medium text-muted-foreground mb-2">Fastest Single KM Splits</div>
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-                    {(bestSplits as any[]).map((s: any, i: number) => (
+                    {bestSplits.map((s, i: number) => (
                       <div key={i} className="flex items-center gap-2 p-2 bg-muted/20 rounded">
                         <span className={`text-sm font-bold ${i === 0 ? "text-amber-400" : i === 1 ? "text-slate-300" : "text-amber-700"}`}>
                           #{i + 1}
@@ -970,13 +1089,13 @@ export default async function RunningPage({
               <div>
                 <div className="text-xs text-muted-foreground">Hill Strength</div>
                 <div className="text-2xl font-bold">
-                  {(fitnessScores.latestHill as any)?.strength ?? "—"}
+                  {fitnessScores.latestHill?.strength ?? "—"}
                 </div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Hill Endurance</div>
                 <div className="text-2xl font-bold">
-                  {(fitnessScores.latestHill as any)?.endurance ?? "—"}
+                  {fitnessScores.latestHill?.endurance ?? "—"}
                 </div>
               </div>
             </div>
@@ -1114,20 +1233,20 @@ export default async function RunningPage({
       </Card>
 
       {/* Shoe Mileage Tracker */}
-      {(shoeMileage as any[]).length > 0 && (
+      {shoeMileage.length > 0 && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <Footprints className="h-4 w-4 text-emerald-400" />
               Shoe Mileage
               <span className="ml-auto text-xs font-normal">
-                {(shoeMileage as any[]).length} {(shoeMileage as any[]).length === 1 ? "pair" : "pairs"} tracked
+                {shoeMileage.length} {shoeMileage.length === 1 ? "pair" : "pairs"} tracked
               </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {(shoeMileage as any[]).map((shoe: any) => {
+              {shoeMileage.map((shoe) => {
                 const totalKm = Number(shoe.total_km);
                 const maxKm = shoe.max_km ? Number(shoe.max_km) : null;
                 const pct = maxKm ? (totalKm / maxKm) * 100 : null;
@@ -1192,7 +1311,7 @@ export default async function RunningPage({
         </CardHeader>
         <CardContent>
           <ClickableRunTable
-            runs={(recentRuns as any[]).map((r: any) => ({
+            runs={recentRuns.map((r) => ({
               activity_id: r.activity_id,
               date: r.date,
               name: r.name,

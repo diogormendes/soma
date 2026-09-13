@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import { TrainingDashboard } from "@/components/training-dashboard";
 import { getDb } from "@/lib/db";
-import { getLivePlan, getTrailingLoad, type LivePlan } from "@/lib/live-plan";
+import {
+  getLivePlan,
+  getTrailingLoad,
+  type LivePlan,
+  type PlanDayWithPlan,
+} from "@/lib/live-plan";
+import type { Numeric } from "@/lib/json";
 import { TrainingControls } from "@/components/training-controls";
 import { PlanLifecycleCard } from "@/components/plan-lifecycle-card";
 import { getPlanLifecycle } from "@/lib/live-plan";
@@ -14,6 +20,39 @@ export const metadata: Metadata = { title: "Training" };
 export const revalidate = 300;
 
 /** Safe query wrapper — returns fallback on missing table or other DB error. */
+/** A plan day as this page renders it: the live plan's row plus the plan's own header fields. */
+type PagePlanDay = PlanDayWithPlan;
+
+/** The fitted Banister parameters, as `banister_params` stores them. */
+interface BanisterParamsRow {
+  p0: Numeric;
+  k1: Numeric;
+  k2: Numeric;
+  tau1: Numeric;
+  tau2: Numeric;
+  current_vdot: Numeric;
+}
+
+/** Any reference-history row: the reader below converts each column it needs. */
+type ReferenceRow = Record<string, unknown>;
+
+interface ActualRow {
+  date: string;
+  vo2max: Numeric;
+  weight_kg: Numeric;
+}
+
+interface PmcRow {
+  date: string;
+  ctl: Numeric;
+  daily_load: Numeric;
+}
+
+interface ReadinessRow {
+  date: string;
+  composite_score: Numeric;
+}
+
 async function safeQuery<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await fn();
@@ -29,7 +68,7 @@ async function safeQuery<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
  * page shows what Garmin actually observed instead of a phantom schedule.
  */
 async function getPlanForPage(): Promise<{
-  planDays: any[];
+  planDays: PagePlanDay[];
   raceInfo: { race_date: string; goal_time_seconds: number | null; plan_name: string | null } | null;
   live: LivePlan;
 }> {
@@ -122,7 +161,26 @@ async function getReferenceData() {
       [],
     ),
   ]);
-  return { readinessHistory, fitnessHistory, weightHistory };
+  // The charts read numbers; a driver may hand these back as strings, and a missing row is null.
+  const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+  return {
+    readinessHistory: (readinessHistory as ReferenceRow[]).map((r) => ({
+      date: String(r.date),
+      composite_score: num(r.composite_score),
+      garmin_readiness_score: num(r.garmin_readiness_score),
+    })),
+    fitnessHistory: (fitnessHistory as ReferenceRow[]).map((r) => ({
+      date: String(r.date),
+      efficiency_factor: num(r.efficiency_factor),
+      decoupling_pct: num(r.decoupling_pct),
+      race_prediction_seconds: num(r.race_prediction_seconds),
+      vdot_adjusted: num(r.vdot_adjusted),
+    })),
+    weightHistory: (weightHistory as ReferenceRow[]).map((r) => ({
+      date: String(r.date),
+      weight_kg: num(r.weight_kg),
+    })),
+  };
 }
 
 async function getBanisterParams() {
@@ -134,13 +192,13 @@ async function getBanisterParams() {
     `,
     [],
   );
-  return rows[0] || null;
+  return (rows[0] as BanisterParamsRow | undefined) || null;
 }
 
 async function getTrajectoryData(
   raceDate: string,
-  banister: any | null,
-  planDays: any[],
+  banister: BanisterParamsRow | null,
+  planDays: PagePlanDay[],
 ) {
   const sql = getDb();
 
@@ -178,7 +236,9 @@ async function getTrajectoryData(
   // Rest days come from the LIVE plan's days passed in (already gated by the
   // live rule), not from a raw status='active' join that would resurrect a
   // dormant plan's calendar (#701).
-  const _restDatesSet = new Set(planDays.filter((d: any) => d.run_type === "rest").map((d: any) => d.day_date));
+  const _restDatesSet = new Set(
+    planDays.filter((d) => d.run_type === "rest").map((d) => d.day_date),
+  );
 
   // Race-calibrated VDOT from Banister model — no Garmin fallback
   const banisterCurrentVdot = banister?.current_vdot ? Number(banister.current_vdot) : 0;
@@ -187,10 +247,16 @@ async function getTrajectoryData(
   const start = new Date(actuals[0].date + "T00:00:00");
   const end = new Date(raceDate + "T00:00:00");
 
-  const actualMap = new Map(actuals.map((a: any) => [a.date, Number(a.vo2max)]));
-  const weightMap = new Map(actuals.filter((a: any) => a.weight_kg != null).map((a: any) => [a.date, Number(a.weight_kg)]));
-  const ctlMap = new Map(pmcRows.map((r: any) => [r.date, Number(r.ctl)]));
-  const readinessMap = new Map(readinessRows.map((r: any) => [r.date, Number(r.composite_score)]));
+  const actualRows = actuals as ActualRow[];
+  const pmc = pmcRows as PmcRow[];
+  const readiness = readinessRows as ReadinessRow[];
+
+  const actualMap = new Map(actualRows.map((a) => [a.date, Number(a.vo2max)]));
+  const weightMap = new Map(
+    actualRows.filter((a) => a.weight_kg != null).map((a) => [a.date, Number(a.weight_kg)]),
+  );
+  const ctlMap = new Map(pmc.map((r) => [r.date, Number(r.ctl)]));
+  const readinessMap = new Map(readiness.map((r) => [r.date, Number(r.composite_score)]));
 
   // ── Banister projection using full historical loads ──
   // Use the raw p0 (historical baseline) with real loads from pmc_daily.
@@ -212,9 +278,9 @@ async function getTrajectoryData(
 
   // Build historical loads from pmc_daily (real data, EPOC-based units)
   const historicalLoadMap = new Map<string, number>();
-  for (const r of pmcRows) {
-    const load = Number((r as any).daily_load) || 0;
-    if (load > 0) historicalLoadMap.set(r.date as string, load);
+  for (const r of pmc) {
+    const load = Number(r.daily_load) || 0;
+    if (load > 0) historicalLoadMap.set(r.date, load);
   }
 
   // Compute scale factor: plan loads use distance×intensity (0-15 range)
@@ -227,8 +293,8 @@ async function getTrajectoryData(
   // Compute raw plan load estimates and their average
   const rawPlanLoads: { date: string; load: number }[] = [];
   for (const d of planDays) {
-    const raw = ((d as any).target_distance_km || 0) * (INTENSITY[(d as any).run_type] || 0.6);
-    if (raw > 0) rawPlanLoads.push({ date: (d as any).day_date, load: raw });
+    const raw = (d.target_distance_km || 0) * (INTENSITY[d.run_type ?? ""] || 0.6);
+    if (raw > 0) rawPlanLoads.push({ date: d.day_date, load: raw });
   }
   const avgRawPlanLoad = rawPlanLoads.length > 0
     ? rawPlanLoads.reduce((s, v) => s + v.load, 0) / rawPlanLoads.length
@@ -240,8 +306,8 @@ async function getTrajectoryData(
   // Add future plan loads scaled to EPOC units (for dates not yet in pmc_daily)
   const planLoadMap = new Map<string, number>();
   for (const d of planDays) {
-    const raw = ((d as any).target_distance_km || 0) * (INTENSITY[(d as any).run_type] || 0.6);
-    if (raw > 0) planLoadMap.set((d as any).day_date, raw * loadScaleFactor);
+    const raw = (d.target_distance_km || 0) * (INTENSITY[d.run_type ?? ""] || 0.6);
+    if (raw > 0) planLoadMap.set(d.day_date, raw * loadScaleFactor);
   }
 
   // Build one DatedLoad entry per day from (trajectory_start - lookback) to race date.
@@ -270,12 +336,14 @@ async function getTrajectoryData(
   });
 
   // Compute normalization ranges for secondary dimensions
-  const ctlValues = pmcRows.map((r: any) => Number(r.ctl)).filter((v: number) => !isNaN(v));
+  const ctlValues = pmc.map((r) => Number(r.ctl)).filter((v: number) => !isNaN(v));
   const ctlMin = ctlValues.length > 0 ? Math.min(...ctlValues) : 0;
   const ctlMax = ctlValues.length > 0 ? Math.max(...ctlValues) : 1;
   const ctlRange = Math.max(ctlMax - ctlMin, 1);
 
-  const readinessValues = readinessRows.map((r: any) => Number(r.composite_score)).filter((v: number) => !isNaN(v));
+  const readinessValues = readiness
+    .map((r) => Number(r.composite_score))
+    .filter((v: number) => !isNaN(v));
   const readinessMin = readinessValues.length > 0 ? Math.min(...readinessValues) : 0;
   const readinessMax = readinessValues.length > 0 ? Math.max(...readinessValues) : 1;
   const readinessRange = Math.max(readinessMax - readinessMin, 1);
@@ -377,17 +445,17 @@ export default async function TrainingPage() {
   let trajectoryData: { date: string; optimal: number; actual: number | null; projectedVdot: number | null; ctl: number | null; readiness: number | null; weightEffect: number | null }[] = [];
   let trajectoryNorms: { ctlMin: number; ctlRange: number; readinessMin: number; readinessRange: number; weightMin: number; weightRange: number } | null = null;
   if (raceInfo) {
-    const result = await getTrajectoryData(raceInfo.race_date, banisterParams, planDays as any[]);
+    const result = await getTrajectoryData(raceInfo.race_date, banisterParams, planDays);
     trajectoryData = result.trajectory;
     trajectoryNorms = result.norms;
   }
 
   // Compute stats for header + race countdown
   const totalWeeks = planDays.length > 0
-    ? Math.max(...planDays.map((d: any) => d.week_number))
+    ? Math.max(...planDays.map((d) => d.week_number ?? 0))
     : 0;
 
-  const todayEntry = planDays.find((d: any) => d.day_date === today);
+  const todayEntry = planDays.find((d) => d.day_date === today);
   const currentWeek = todayEntry?.week_number ?? 1;
 
   // Race-calibrated VDOT from Banister model — no Garmin fallback
@@ -446,14 +514,14 @@ export default async function TrainingPage() {
         <PlanLifecycleCard lifecycle={lifecycle} fallbackLabel={fallback.label} />
         {/* Training Dashboard — client component managing graph, trajectory, and plan */}
         <TrainingDashboard
-          planDays={planDays as any}
+          planDays={planDays}
           today={today}
-          raceInfo={raceInfo as any}
+          raceInfo={raceInfo}
           trajectoryData={trajectoryData}
           trajectoryNorms={trajectoryNorms}
           currentVdot={currentVdot}
           goalVdot={goalVdot}
-          referenceData={referenceData as any}
+          referenceData={referenceData}
           engagement={engagement}
           fallback={fallback}
         />
