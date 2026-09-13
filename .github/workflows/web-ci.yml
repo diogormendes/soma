@@ -47,7 +47,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Install
         run: npm ci
-      - name: eslint (warning cap 334, lowered by every campaign PR)
+      - name: eslint (warning cap lowered by every campaign PR)
         run: npx eslint . --max-warnings 91
 
   build-without-db:
