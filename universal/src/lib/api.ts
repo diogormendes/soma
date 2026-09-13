@@ -1099,6 +1099,14 @@ export interface Ingredient {
   is_raw?: boolean;
   /** Cooked weight = raw grams x ratio (e.g. rice absorbs water, meat loses it). */
   raw_to_cooked_ratio?: number | null;
+  /** Where the macros came from ("usda", "off", "claude" = an estimate) and how sure the source was (soma#932). */
+  source?: string | null;
+  confidence?: number | null;
+  /** How the catalog has been used: meal-log count and last date, preset meals naming it. Pickers show used first. */
+  use_count?: number | null;
+  last_used?: string | null;
+  in_presets?: number | null;
+  is_favorite?: boolean | null;
 }
 /** Macros for `grams` of an ingredient (linear per-100g scaling). */
 export function ingredientMacros(ing: Ingredient, grams: number) {
@@ -1224,7 +1232,7 @@ export interface IngredientProposal {
   id: number; name: string; brand?: string | null;
   calories_per_100g: number | null; protein_per_100g: number | null; carbs_per_100g: number | null;
   fat_per_100g: number | null; fiber_per_100g: number | null;
-  source: "usda" | "off"; source_id: string; source_url: string; confidence: number; rationale: string; flags: string[];
+  source: string; source_id: string; source_url: string; confidence: number; rationale: string; flags: string[];
 }
 export async function researchIngredient(query: string): Promise<{ query: string; proposals: IngredientProposal[]; warnings: string[] }> {
   const r = await fetch(`${API_BASE}/api/nutrition/ingredients/research`, {
@@ -1233,6 +1241,16 @@ export async function researchIngredient(query: string): Promise<{ query: string
   const j = (await r.json().catch(() => ({}))) as { error?: string; query?: string; proposals?: IngredientProposal[]; warnings?: string[] };
   if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
   return { query: j.query ?? query, proposals: j.proposals ?? [], warnings: j.warnings ?? [] };
+}
+/** The third source (soma#933): the local Claude Code estimates a food neither table has. Slow (10-30 s);
+ *  the answer is a proposal marked as an estimate (source "claude", flag "estimated", capped confidence). */
+export async function estimateIngredient(query: string, notes?: string): Promise<{ query: string; proposal: IngredientProposal; warnings: string[] }> {
+  const r = await fetch(`${API_BASE}/api/nutrition/ingredients/estimate`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...AUTH_HEADERS }, body: JSON.stringify({ query, notes }),
+  });
+  const j = (await r.json().catch(() => ({}))) as { error?: string; query?: string; proposal?: IngredientProposal; warnings?: string[] };
+  if (!r.ok || !j.proposal) throw new Error(j.error ?? `HTTP ${r.status}`);
+  return { query: j.query ?? query, proposal: j.proposal, warnings: j.warnings ?? [] };
 }
 export interface ConfirmIngredientBody {
   proposal_id: number; id: string; name: string; category: string; is_raw: boolean;
