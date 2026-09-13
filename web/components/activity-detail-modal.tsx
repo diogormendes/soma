@@ -10,8 +10,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Download, Upload, Check, Loader2 } from "lucide-react";
-import { ActivityPerformanceChart } from "@/components/activity-performance-chart";
+import { ActivityPerformanceChart, type TimeSeriesPoint } from "@/components/activity-performance-chart";
 import { RunSparklines, buildSparkPoints } from "@/components/run-sparklines";
+import type { GarminActivitySummary, GarminGear, GarminHrZone, GarminLap } from "@/lib/garmin-types";
+import { num, rec, str } from "@/lib/json";
 
 const RunMap = dynamic(
   () => import("@/components/run-map").then((m) => m.RunMap),
@@ -40,7 +42,7 @@ function formatDur(seconds: number) {
 }
 
 export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModalProps) {
-  const [fetched, setData] = useState<Record<string, any> | null>(null);
+  const [fetched, setData] = useState<Record<string, unknown> | null>(null);
   // Nothing is shown for a closed modal, so the effect never has to clear it.
   const data = activityId ? fetched : null;
   const [loading, setLoading] = useState(false);
@@ -84,19 +86,20 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
       .finally(() => setLoading(false));
   }, [activityId]);
 
-  const summary = data?.summary;
-  const splits = data?.splits;
-  const weather = data?.weather;
-  const hrZones = data?.hr_zones;
+  // The route hands back the raw Garmin endpoints; each is read through its named shape.
+  const summary = (data?.summary ?? {}) as GarminActivitySummary;
+  const splits = data?.splits as { lapDTOs?: GarminLap[] } | undefined;
+  const weather = rec(data?.weather);
+  const hrZones = (Array.isArray(data?.hr_zones) ? data.hr_zones : []) as GarminHrZone[];
   const gear = data?.gear;
 
-  const typeKey = summary?.activityType?.typeKey || "";
+  const typeKey = summary.activityType?.typeKey || "";
   const isRunning = typeKey === "running" || typeKey === "treadmill_running";
   const isStrength = typeKey === "strength_training";
 
-  const laps = splits?.lapDTOs || [];
-  const hasLaps = laps.length > 0 && laps[0]?.distance > 0;
-  const shoeInfo = Array.isArray(gear) ? gear.find((g: any) => g.gearTypeName === "Shoes") : null;
+  const laps: GarminLap[] = splits?.lapDTOs ?? [];
+  const hasLaps = laps.length > 0 && (laps[0]?.distance ?? 0) > 0;
+  const shoeInfo = Array.isArray(gear) ? (gear as GarminGear[]).find((g) => g.gearTypeName === "Shoes") : null;
   const hasTimeSeries = isRunning && Array.isArray(data?.time_series) && data.time_series.length > 0;
   const gpsRoute = data?.gps_route ?? [];
   const hasGpsRoute = isRunning && Array.isArray(gpsRoute) && gpsRoute.length > 10;
@@ -108,7 +111,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
           <SheetTitle className="text-lg">
             {loading ? "Loading..." : summary?.activityName || "Activity"}
           </SheetTitle>
-          {summary && (
+          {!!summary.startTimeLocal && (
             <div className="text-sm text-muted-foreground">
               {new Date(summary.startTimeLocal).toLocaleDateString("en-US", {
                 weekday: "long",
@@ -150,69 +153,69 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
               <TabsContent value="overview" className="space-y-4 px-4 pb-8">
                 {/* Key Metrics Grid */}
                 <div className="grid grid-cols-2 gap-3">
-                  {summary.distance > 0 && (
-                    <MetricBox label="Distance" value={`${(summary.distance / 1000).toFixed(2)} km`} />
+                  {(summary.distance ?? 0) > 0 && (
+                    <MetricBox label="Distance" value={`${((summary.distance ?? 0) / 1000).toFixed(2)} km`} />
                   )}
-                  <MetricBox label="Duration" value={formatDur(summary.duration)} />
-                  {isRunning && summary.distance > 0 && (
+                  <MetricBox label="Duration" value={formatDur(summary.duration ?? 0)} />
+                  {isRunning && (summary.distance ?? 0) > 0 && (
                     <MetricBox
                       label="Avg Pace"
-                      value={`${formatPace(summary.averageSpeed)}/km`}
+                      value={`${formatPace(summary.averageSpeed ?? 0)}/km`}
                     />
                   )}
-                  {summary.averageHR > 0 && (
-                    <MetricBox label="Avg HR" value={`${Math.round(summary.averageHR)} bpm`} />
+                  {(summary.averageHR ?? 0) > 0 && (
+                    <MetricBox label="Avg HR" value={`${Math.round(summary.averageHR ?? 0)} bpm`} />
                   )}
-                  {summary.maxHR > 0 && (
-                    <MetricBox label="Max HR" value={`${Math.round(summary.maxHR)} bpm`} />
+                  {(summary.maxHR ?? 0) > 0 && (
+                    <MetricBox label="Max HR" value={`${Math.round(summary.maxHR ?? 0)} bpm`} />
                   )}
-                  {summary.calories > 0 && (
-                    <MetricBox label="Calories" value={`${Math.round(summary.calories)} kcal`} />
+                  {(summary.calories ?? 0) > 0 && (
+                    <MetricBox label="Calories" value={`${Math.round(summary.calories ?? 0)} kcal`} />
                   )}
-                  {summary.elevationGain > 0 && (
-                    <MetricBox label="Elev Gain" value={`${Math.round(summary.elevationGain)}m`} />
+                  {(summary.elevationGain ?? 0) > 0 && (
+                    <MetricBox label="Elev Gain" value={`${Math.round(summary.elevationGain ?? 0)}m`} />
                   )}
-                  {summary.elevationLoss > 0 && (
-                    <MetricBox label="Elev Loss" value={`${Math.round(summary.elevationLoss)}m`} />
+                  {(summary.elevationLoss ?? 0) > 0 && (
+                    <MetricBox label="Elev Loss" value={`${Math.round((summary.elevationLoss ?? 0))}m`} />
                   )}
-                  {isRunning && summary.averageRunningCadenceInStepsPerMinute > 0 && (
-                    <MetricBox label="Cadence" value={`${Math.round(summary.averageRunningCadenceInStepsPerMinute)} spm`} />
+                  {isRunning && (summary.averageRunningCadenceInStepsPerMinute ?? 0) > 0 && (
+                    <MetricBox label="Cadence" value={`${Math.round(summary.averageRunningCadenceInStepsPerMinute ?? 0)} spm`} />
                   )}
-                  {isRunning && summary.avgStrideLength > 0 && (
-                    <MetricBox label="Stride" value={`${Math.round(summary.avgStrideLength)} cm`} />
+                  {isRunning && (summary.avgStrideLength ?? 0) > 0 && (
+                    <MetricBox label="Stride" value={`${Math.round((summary.avgStrideLength ?? 0))} cm`} />
                   )}
-                  {summary.vO2MaxValue > 0 && (
+                  {(summary.vO2MaxValue ?? 0) > 0 && (
                     <MetricBox label="VO2max" value={`${Number(summary.vO2MaxValue).toFixed(1)}`} />
                   )}
-                  {summary.aerobicTrainingEffect > 0 && (
+                  {(summary.aerobicTrainingEffect ?? 0) > 0 && (
                     <MetricBox label="Aerobic TE" value={`${Number(summary.aerobicTrainingEffect).toFixed(1)}`} />
                   )}
-                  {!isRunning && !isStrength && summary.maxSpeed > 0 && (
+                  {!isRunning && !isStrength && (summary.maxSpeed ?? 0) > 0 && (
                     <MetricBox
                       label="Max Speed"
                       value={
                         typeKey.includes("kite")
-                          ? `${(summary.maxSpeed * 1.94384).toFixed(1)} kts`
-                          : `${(summary.maxSpeed * 3.6).toFixed(1)} km/h`
+                          ? `${((summary.maxSpeed ?? 0) * 1.94384).toFixed(1)} kts`
+                          : `${((summary.maxSpeed ?? 0) * 3.6).toFixed(1)} km/h`
                       }
                     />
                   )}
                 </div>
 
                 {/* HR Zones */}
-                {hrZones && Array.isArray(hrZones) && hrZones.length > 0 && (
+                {hrZones.length > 0 && (
                   <div className="space-y-2">
                     <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">HR Zones</h4>
-                    {hrZones.map((z: any) => {
-                      const totalSecs = hrZones.reduce((s: number, zz: any) => s + (zz.secsInZone || 0), 0);
+                    {hrZones.map((z) => {
+                      const totalSecs = hrZones.reduce((s: number, zz) => s + (zz.secsInZone || 0), 0);
                       const pct = totalSecs > 0 ? ((z.secsInZone || 0) / totalSecs) * 100 : 0;
                       const colors = ["bg-slate-400", "bg-blue-400", "bg-green-400", "bg-orange-400", "bg-red-400"];
                       return (
-                        <div key={z.zoneNumber} className="flex items-center gap-2 text-xs">
+                        <div key={String(z.zoneNumber)} className="flex items-center gap-2 text-xs">
                           <span className="w-8 text-muted-foreground">Z{z.zoneNumber}</span>
                           <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
                             <div
-                              className={`h-full ${colors[z.zoneNumber - 1] || "bg-primary"} rounded-full`}
+                              className={`h-full ${colors[(z.zoneNumber ?? 1) - 1] || "bg-primary"} rounded-full`}
                               style={{ width: `${pct}%` }}
                             />
                           </div>
@@ -225,33 +228,33 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                 )}
 
                 {/* Weather */}
-                {weather && weather.temp && (
+                {num(weather?.temp) != null && (
                   <div className="space-y-2">
                     <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Weather</h4>
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div>
                         <span className="text-muted-foreground">Temp: </span>
-                        {Math.round((weather.temp - 32) * 5/9)}°C
+                        {Math.round(((num(weather?.temp) ?? 0) - 32) * 5 / 9)}°C
                       </div>
-                      {weather.relativeHumidity && (
+                      {!!num(weather?.relativeHumidity) && (
                         <div>
                           <span className="text-muted-foreground">Humidity: </span>
-                          {weather.relativeHumidity}%
+                          {num(weather?.relativeHumidity)}%
                         </div>
                       )}
-                      {weather.windSpeed > 0 && (
+                      {(num(weather?.windSpeed) ?? 0) > 0 && (
                         <div>
                           <span className="text-muted-foreground">Wind: </span>
                           {typeKey.includes("kite") || typeKey.includes("wind")
-                            ? `${(weather.windSpeed * 0.868976).toFixed(1)} kts`
-                            : `${weather.windSpeed} mph`}
-                          {weather.windDirectionCompassPoint && ` ${weather.windDirectionCompassPoint.toUpperCase()}`}
+                            ? `${((num(weather?.windSpeed) ?? 0) * 0.868976).toFixed(1)} kts`
+                            : `${num(weather?.windSpeed)} mph`}
+                          {!!str(weather?.windDirectionCompassPoint) && ` ${String(weather?.windDirectionCompassPoint).toUpperCase()}`}
                         </div>
                       )}
-                      {weather.weatherTypeDTO?.desc && (
+                      {!!str(rec(weather?.weatherTypeDTO)?.desc) && (
                         <div>
                           <span className="text-muted-foreground">Condition: </span>
-                          {weather.weatherTypeDTO.desc}
+                          {str(rec(weather?.weatherTypeDTO)?.desc)}
                         </div>
                       )}
                     </div>
@@ -268,9 +271,9 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                         <div className="text-sm font-medium">
                           {shoeInfo.customMakeModel || shoeInfo.displayName || "Unknown Shoe"}
                         </div>
-                        {shoeInfo.maximumMeters > 0 && (
+                        {(shoeInfo.maximumMeters ?? 0) > 0 && (
                           <div className="text-xs text-muted-foreground">
-                            {Math.round(shoeInfo.maximumMeters / 1000)} km max life
+                            {Math.round((shoeInfo.maximumMeters ?? 0) / 1000)} km max life
                             <span className={`ml-2 ${shoeInfo.gearStatusName === "active" ? "text-green-400" : "text-muted-foreground"}`}>
                               {shoeInfo.gearStatusName}
                             </span>
@@ -282,21 +285,21 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                 )}
 
                 {/* Running Dynamics Summary */}
-                {isRunning && summary.avgGroundContactTime > 0 && (
+                {isRunning && (summary.avgGroundContactTime ?? 0) > 0 && (
                   <div className="space-y-2">
                     <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Running Dynamics</h4>
                     <div className="grid grid-cols-2 gap-2">
-                      {summary.avgGroundContactTime > 0 && (
-                        <MetricBox label="Ground Contact" value={`${Math.round(summary.avgGroundContactTime)} ms`} />
+                      {(summary.avgGroundContactTime ?? 0) > 0 && (
+                        <MetricBox label="Ground Contact" value={`${Math.round((summary.avgGroundContactTime ?? 0))} ms`} />
                       )}
-                      {summary.avgVerticalOscillation > 0 && (
-                        <MetricBox label="Vert Oscillation" value={`${Number(summary.avgVerticalOscillation).toFixed(1)} cm`} />
+                      {(summary.avgVerticalOscillation ?? 0) > 0 && (
+                        <MetricBox label="Vert Oscillation" value={`${Number((summary.avgVerticalOscillation ?? 0)).toFixed(1)} cm`} />
                       )}
-                      {summary.avgVerticalRatio > 0 && (
-                        <MetricBox label="Vert Ratio" value={`${Number(summary.avgVerticalRatio).toFixed(1)}%`} />
+                      {(summary.avgVerticalRatio ?? 0) > 0 && (
+                        <MetricBox label="Vert Ratio" value={`${Number((summary.avgVerticalRatio ?? 0)).toFixed(1)}%`} />
                       )}
-                      {summary.averagePower > 0 && (
-                        <MetricBox label="Avg Power" value={`${Math.round(summary.averagePower)} W`} />
+                      {(summary.averagePower ?? 0) > 0 && (
+                        <MetricBox label="Avg Power" value={`${Math.round((summary.averagePower ?? 0))} W`} />
                       )}
                     </div>
                   </div>
@@ -305,7 +308,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
 
               {hasTimeSeries && (
                 <TabsContent value="performance" className="px-4 pb-8">
-                  <ActivityPerformanceChart timeSeries={data.time_series} />
+                  <ActivityPerformanceChart timeSeries={(data?.time_series ?? []) as TimeSeriesPoint[]} />
                 </TabsContent>
               )}
 
@@ -315,15 +318,15 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                     {/* Visual pace bars */}
                     {isRunning && (() => {
                       const paceData = laps
-                        .filter((l: any) => l.averageSpeed > 0 && l.distance > 0)
-                        .map((l: any) => ({
-                          pace: 1000 / l.averageSpeed / 60,
-                          hr: l.averageHR }));
+                        .filter((l) => (l.averageSpeed ?? 0) > 0 && (l.distance ?? 0) > 0)
+                        .map((l) => ({
+                          pace: 1000 / (l.averageSpeed ?? 0) / 60,
+                          hr: (l.averageHR ?? 0) }));
                       if (paceData.length < 2) return null;
-                      const minPace = Math.min(...paceData.map((p: any) => p.pace));
-                      const maxPace = Math.max(...paceData.map((p: any) => p.pace));
+                      const minPace = Math.min(...paceData.map((p) => p.pace));
+                      const maxPace = Math.max(...paceData.map((p) => p.pace));
                       const range = maxPace - minPace || 1;
-                      const avgPace = paceData.reduce((s: number, p: any) => s + p.pace, 0) / paceData.length;
+                      const avgPace = paceData.reduce((s: number, p) => s + p.pace, 0) / paceData.length;
                       return (
                         <div className="space-y-1">
                           <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
@@ -331,7 +334,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                             <span>avg {formatPace(avgPace * 60)}/km</span>
                           </div>
                           <div className="flex items-end gap-[3px] h-24">
-                            {paceData.map((p: any, i: number) => {
+                            {paceData.map((p, i: number) => {
                               const normalized = 1 - (p.pace - minPace) / range;
                               const h = 20 + normalized * 80;
                               const isFast = p.pace < avgPace * 0.97;
@@ -359,8 +362,8 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                     {/* Card-based splits */}
                     {(() => {
                       const paces = laps
-                        .filter((l: any) => l.averageSpeed > 0 && l.distance > 0)
-                        .map((l: any) => 1000 / l.averageSpeed / 60);
+                        .filter((l) => (l.averageSpeed ?? 0) > 0 && (l.distance ?? 0) > 0)
+                        .map((l) => 1000 / (l.averageSpeed ?? 1) / 60);
                       const avgPace = paces.length > 0
                         ? paces.reduce((s: number, p: number) => s + p, 0) / paces.length
                         : 0;
@@ -380,13 +383,13 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                           </div>
 
                           <div className="space-y-0">
-                            {laps.map((lap: any, i: number) => {
-                              const pace = lap.averageSpeed > 0 ? formatPace(lap.averageSpeed) : "—";
-                              const paceVal = lap.averageSpeed > 0 ? 1000 / lap.averageSpeed / 60 : 0;
+                            {laps.map((lap, i: number) => {
+                              const pace = (lap.averageSpeed ?? 0) > 0 ? formatPace((lap.averageSpeed ?? 0)) : "—";
+                              const paceVal = (lap.averageSpeed ?? 0) > 0 ? 1000 / (lap.averageSpeed ?? 0) / 60 : 0;
                               const isFast = paceVal > 0 && avgPace > 0 && paceVal < avgPace * 0.97;
                               const isSlow = paceVal > 0 && avgPace > 0 && paceVal > avgPace * 1.03;
                               const paceColor = isFast ? "text-green-400" : isSlow ? "text-red-400" : "text-foreground";
-                              const distKm = lap.distance > 0 ? (lap.distance / 1000) : 0;
+                              const distKm = (lap.distance ?? 0) > 0 ? ((lap.distance ?? 0) / 1000) : 0;
 
                               return (
                                 <div key={i} className="flex items-center gap-3 py-2.5 border-b border-border/30 hover:bg-accent/10 -mx-2 px-2 rounded transition-colors">
@@ -408,24 +411,24 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                                     </div>
                                     <div>
                                       <div className="text-sm font-medium">
-                                        {lap.averageHR > 0 ? `${Math.round(lap.averageHR)}` : "—"}
-                                        {lap.averageHR > 0 && <span className="text-[10px] text-muted-foreground ml-0.5">bpm</span>}
+                                        {(lap.averageHR ?? 0) > 0 ? `${Math.round((lap.averageHR ?? 0))}` : "—"}
+                                        {(lap.averageHR ?? 0) > 0 && <span className="text-[10px] text-muted-foreground ml-0.5">bpm</span>}
                                       </div>
                                     </div>
                                     <div>
                                       <div className="text-sm text-muted-foreground">
-                                        {lap.duration > 0 ? formatDur(lap.duration) : "—"}
+                                        {(lap.duration ?? 0) > 0 ? formatDur((lap.duration ?? 0)) : "—"}
                                       </div>
                                     </div>
                                   </div>
 
                                   {/* Optional secondary metrics (elevation, cadence) shown small */}
                                   <div className="w-16 text-right shrink-0 space-y-0.5">
-                                    {lap.elevationGain > 0 && (
-                                      <div className="text-[10px] text-muted-foreground">+{Math.round(lap.elevationGain)}m</div>
+                                    {(lap.elevationGain ?? 0) > 0 && (
+                                      <div className="text-[10px] text-muted-foreground">+{Math.round((lap.elevationGain ?? 0))}m</div>
                                     )}
-                                    {lap.averageRunCadence > 0 && (
-                                      <div className="text-[10px] text-muted-foreground">{Math.round(lap.averageRunCadence)} spm</div>
+                                    {(lap.averageRunCadence ?? 0) > 0 && (
+                                      <div className="text-[10px] text-muted-foreground">{Math.round((lap.averageRunCadence ?? 0))} spm</div>
                                     )}
                                   </div>
                                 </div>
@@ -437,9 +440,9 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                           <div className="flex items-center justify-between pt-3 mt-2 border-t border-border">
                             <div className="text-xs text-muted-foreground">{laps.length} splits</div>
                             <div className="flex gap-4 text-xs">
-                              <span className="font-medium">{summary?.averageSpeed > 0 ? `${formatPace(summary.averageSpeed)}/km avg` : ""}</span>
-                              <span className="text-muted-foreground">{summary?.averageHR > 0 ? `${Math.round(summary.averageHR)} bpm avg` : ""}</span>
-                              <span className="text-muted-foreground">{summary?.duration > 0 ? formatDur(summary.duration) : ""}</span>
+                              <span className="font-medium">{(summary.averageSpeed ?? 0) > 0 ? `${formatPace(summary.averageSpeed ?? 0)}/km avg` : ""}</span>
+                              <span className="text-muted-foreground">{(summary.averageHR ?? 0) > 0 ? `${Math.round(summary.averageHR ?? 0)} bpm avg` : ""}</span>
+                              <span className="text-muted-foreground">{(summary.duration ?? 0) > 0 ? formatDur(summary.duration ?? 0) : ""}</span>
                             </div>
                           </div>
                         </>

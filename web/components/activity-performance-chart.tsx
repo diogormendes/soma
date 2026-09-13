@@ -12,7 +12,7 @@ import {
   CartesianGrid,
 } from "recharts";
 
-interface TimeSeriesPoint {
+export interface TimeSeriesPoint {
   elapsed_sec: number;
   hr: number | null;
   speed: number | null;
