@@ -27,6 +27,7 @@ export default function PumpUpModal({ open, onClose, refreshKey }: Props) {
 
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch for the newly opened selection; the remaining setState calls run after the response.
     setLoading(true);
     fetch("/api/playlist/pump-up")
       .then(r => r.json())

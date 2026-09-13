@@ -8,6 +8,7 @@ import { getPlanLifecycle } from "@/lib/live-plan";
 import { projectVdotSeries, DEFAULT_BANISTER, type DatedLoad } from "banister";
 import { vdotFromHmSeconds } from "banister";
 import { todayAthlete } from "@/lib/athlete-tz";
+import { daysUntil } from "@/lib/date-range";
 
 export const metadata: Metadata = { title: "Training" };
 export const revalidate = 300;
@@ -409,7 +410,7 @@ export default async function TrainingPage() {
   // negative number means the race is in the past — clamping it to 0 made a
   // finished race read "0d to race" as if it were today.
   const rawDaysUntilRace = raceInfo
-    ? Math.ceil((new Date(raceInfo.race_date + "T00:00:00").getTime() - Date.now()) / 86400000)
+    ? daysUntil(raceInfo.race_date)
     : null;
   const daysUntilRace = rawDaysUntilRace != null ? Math.max(0, rawDaysUntilRace) : 0;
   const racePast = rawDaysUntilRace != null && rawDaysUntilRace < 0;

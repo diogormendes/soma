@@ -456,6 +456,21 @@ export function TrajectoryChart({
     });
   }
 
+  // Hover handlers for date emission (before the early return below: hooks run in the same
+  // order on every render).
+  const handleMouseMove = useCallback(
+    (state: any) => {
+      if (onHoverDate && state?.activeLabel) {
+        onHoverDate(state.activeLabel);
+      }
+    },
+    [onHoverDate],
+  );
+
+  const handleMouseLeave = useCallback(() => {
+    if (onHoverDate) onHoverDate(null);
+  }, [onHoverDate]);
+
   if (!data || data.length === 0) {
     return (
       <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
@@ -548,20 +563,6 @@ export function TrajectoryChart({
   const goalA = goalVdot;
   const goalB = goalVdot - 2;
   const goalC = goalVdot - 3.5;
-
-  // Hover handlers for date emission
-  const handleMouseMove = useCallback(
-    (state: any) => {
-      if (onHoverDate && state?.activeLabel) {
-        onHoverDate(state.activeLabel);
-      }
-    },
-    [onHoverDate],
-  );
-
-  const handleMouseLeave = useCallback(() => {
-    if (onHoverDate) onHoverDate(null);
-  }, [onHoverDate]);
 
   return (
     <div>

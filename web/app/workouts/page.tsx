@@ -28,6 +28,7 @@ import {
   HeartPulse,
   Heart,
 } from "lucide-react";
+import { cutoffIso } from "@/lib/date-range";
 
 export const revalidate = 300;
 
@@ -486,7 +487,7 @@ function formatDate(dateStr: string): string {
 export default async function WorkoutsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const params = await searchParams;
   const rangeDays = rangeToDays(params.range);
-  const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
+  const cutoff = cutoffIso(rangeDays);
   const [recent, weeklyVolume, configurableProgression, stats, topExercises, programSplit, exercisePRs, calendar, weeklyFreqDetailed, monthlyMuscle, calorieStats, totalWorkoutCount, bodyMapVolumes, hrTrend, workoutTimeline] =
     await Promise.all([
       getRecentWorkouts(cutoff, 50),

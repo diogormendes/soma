@@ -103,7 +103,6 @@ function buildResponse(current: DataPoint[], previous: DataPoint[]): MetricRespo
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SqlFn = ReturnType<typeof getDb>;
 
 async function fetchMetricData(sql: SqlFn, metric: Metric, days: number): Promise<MetricResponse> {

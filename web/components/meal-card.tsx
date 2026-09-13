@@ -219,8 +219,8 @@ export function MealCard({
   const slotIcon = SLOT_ICONS[slot] || "";
   const totalCal = meals.reduce((s, m) => s + Number(m.calories || 0), 0);
 
-  // Filter presets for this slot
-  const slotTags = SLOT_TAG_MAP[slot] || [];
+  // Filter presets for this slot (memoized: a fresh array every render would defeat the memo below)
+  const slotTags = useMemo(() => SLOT_TAG_MAP[slot] || [], [slot]);
   const filteredPresets = useMemo(
     () =>
       presets.filter((p) => {

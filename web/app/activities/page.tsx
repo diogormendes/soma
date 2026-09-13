@@ -26,6 +26,7 @@ import {
   Heart,
   Activity,
 } from "lucide-react";
+import { cutoffIso } from "@/lib/date-range";
 
 export const revalidate = 300;
 
@@ -332,7 +333,7 @@ function extractResort(name: string): string {
 export default async function ActivitiesPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const params = await searchParams;
   const rangeDays = rangeToDays(params.range);
-  const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
+  const cutoff = cutoffIso(rangeDays);
 
   const [summary, kiteSessions, snowSessions, monthlyRaw, activities, yearlySports, cyclingSessions, timeBreakdown, walkingSessions, swimmingSessions] =
     await Promise.all([

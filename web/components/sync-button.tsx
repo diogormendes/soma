@@ -8,6 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useNow } from "@/lib/use-now";
 
 type SyncStatus = "never" | "running" | "success" | "error" | "completed";
 
@@ -37,6 +38,7 @@ function relativeTime(iso: string | null): string {
 export function SyncButton() {
   const isDemo = process.env.NEXT_PUBLIC_IS_DEMO?.trim() === "true";
 
+  const now = useNow();
   const [state, setState] = useState<SyncState>({
     status: "never",
     lastSync: null,
@@ -76,6 +78,7 @@ export function SyncButton() {
 
   // Fetch on mount + idle polling
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; every setState it causes runs after the response.
     fetchStatus();
     startPolling(IDLE_POLL_MS);
     return () => {
@@ -121,7 +124,7 @@ export function SyncButton() {
   const isRunning = state.status === "running";
   const isFresh =
     state.lastSync &&
-    Date.now() - new Date(state.lastSync).getTime() < FRESH_THRESHOLD_MS;
+    now - new Date(state.lastSync).getTime() < FRESH_THRESHOLD_MS;
 
   // Tooltip label
   let tooltipText: string;

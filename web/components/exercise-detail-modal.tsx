@@ -116,16 +116,17 @@ export function ExerciseDetailModal({
   exerciseName: string | null;
   onClose: () => void;
 }) {
-  const [data, setData] = useState<ExerciseData | null>(null);
+  const [fetched, setData] = useState<ExerciseData | null>(null);
+  // Nothing is shown for a closed modal, so the effect never has to clear it.
+  const data = exerciseName ? fetched : null;
   const [loading, setLoading] = useState(false);
   const [metric, setMetric] = useState<ChartMetric>("maxWeight");
   const [tab, setTab] = useState("records");
 
   useEffect(() => {
-    if (!exerciseName) {
-      setData(null);
-      return;
-    }
+    // Nothing selected: the modal shows nothing (derived below), so the effect just stops.
+    if (!exerciseName) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch for the newly opened selection; the remaining setState calls run after the response.
     setLoading(true);
     setTab("records");
     setMetric("maxWeight");

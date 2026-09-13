@@ -39,6 +39,7 @@ import {
   Weight,
   Heart,
 } from "lucide-react";
+import { cutoffIso } from "@/lib/date-range";
 
 export const revalidate = 300;
 
@@ -754,8 +755,8 @@ export default async function HomePage({
 }) {
   const { range: rangeParam } = await searchParams;
   const rangeDays = rangeToDays(rangeParam);
-  const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
-  const heatmapCutoff = new Date(Date.now() - Math.min(rangeDays, 365) * 86400000).toISOString().split("T")[0];
+  const cutoff = cutoffIso(rangeDays);
+  const heatmapCutoff = cutoffIso(Math.min(rangeDays, 365));
 
   const [health, weekly, prevWeekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, latestSleep, recovery, rhrTrend, stressTrend] =
     await Promise.all([

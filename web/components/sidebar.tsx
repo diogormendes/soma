@@ -60,11 +60,14 @@ export function Sidebar() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [router]);
 
-  // Close drawer + clear loading on navigation
-  useEffect(() => {
+  // Close the drawer and clear the pending navigation once the path has changed: state
+  // adjusted during render (React's derived-state pattern), not a setState inside an effect.
+  const [pathAtRender, setPathAtRender] = useState(pathname);
+  if (pathname !== pathAtRender) {
+    setPathAtRender(pathname);
     setDrawerOpen(false);
     setNavigatingTo(null);
-  }, [pathname]);
+  }
 
   return (
     <>

@@ -30,6 +30,7 @@ import {
   Activity,
   Gauge,
 } from "lucide-react";
+import { cutoffIso } from "@/lib/date-range";
 
 export const revalidate = 300;
 
@@ -381,7 +382,7 @@ function qualityBadge(quality: string | null) {
 export default async function SleepPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const params = await searchParams;
   const rangeDays = rangeToDays(params.range);
-  const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
+  const cutoff = cutoffIso(rangeDays);
 
   const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness, stressTrend, sleepSchedule, respiration, spo2Trend, weekdayWeekend, sleepRegularity] =
     await Promise.all([

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { AlertTriangle, RotateCcw, ShieldAlert } from "lucide-react";
 import type { ComputationGraph, GraphNode, GraphEdge, NodeColumn } from "@/lib/training-engine";
 import { GraphNodeComponent, NODE_W, NODE_H } from "@/components/graph-node";
@@ -86,6 +86,9 @@ const COLUMN_DELAYS: Record<NodeColumn, number> = {
 const STORAGE_KEY = "soma-dag-positions";
 
 type NodePositions = Record<string, { x: number; y: number }>;
+
+// Module scope: a Set rebuilt every render made every memo below depend on a new value.
+const BANISTER_PARAM_IDS = new Set(["banister_tau1", "banister_tau2", "banister_p0", "banister_k1", "banister_k2"]);
 
 function loadPositions(): NodePositions {
   if (typeof window === "undefined") return {};
@@ -222,6 +225,8 @@ export function ComputationGraphView({
     didMove: boolean;
   } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  // Which node is being dragged, in state: render must not read a ref (soma#958).
+  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
 
   // Save positions to localStorage when they change
   useEffect(() => {
@@ -229,7 +234,6 @@ export function ComputationGraphView({
   }, [customPositions]);
 
   // Banister params to fold into annotations rather than separate nodes
-  const BANISTER_PARAM_IDS = new Set(["banister_tau1", "banister_tau2", "banister_p0", "banister_k1", "banister_k2"]);
   const banisterAnnotations = new Map<string, string>();
 
   for (const node of graph.nodes) {
@@ -255,20 +259,27 @@ export function ComputationGraphView({
     banisterAnnotations.set("adjusted_pace", `HM ≈ ${hmStr}`);
   }
 
-  // Filter out banister param nodes and edges from display
-  const displayNodes = graph.nodes.filter(n => !BANISTER_PARAM_IDS.has(n.id));
-  const displayEdges = graph.edges.filter(
-    e => !BANISTER_PARAM_IDS.has(e.from) && !BANISTER_PARAM_IDS.has(e.to)
+  // Filter out banister param nodes and edges from display. These four derive from the graph
+  // and feed the drag callbacks below, so they are memoized: a fresh array or Map every render
+  // rebuilt every callback and stopped the compiler preserving any of it (soma#958).
+  const displayNodes = useMemo(
+    () => graph.nodes.filter((n) => !BANISTER_PARAM_IDS.has(n.id)),
+    [graph.nodes],
+  );
+  const displayEdges = useMemo(
+    () => graph.edges.filter((e) => !BANISTER_PARAM_IDS.has(e.from) && !BANISTER_PARAM_IDS.has(e.to)),
+    [graph.edges],
   );
 
   // Node position lookup
-  const layout = columnIndices(displayNodes);
-  const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
-  const shadowNodeMap = shadowGraph
-    ? new Map(shadowGraph.nodes.map((n) => [n.id, n]))
-    : null;
+  const layout = useMemo(() => columnIndices(displayNodes), [displayNodes]);
+  const nodeMap = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph.nodes]);
+  const shadowNodeMap = useMemo(
+    () => (shadowGraph ? new Map(shadowGraph.nodes.map((n) => [n.id, n])) : null),
+    [shadowGraph],
+  );
 
-  const height = svgHeight(displayNodes);
+  const height = useMemo(() => svgHeight(displayNodes), [displayNodes]);
 
   /** Get effective position for a node (custom → hand-tuned default → column fallback). */
   const getNodePos = useCallback(
@@ -366,6 +377,7 @@ export function ComputationGraphView({
       if (!drag.didMove) {
         drag.didMove = true;
         setIsDragging(true);
+        setDraggingNodeId(drag.nodeId);
         setTooltip(null);
         setEdgeTooltip(null);
       }
@@ -387,6 +399,7 @@ export function ComputationGraphView({
     const drag = dragRef.current;
     dragRef.current = null;
     setIsDragging(false);
+    setDraggingNodeId(null);
 
     // If it was a click (no movement), trigger node click for tooltip
     if (drag && !drag.didMove) {
@@ -698,7 +711,7 @@ export function ComputationGraphView({
             shadowNode && shadowNode.value !== node.value
               ? shadowNode.value
               : undefined;
-          const isThisDragging = isDragging && dragRef.current?.nodeId === node.id;
+          const isThisDragging = isDragging && draggingNodeId === node.id;
 
           return (
             <g
