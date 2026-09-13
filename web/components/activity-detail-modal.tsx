@@ -42,7 +42,9 @@ function formatDur(seconds: number) {
 }
 
 export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModalProps) {
-  const [data, setData] = useState<Record<string, any> | null>(null);
+  const [fetched, setData] = useState<Record<string, any> | null>(null);
+  // Nothing is shown for a closed modal, so the effect never has to clear it.
+  const data = activityId ? fetched : null;
   const [loading, setLoading] = useState(false);
   const [showBranding, setShowBranding] = useState(true);
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "done" | "error">("idle");
@@ -72,10 +74,9 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
   }
 
   useEffect(() => {
-    if (!activityId) {
-      setData(null);
-      return;
-    }
+    // Nothing selected: the modal shows nothing (derived below), so the effect just stops.
+    if (!activityId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch for the newly opened selection; the remaining setState calls run after the response.
     setLoading(true);
     setUploadState("idle");
     setUploadError(null);

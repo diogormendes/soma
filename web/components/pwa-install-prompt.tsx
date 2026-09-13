@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useSyncExternalStore } from "react";
 import { X, Download, Share, Apple, Smartphone } from "lucide-react";
 import { detectMobileBrowser } from "@/lib/mobile-browser";
 
@@ -12,35 +12,48 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+/** True when the card is worth showing: a mobile browser, not already installed, not dismissed
+ *  in the last two weeks. Called as both the subscribe-less snapshot and the server snapshot. */
+function readEligible(): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.matchMedia("(display-mode: standalone)").matches) return false;
+  // @ts-expect-error - iOS standalone check
+  if (window.navigator.standalone === true) return false;
+  // Mobile browsers only (#709). On a laptop this is noise, and at phone widths it sat on top
+  // of the Close Day button.
+  if (!detectMobileBrowser()) return false;
+  const dismissedAt = localStorage.getItem("pwa-install-dismissed");
+  if (dismissedAt && (Date.now() - Number(dismissedAt)) / (1000 * 60 * 60 * 24) < 14) return false;
+  return true;
+}
+
+/** iOS Safari, which has no beforeinstallprompt and needs the share-sheet hint. */
+function readIsIOSSafari(): boolean {
+  if (typeof window === "undefined") return false;
+  const isIOS =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) &&
+    !(window as unknown as { MSStream?: unknown }).MSStream;
+  const isSafari =
+    /Safari/.test(navigator.userAgent) && !/Chrome|CriOS|FxiOS/.test(navigator.userAgent);
+  return isIOS && isSafari;
+}
+
 export function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
-  const [showIOSHint, setShowIOSHint] = useState(false);
-  const [dismissed, setDismissed] = useState(true); // start hidden
+  // iOS Safari has no beforeinstallprompt; the share-sheet hint is derived from the user agent
+  // (an external value) rather than copied into state by an effect.
+  const showIOSHint = useSyncExternalStore(() => () => {}, readIsIOSSafari, () => false);
+  // Whether this browser should see the card at all is an external value (display mode, user
+  // agent, the dismissal stamp), read through useSyncExternalStore instead of copied into state
+  // by an effect (soma#958). The server snapshot is "not eligible", so nothing renders until
+  // the client has decided. A dismissal in this session wins.
+  const eligible = useSyncExternalStore(() => () => {}, readEligible, () => false);
+  const [dismissedNow, setDismissed] = useState(false);
+  const dismissed = dismissedNow || !eligible;
 
   useEffect(() => {
-    // Already installed?
-    if (window.matchMedia("(display-mode: standalone)").matches) return;
-    // @ts-expect-error - iOS standalone check
-    if (window.navigator.standalone === true) return;
-
-    // Mobile browsers only (#709). On a laptop this is noise, and at phone
-    // widths it sat on top of the Close Day button. macOS Safari used to get
-    // its own "Add to Dock" branch; that is a desktop and is gone.
-    if (!detectMobileBrowser()) return;
-
-    // Previously dismissed?
-    const dismissedAt = localStorage.getItem("pwa-install-dismissed");
-    if (dismissedAt) {
-      const daysSince =
-        (Date.now() - Number(dismissedAt)) / (1000 * 60 * 60 * 24);
-      if (daysSince < 14) return; // re-show after 2 weeks
-    }
-
-    // On a mobile browser the card is useful even when the browser never
-    // fires beforeinstallprompt: the native builds are what carry the widgets.
-    // The Install button itself still appears only once the event has fired.
-    setDismissed(false);
+    if (!eligible) return;
 
     // Chromium: listen for beforeinstallprompt
     const handler = (e: Event) => {
@@ -49,17 +62,8 @@ export function PWAInstallPrompt() {
     };
     window.addEventListener("beforeinstallprompt", handler);
 
-    // iOS Safari has no beforeinstallprompt; show the share-sheet hint instead.
-    const isIOS =
-      /iPad|iPhone|iPod/.test(navigator.userAgent) &&
-      !(window as unknown as { MSStream?: unknown }).MSStream;
-    const isSafari =
-      /Safari/.test(navigator.userAgent) &&
-      !/Chrome|CriOS|FxiOS/.test(navigator.userAgent);
-    if (isIOS && isSafari) setShowIOSHint(true);
-
     return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
+  }, [eligible]);
 
   const handleInstall = useCallback(async () => {
     if (!deferredPrompt) return;

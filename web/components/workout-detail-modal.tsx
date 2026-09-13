@@ -36,15 +36,16 @@ interface WorkoutDetailModalProps {
 }
 
 export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalProps) {
-  const [data, setData] = useState<any>(null);
+  const [fetched, setData] = useState<any>(null);
+  // Nothing is shown for a closed modal, so the effect never has to clear it.
+  const data = workoutId ? fetched : null;
   const [loading, setLoading] = useState(false);
   const [unit, setUnit] = useState<WeightUnit>("kg");
 
   useEffect(() => {
-    if (!workoutId) {
-      setData(null);
-      return;
-    }
+    // Nothing selected: the modal shows nothing (derived below), so the effect just stops.
+    if (!workoutId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch for the newly opened selection; the remaining setState calls run after the response.
     setLoading(true);
     fetch(`/api/workout/${workoutId}`)
       .then((r) => r.json())

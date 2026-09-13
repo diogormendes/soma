@@ -967,16 +967,13 @@ function ToolStepView({
   step: ToolStep;
   defaultExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState<boolean>(!!defaultExpanded);
+  const [toggledExpanded, setExpanded] = useState<boolean>(!!defaultExpanded);
   const [userToggled, setUserToggled] = useState(false);
+  // Auto-expand while a tool runs, back to the default when it finishes, unless the user has
+  // toggled it: derived, not copied into state by an effect (soma#958).
+  const expanded = userToggled ? toggledExpanded : step.status === "running" || !!defaultExpanded;
   const [showFull, setShowFull] = useState(false);
 
-  // Auto-collapse when a running tool completes (unless the user toggled it manually).
-  useEffect(() => {
-    if (userToggled) return;
-    if (step.status === "running") setExpanded(true);
-    else setExpanded(!!defaultExpanded);
-  }, [step.status, defaultExpanded, userToggled]);
 
   const summary = summarizeToolInput(step.name, step.input);
   const statusColor =

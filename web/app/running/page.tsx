@@ -30,6 +30,7 @@ import {
   Gauge,
   BarChart3,
 } from "lucide-react";
+import { cutoffIso } from "@/lib/date-range";
 
 export const revalidate = 300;
 
@@ -549,7 +550,7 @@ export default async function RunningPage({
   const rangeDays = rangeToDays(rangeParam);
   // Cap at 2 years to prevent Neon free tier OOM on large JSONB scans
   const cutoffDays = Math.min(rangeDays, 730);
-  const cutoff = new Date(Date.now() - cutoffDays * 86400000).toISOString().split("T")[0];
+  const cutoff = cutoffIso(cutoffDays);
 
   const [stats, paceHistory, mileage, vo2max, hrPaceData, cadenceStride, records, recentRuns, fitnessScores, trainingStatus, hrDistribution, shoeMileage, splitAnalysis, bestSplits, trainingLoadTrend, runStatus] =
     await Promise.all([

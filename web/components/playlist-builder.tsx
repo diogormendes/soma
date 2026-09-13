@@ -17,7 +17,6 @@ import { SongData } from "./song-card";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
 import { nanoid } from "nanoid";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ParsedStep = { type?: string; duration_s?: number } | { type: "repeat"; repeat_count: number; children: ParsedStep[] };
 
 function makeSegment(p: { type?: string; duration_s?: number }): Segment {

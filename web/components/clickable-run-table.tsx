@@ -27,6 +27,18 @@ function formatPace(mins: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+// Module-level, not created inside the table's render: a component created during render is a
+// new type every render and loses its state (soma#958).
+function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
+  if (sortKey !== col)
+    return <ChevronsUpDown className="h-3 w-3 opacity-30 inline ml-1" />;
+  return sortDir === "asc" ? (
+    <ChevronUp className="h-3 w-3 inline ml-1" />
+  ) : (
+    <ChevronDown className="h-3 w-3 inline ml-1" />
+  );
+}
+
 export function ClickableRunTable({ runs }: { runs: Run[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("date");
@@ -38,16 +50,6 @@ export function ClickableRunTable({ runs }: { runs: Run[] }) {
       setSortKey(key);
       setSortDir("desc");
     }
-  }
-
-  function SortIcon({ col }: { col: SortKey }) {
-    if (sortKey !== col)
-      return <ChevronsUpDown className="h-3 w-3 opacity-30 inline ml-1" />;
-    return sortDir === "asc" ? (
-      <ChevronUp className="h-3 w-3 inline ml-1" />
-    ) : (
-      <ChevronDown className="h-3 w-3 inline ml-1" />
-    );
   }
 
   const sorted = [...runs].sort((a, b) => {
@@ -90,33 +92,33 @@ export function ClickableRunTable({ runs }: { runs: Run[] }) {
                 className="text-left py-2 font-medium cursor-pointer hover:text-foreground select-none"
                 onClick={() => toggleSort("date")}
               >
-                Date <SortIcon col="date" />
+                Date <SortIcon col="date" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th className="text-left py-2 font-medium">Name</th>
               <th
                 className="text-right py-2 font-medium cursor-pointer hover:text-foreground select-none"
                 onClick={() => toggleSort("distance")}
               >
-                Distance <SortIcon col="distance" />
+                Distance <SortIcon col="distance" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th className="text-right py-2 font-medium">Duration</th>
               <th
                 className="text-right py-2 font-medium cursor-pointer hover:text-foreground select-none"
                 onClick={() => toggleSort("pace")}
               >
-                Pace <SortIcon col="pace" />
+                Pace <SortIcon col="pace" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th
                 className="text-right py-2 font-medium cursor-pointer hover:text-foreground select-none"
                 onClick={() => toggleSort("avg_hr")}
               >
-                HR <SortIcon col="avg_hr" />
+                HR <SortIcon col="avg_hr" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th
                 className="text-right py-2 font-medium cursor-pointer hover:text-foreground select-none hidden sm:table-cell"
                 onClick={() => toggleSort("calories")}
               >
-                Cal <SortIcon col="calories" />
+                Cal <SortIcon col="calories" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th className="text-right py-2 font-medium hidden sm:table-cell">Temp</th>
             </tr>

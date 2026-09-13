@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { MACRO_COLORS } from "soma-style/colors";
 import { AlertTriangle, Lock, Moon, Footprints, Dumbbell, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -390,7 +390,7 @@ export function NutritionDashboard({
       const res = await fetch("/api/nutrition/rebalance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, changedSlot, lockedSlots: Array.from(lockedSlots) }),
+        body: JSON.stringify({ date, changedSlot, lockedSlots: Array.from(lockedSlotsRef.current) }),
       });
       if (!res.ok) return;
       const data = await res.json();
@@ -415,6 +415,10 @@ export function NutritionDashboard({
     refreshData();
   }, [refreshData]);
 
+  // The rebalance callback reads the locked slots through a ref written after render, so its
+  // identity stays stable while the value it sends is always the current one (soma#958).
+  const lockedSlotsRef = useRef<Set<string>>(new Set());
+
   // Locked slots (won't be rebalanced) — persisted in localStorage per date
   const [lockedSlots, setLockedSlots] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -423,6 +427,10 @@ export function NutritionDashboard({
       return stored ? new Set(JSON.parse(stored)) : new Set();
     } catch { return new Set(); }
   });
+  useEffect(() => {
+    lockedSlotsRef.current = lockedSlots;
+  }, [lockedSlots]);
+
   const handleLockToggle = useCallback((slot: string) => {
     setLockedSlots(prev => {
       const next = new Set(prev);

@@ -72,7 +72,7 @@ export function PrepSummary({ meals, ingredients, desktop }: { meals: Meal[]; in
         meals: g.meals,
       }))
       .sort((a, b) => b.totalGrams - a.totalGrams);
-  }, [meals]);
+  }, [meals, ingLookup]);
 
   if (prepItems.length === 0) return null;
 

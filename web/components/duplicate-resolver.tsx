@@ -90,6 +90,7 @@ function ActivityDetailSheet({
 
   useEffect(() => {
     if (!activityId || !open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch for the newly opened selection; the remaining setState calls run after the response.
     setLoading(true);
     setDetail(null);
     fetch(`/api/activity/${activityId}`)
@@ -373,6 +374,7 @@ export function DuplicateResolver() {
     setLoading(false);
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; every setState it causes runs after the response.
   useEffect(() => { fetchDuplicates(); }, [fetchDuplicates]);
 
   const pair = pairs[currentIndex];
