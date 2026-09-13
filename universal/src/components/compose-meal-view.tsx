@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { View, ScrollView, TextInput, Pressable, ActivityIndicator } from "react-native";
 import { IngredientResearchSheet } from "./ingredient-research-sheet";
 import { Text, Button } from "soma-style";
@@ -77,6 +77,10 @@ export function ComposeMealView({
   // Typed portions (soma#934): the quantity is a field, not only a stepper. A draft holds the keystrokes
   // until the field is left, so "1" on the way to "120" never lands as 1 g.
   const [draft, setDraft] = useState<Record<string, string>>({});
+  // Fields just focused: the first keystroke replaces the old value whatever the native selection did.
+  // Android applies select-on-focus after the focus event, so a fast tap-and-type could land the first
+  // digit before the selection and lose it to the select-all that followed (broccoli "120" became "20").
+  const fresh = useRef<Set<string>>(new Set());
   const [grams, setGrams] = useState<Record<string, number>>(initialGrams ?? {});
   const [busy, setBusy] = useState(false);
   const [cookedMode, setCookedMode] = useState<Set<string>>(new Set());
@@ -376,8 +380,17 @@ export function ComposeMealView({
                       <TextInput
                         testID={`qty-${id}`}
                         value={draft[id] ?? String(qty)}
-                        onChangeText={(t) => { setDraft((d) => ({ ...d, [id]: t })); applyQty(id, ing, asCount, asCooked, t); }}
-                        onEndEditing={() => finishQty(id, ing, asCount, asCooked)}
+                        onFocus={() => { fresh.current.add(id); }}
+                        onChangeText={(raw) => {
+                          let t = raw;
+                          if (fresh.current.has(id)) {
+                            fresh.current.delete(id);
+                            const old = String(qty);
+                            if (t !== old) { if (t.startsWith(old)) t = t.slice(old.length); else if (t.endsWith(old)) t = t.slice(0, t.length - old.length); }
+                          }
+                          setDraft((d) => ({ ...d, [id]: t })); applyQty(id, ing, asCount, asCooked, t);
+                        }}
+                        onEndEditing={() => { fresh.current.delete(id); finishQty(id, ing, asCount, asCooked); }}
                         onSubmitEditing={() => finishQty(id, ing, asCount, asCooked)}
                         keyboardType="decimal-pad"
                         selectTextOnFocus
