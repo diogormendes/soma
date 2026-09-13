@@ -16,6 +16,8 @@ import { InteractiveThisWeek } from "@/components/interactive-this-week";
 import { TimeRangeSelector } from "@/components/time-range-selector";
 import { rangeToDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
+import type { Numeric } from "@/lib/json";
+import type { HevyExercise } from "@/lib/hevy-types";
 import { freshness, staleHeadline, todayKey, RECOVERY_MAX_AGE_DAYS } from "banister";
 import { readinessScore, trafficLightText } from "@/lib/readiness";
 import {
@@ -42,6 +44,91 @@ import {
 import { cutoffIso } from "@/lib/date-range";
 
 export const revalidate = 300;
+
+/**
+ * The shapes the queries below select. `Numeric` is a column the driver may hand back as a
+ * number or a string (`COUNT`, `SUM`, `ROUND`, `::bigint`), and null when the group is empty.
+ */
+interface GymFreqRow {
+  month: string;
+  workouts: Numeric;
+}
+
+interface ActivityCountRow {
+  type_key: string;
+  cnt: Numeric;
+}
+
+interface HevyWorkoutRow {
+  workout_id: string;
+  title: string | null;
+  start_time: string;
+  end_time: string | null;
+}
+
+interface RecentActivity {
+  activity_id: string | null;
+  type_key: string;
+  date: string;
+  name: string;
+  distance_km: Numeric;
+  duration_min: Numeric;
+  calories: Numeric;
+  begin_ts?: Numeric;
+  workout_id: string | null;
+}
+
+interface WeekSummaryRow {
+  period: string;
+  sessions: Numeric;
+  total_hours: Numeric;
+  total_km: Numeric;
+  total_cal: Numeric;
+}
+
+interface StepsRow {
+  date: string;
+  steps: Numeric;
+}
+
+interface CalorieRow {
+  date: string;
+  active: Numeric;
+  bmr: Numeric;
+}
+
+interface WeightRow {
+  date: string;
+  weight_kg: Numeric;
+  body_fat: Numeric;
+}
+
+interface StressRow {
+  date: string;
+  avg_stress: Numeric;
+  max_stress: Numeric;
+}
+
+interface RhrRow {
+  date: string;
+  rhr: Numeric;
+}
+
+/** One activity inside a heatmap day. Garmin days carry a begin_ts; Hevy-only days do not. */
+interface HeatmapActivity {
+  activity_id: string | null;
+  type_key: string;
+  name: string;
+  begin_ts: Numeric;
+  workout_id: string | null;
+}
+
+interface HeatmapDay {
+  date: string;
+  count: Numeric;
+  types: string[];
+  activities: HeatmapActivity[];
+}
 
 async function getTodayHealth() {
   const sql = getDb();
@@ -140,7 +227,7 @@ async function getGymFrequency(cutoff: string) {
     GROUP BY month
     ORDER BY month ASC
   `;
-  return rows;
+  return rows as GymFreqRow[];
 }
 
 async function getRunningStats(cutoff: string) {
@@ -191,7 +278,7 @@ async function getActivityCounts(cutoff: string) {
 
   // Replace Garmin strength counts with Hevy count (avoids double-counting)
   const strengthTypes = new Set(["strength_training", "gym"]);
-  const rows = garminRows.filter((r: any) => !strengthTypes.has(r.type_key));
+  const rows = (garminRows as ActivityCountRow[]).filter((r) => !strengthTypes.has(r.type_key));
   if (hevyCnt > 0) {
     rows.push({ type_key: "strength_training", cnt: hevyCnt });
   }
@@ -240,13 +327,15 @@ async function getRecentActivities(cutoff: string) {
   const matchedHevyIds = new Set<string>();
   const MATCH_WINDOW_MS = 4 * 3600 * 1000; // 4 hours
 
-  const merged = garminRows.map((r: any) => {
+  const hevy = hevyRows as HevyWorkoutRow[];
+
+  const merged: RecentActivity[] = (garminRows as Omit<RecentActivity, "workout_id">[]).map((r) => {
     if (r.type_key !== "strength_training") return { ...r, workout_id: null };
 
     const garminMs = Number(r.begin_ts);
-    let bestMatch: any = null;
+    let bestMatch: HevyWorkoutRow | null = null;
     let bestDiff = Infinity;
-    for (const h of hevyRows) {
+    for (const h of hevy) {
       const hevyMs = new Date(h.start_time).getTime();
       const diff = Math.abs(garminMs - hevyMs);
       if (diff < MATCH_WINDOW_MS && diff < bestDiff) {
@@ -259,7 +348,7 @@ async function getRecentActivities(cutoff: string) {
   });
 
   // Add Hevy-only workouts (not matched to any Garmin activity)
-  for (const h of hevyRows) {
+  for (const h of hevy) {
     if (matchedHevyIds.has(h.workout_id)) continue;
     const start = new Date(h.start_time);
     const end = h.end_time ? new Date(h.end_time) : start;
@@ -277,7 +366,7 @@ async function getRecentActivities(cutoff: string) {
   }
 
   // Sort by date descending and limit
-  merged.sort((a: any, b: any) => {
+  merged.sort((a, b) => {
     const da = new Date(a.date).getTime();
     const db = new Date(b.date).getTime();
     return db - da;
@@ -316,8 +405,8 @@ async function getWeeklyTrainingSummary() {
     FROM week_data
     GROUP BY period
   `;
-  const result: Record<string, any> = {};
-  for (const r of rows) result[r.period] = r;
+  const result: Record<string, WeekSummaryRow> = {};
+  for (const r of rows as WeekSummaryRow[]) result[r.period] = r;
   return result;
 }
 
@@ -342,7 +431,7 @@ async function getTrainingStreak() {
   let streak = 0;
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
-  const days = new Set(rows.map((r: any) => r.day));
+  const days = new Set((rows as { day: string }[]).map((r) => r.day));
 
   // Check from today backwards
   const d = new Date(today);
@@ -370,7 +459,7 @@ async function getStepsTrend(cutoff: string) {
       AND date >= ${cutoff}::date
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as StepsRow[];
 }
 
 async function getCalorieTrend(cutoff: string) {
@@ -386,7 +475,7 @@ async function getCalorieTrend(cutoff: string) {
       AND date >= ${cutoff}::date
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as CalorieRow[];
 }
 
 async function getFitnessAge() {
@@ -438,7 +527,7 @@ async function getWeightTrend(cutoff: string) {
       AND date >= ${cutoff}::date
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as WeightRow[];
 }
 
 async function getRecoverySummary() {
@@ -521,7 +610,7 @@ async function getStressTrend(cutoff: string) {
       AND date >= ${cutoff}::date
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as StressRow[];
 }
 
 async function getRestingHRTrend(cutoff: string) {
@@ -535,7 +624,7 @@ async function getRestingHRTrend(cutoff: string) {
       AND date >= ${cutoff}::date
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as RhrRow[];
 }
 
 
@@ -571,7 +660,7 @@ async function getActivityHeatmap(cutoff: string) {
       AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
     ORDER BY raw_json->>'start_time' DESC
   `;
-  const hevyList = hevyRows.map((r: any) => ({
+  const hevyList = (hevyRows as HevyWorkoutRow[]).map((r) => ({
     workout_id: r.workout_id,
     start_ms: new Date(r.start_time).getTime(),
     start_time: r.start_time,
@@ -582,11 +671,14 @@ async function getActivityHeatmap(cutoff: string) {
   const matchedHevyIds = new Set<string>();
 
   // Match Garmin strength_training activities with Hevy workouts
-  const garminResult = rows.map((row: any) => {
-    const acts = typeof row.activities === "string" ? JSON.parse(row.activities) : row.activities;
+  const garminResult: HeatmapDay[] = (rows as (Omit<HeatmapDay, "activities"> & {
+    activities: HeatmapActivity[] | string;
+  })[]).map((row) => {
+    const acts: HeatmapActivity[] =
+      typeof row.activities === "string" ? JSON.parse(row.activities) : row.activities;
     return {
       ...row,
-      activities: acts.map((a: any) => {
+      activities: acts.map((a) => {
         if (a.type_key !== "strength_training" || !a.begin_ts) return { ...a, workout_id: null };
         const garminMs = Number(a.begin_ts);
         let bestId: string | null = null;
@@ -605,12 +697,12 @@ async function getActivityHeatmap(cutoff: string) {
   });
 
   // Add Hevy-only workouts (not matched to any Garmin activity)
-  const resultMap = new Map(garminResult.map((r: any) => [r.date, r]));
+  const resultMap = new Map(garminResult.map((r) => [r.date, r]));
   for (const h of hevyList) {
     if (matchedHevyIds.has(h.workout_id)) continue;
     const dateStr = h.start_time.slice(0, 10);
     const existing = resultMap.get(dateStr);
-    const hevyActivity = {
+    const hevyActivity: HeatmapActivity = {
       activity_id: null,
       type_key: "strength_training",
       name: h.title || "Gym",
@@ -624,7 +716,7 @@ async function getActivityHeatmap(cutoff: string) {
         existing.types.push("strength_training");
       }
     } else {
-      const newRow = {
+      const newRow: HeatmapDay = {
         date: dateStr,
         count: 1,
         types: ["strength_training"],
@@ -634,7 +726,7 @@ async function getActivityHeatmap(cutoff: string) {
     }
   }
 
-  return Array.from(resultMap.values()).sort((a: any, b: any) => a.date.localeCompare(b.date));
+  return Array.from(resultMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 async function getLastWorkoutDetail() {
@@ -653,15 +745,20 @@ async function getLastWorkoutDetail() {
   `;
   if (!rows[0]) return null;
   const w = rows[0];
-  const exercises = typeof w.exercises === "string" ? JSON.parse(w.exercises) : w.exercises;
-  const exerciseNames = exercises.map((e: any) => e.title);
+  const exercises: HevyExercise[] =
+    typeof w.exercises === "string" ? JSON.parse(w.exercises) : w.exercises;
+  // An exercise Hevy returned without a title, or without a sets array, is skipped rather than
+  // rendered as "undefined" or counted as zero volume.
+  const exerciseNames = exercises.map((e) => e.title).filter((t): t is string => Boolean(t));
   let totalSets = 0;
   let totalVolume = 0;
   for (const ex of exercises) {
-    for (const s of ex.sets) {
-      if (s.type === "normal" && s.weight_kg > 0 && s.reps > 0) {
+    for (const s of ex.sets ?? []) {
+      const kg = s.weight_kg ?? 0;
+      const reps = s.reps ?? 0;
+      if (s.type === "normal" && kg > 0 && reps > 0) {
         totalSets++;
-        totalVolume += s.weight_kg * s.reps;
+        totalVolume += kg * reps;
       }
     }
   }
@@ -1027,14 +1124,14 @@ export default async function HomePage({
 
       {/* Steps & Calorie Trends */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {(stepsTrend as any[]).length > 0 && (
+        {stepsTrend.length > 0 && (
           <ExpandableChartCard
             title="Daily Steps"
             icon={<Footprints className="h-4 w-4" />}
             subtitle={weekly?.avg_steps ? `7-day avg: ${Number(weekly.avg_steps).toLocaleString()}` : undefined}
           >
             <StepsTrendChart
-              data={(stepsTrend as any[]).map((s: any) => ({
+              data={stepsTrend.map((s) => ({
                 date: s.date,
                 steps: Number(s.steps),
               }))}
@@ -1042,14 +1139,14 @@ export default async function HomePage({
           </ExpandableChartCard>
         )}
 
-        {(calorieTrend as any[]).length > 0 && (
+        {calorieTrend.length > 0 && (
           <ExpandableChartCard
             title="Daily Calories"
             icon={<Flame className="h-4 w-4 text-orange-400" />}
             subtitle={weekly?.avg_active_cal ? `7-day active avg: ${Number(weekly.avg_active_cal).toLocaleString()} kcal` : undefined}
           >
             <CalorieTrendChart
-              data={(calorieTrend as any[]).map((c: any) => ({
+              data={calorieTrend.map((c) => ({
                 date: c.date,
                 active: Number(c.active),
                 bmr: Number(c.bmr),
@@ -1061,11 +1158,11 @@ export default async function HomePage({
 
       {/* RHR + Stress Trends */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {(rhrTrend as any[]).length > 0 && (() => {
-          const rhrData = (rhrTrend as any[]).filter((r: any) => Number(r.rhr) > 0);
+        {rhrTrend.length > 0 && (() => {
+          const rhrData = rhrTrend.filter((r) => Number(r.rhr) > 0);
           if (rhrData.length === 0) return null;
           const latest = Number(rhrData[rhrData.length - 1].rhr);
-          const avg7d = rhrData.slice(-7).reduce((s: number, r: any) => s + Number(r.rhr), 0) / Math.min(rhrData.length, 7);
+          const avg7d = rhrData.slice(-7).reduce((s: number, r) => s + Number(r.rhr), 0) / Math.min(rhrData.length, 7);
           return (
             <ExpandableChartCard
               title="Resting Heart Rate"
@@ -1073,7 +1170,7 @@ export default async function HomePage({
               subtitle={`${latest} bpm · avg ${Math.round(avg7d)}`}
             >
               <RHRChart
-                data={rhrData.map((r: any) => ({
+                data={rhrData.map((r) => ({
                   date: r.date,
                   rhr: Number(r.rhr),
                 }))}
@@ -1082,11 +1179,11 @@ export default async function HomePage({
           );
         })()}
 
-        {(stressTrend as any[]).length > 0 && (() => {
-          const stressData = stressTrend as any[];
+        {stressTrend.length > 0 && (() => {
+          const stressData = stressTrend;
           if (stressData.length === 0) return null;
           const latest = Number(stressData[stressData.length - 1].avg_stress);
-          const avg7d = stressData.slice(-7).reduce((s: number, r: any) => s + Number(r.avg_stress), 0) / Math.min(stressData.length, 7);
+          const avg7d = stressData.slice(-7).reduce((s: number, r) => s + Number(r.avg_stress), 0) / Math.min(stressData.length, 7);
           return (
             <ExpandableChartCard
               title="Stress Trend"
@@ -1094,7 +1191,7 @@ export default async function HomePage({
               subtitle={`Today: ${latest} · avg ${Math.round(avg7d)}`}
             >
               <StressChart
-                data={stressData.map((s: any) => ({
+                data={stressData.map((s) => ({
                   date: s.date,
                   avg_stress: Number(s.avg_stress),
                   max_stress: Number(s.max_stress),
@@ -1221,8 +1318,8 @@ export default async function HomePage({
       </div>
 
       {/* Body Composition Trend */}
-      {(weightTrend as any[]).length > 0 && (() => {
-        const weightData = (weightTrend as any[]).filter((w: any) => w.weight_kg > 0);
+      {weightTrend.length > 0 && (() => {
+        const weightData = weightTrend.filter((w) => Number(w.weight_kg) > 0);
         if (weightData.length === 0) return null;
         const latest = weightData[weightData.length - 1];
         const subtitleStr = `${Number(latest.weight_kg).toFixed(1)} kg${latest.body_fat ? ` · ${Number(latest.body_fat).toFixed(1)}% BF` : ""}`;
@@ -1234,7 +1331,7 @@ export default async function HomePage({
             className="mb-6"
           >
             <WeightTrendChart
-              data={weightData.map((w: any) => ({
+              data={weightData.map((w) => ({
                 date: w.date,
                 weight_kg: Number(w.weight_kg),
                 body_fat: w.body_fat ? Number(w.body_fat) : null,
@@ -1245,7 +1342,7 @@ export default async function HomePage({
       })()}
 
       {/* Activity Heatmap */}
-      {(heatmapData as any[]).length > 0 && (
+      {heatmapData.length > 0 && (
         <Card className="mb-6">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -1260,12 +1357,12 @@ export default async function HomePage({
           </CardHeader>
           <CardContent>
             <ActivityHeatmap
-              data={(heatmapData as any[]).map((d: any) => ({
+              data={heatmapData.map((d) => ({
                 date: d.date,
                 count: Number(d.count),
                 types: Array.isArray(d.types) ? d.types : [],
                 activities: Array.isArray(d.activities)
-                  ? d.activities.map((a: any) => ({
+                  ? d.activities.map((a) => ({
                       activity_id: a.activity_id,
                       type_key: a.type_key,
                       name: a.name,
@@ -1287,7 +1384,7 @@ export default async function HomePage({
         </CardHeader>
         <CardContent>
           <ClickableRecentActivity
-            activities={(recentActivities as any[]).map((a: any) => ({
+            activities={recentActivities.map((a) => ({
               type_key: a.type_key,
               date: a.date,
               name: a.name,
@@ -1306,7 +1403,7 @@ export default async function HomePage({
         dayOfWeekData={[]}
         timeOfDayData={[]}
         activityCounts={mergedCounts}
-        gymFrequency={(gymFreq as any[]).map((r: any) => ({
+        gymFrequency={gymFreq.map((r) => ({
           month: r.month,
           workouts: Number(r.workouts),
         }))}

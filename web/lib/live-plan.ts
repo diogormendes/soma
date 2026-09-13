@@ -46,6 +46,21 @@ export interface PlanDayRow {
   actual_distance_km: number | null;
 }
 
+/**
+ * A plan day plus the plan header fields a page attaches before rendering.
+ *
+ * `day_of_week` and `run_description` are columns of `training_plan_day` that `getLivePlan`
+ * does not select, so they are optional here: a consumer that renders them gets nothing unless
+ * it queried the table itself.
+ */
+export type PlanDayWithPlan = PlanDayRow & {
+  plan_name: string | null;
+  race_date: string | null;
+  goal_time_seconds: number | null;
+  day_of_week?: number | null;
+  run_description?: string | null;
+};
+
 export interface LivePlan {
   engagement: TrainingEngagement;
   /** Non-null only when the plan is live. */
