@@ -13,6 +13,7 @@ import { getWeightTrend } from "@/lib/weight-trend";
 import { trendAte } from "@/lib/trend-ate";
 import { computeAlcoholDisplacement } from "macro-engine-core";
 import { todayAthlete } from "@/lib/athlete-tz";
+import { isMissingRelation, warnMissingRelationOnce } from "@/lib/missing-relation";
 
 
 const VALID_MODES: readonly Mode[] = [
@@ -77,7 +78,39 @@ function redistributeRemaining(
   return result;
 }
 
+/** What a day looks like before any nutrition table exists: nothing logged, nothing planned. */
+const EMPTY_DAY = {
+  plan: null,
+  meals: [],
+  drinks: [],
+  consumed: { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
+  remaining: null,
+  slotBudgets: {},
+  skippedSlots: [],
+  runEnabled: true,
+  selectedWorkouts: [],
+  gymCalories: 0,
+  breakdown: null,
+  trend7d: null,
+  deficitEstimate: null,
+  adaptive: null,
+  engagement: null,
+  weightTrend: null,
+  weightTrendPrimary: false,
+};
+
 export async function GET(req: NextRequest) {
+  try {
+    return await planForDay(req);
+  } catch (err) {
+    // No nutrition tables (a fresh fork, an unseeded demo): an empty day, not a 500 (soma#947).
+    if (!isMissingRelation(err)) throw err;
+    warnMissingRelationOnce("nutrition/plan", err);
+    return NextResponse.json(EMPTY_DAY);
+  }
+}
+
+async function planForDay(req: NextRequest) {
   const sql = getDb();
   const todayStr = todayAthlete();
   const date = req.nextUrl.searchParams.get("date") ?? todayStr;
