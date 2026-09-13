@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { X } from "lucide-react";
+import { isEstimated } from "macro-engine-core";
 import { Button } from "@/components/ui/button";
 import { NumberInput } from "@/components/number-input";
 import { ProteinQualityPill } from "@/lib/per-meal-protein";
@@ -207,8 +208,11 @@ export function ComposeMealView({
                 >
                   <X className="h-3 w-3" />
                 </button>
-                <span className="truncate flex-1 min-w-0">
-                  {ing?.name ?? p.ingredient_id}
+                <span className="flex-1 min-w-0">
+                  <span className="flex items-center gap-1 min-w-0">
+                    <span className="truncate">{ing?.name ?? p.ingredient_id}</span>
+                    {ing && isEstimated(ing as { source?: string | null }) ? <span className="shrink-0 rounded-full border border-amber-500 px-1 text-[10px] leading-4 text-amber-500" title="Macros estimated by Claude, not read from a food table">est.</span> : null}
+                  </span>
                   <span className="block text-[10px] text-muted-foreground">
                     {p.calories}kcal · {p.protein}P · {p.carbs}C · {p.fat}F · {p.fiber}Fi
                   </span>

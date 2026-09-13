@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Ingredient } from "@/lib/portion-solver";
+import { slugify, guessCategory } from "macro-engine-core";
 
 /* T3a — ingredient research on the web (soma#684, parity with the app's sheet): propose from
  * the local USDA table + Open Food Facts with source and confidence, pick, edit, CONFIRM.
@@ -14,26 +15,17 @@ const MACROS = [
 ] as const;
 type MacroKey = (typeof MACROS)[number][0];
 
-interface Proposal {
+export interface Proposal {
   id: number; name: string; brand?: string | null;
   calories_per_100g: number | null; protein_per_100g: number | null; carbs_per_100g: number | null; fat_per_100g: number | null; fiber_per_100g: number | null;
-  source: "usda" | "off"; source_id: string; source_url: string; confidence: number; rationale: string; flags: string[];
+  source: string; source_id: string; source_url: string; confidence: number; rationale: string; flags: string[];
 }
+export const sourceLabel = (p: Pick<Proposal, "source">) => (p.source === "usda" ? "USDA" : p.source === "off" ? "Open Food Facts" : p.source === "claude" ? "Claude estimate" : p.source);
 
-const slugify = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^\x00-\x7f]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
-const guessCategory = (name: string): string => {
-  const n = name.toLowerCase();
-  if (/kefir|yog|milk|cheese|skyr|quark|cottage/.test(n)) return "dairy";
-  if (/chicken|beef|pork|turkey|fish|salmon|tuna|egg|tofu|whey|shrimp|lamb/.test(n)) return "protein";
-  if (/rice|pasta|bread|oat|potato|quinoa|noodle|tortilla|cereal/.test(n)) return "carbs";
-  if (/apple|banana|berry|orange|grape|mango|melon|kiwi|pear|peach/.test(n)) return "fruit";
-  if (/oil|butter|nut|almond|peanut|avocado|seed|tahini/.test(n)) return "fat";
-  if (/broccoli|spinach|tomato|lettuce|pepper|onion|carrot|cucumber|zucchini|salad|vegetable/.test(n)) return "vegetable";
-  return "snack";
-};
-
-export function IngredientResearchPanel({ initialQuery, onConfirmed, onClose }: {
+export function IngredientResearchPanel({ initialQuery, initialPick, onConfirmed, onClose }: {
   initialQuery: string;
+  /** Open straight on the confirm form for this candidate (the picker's "edit" affordance, soma#935). */
+  initialPick?: Proposal | null;
   /** The catalog row after a successful confirm; the parent refreshes its ingredient list. */
   onConfirmed: (ing: Ingredient) => void;
   onClose: () => void;
@@ -43,10 +35,17 @@ export function IngredientResearchPanel({ initialQuery, onConfirmed, onClose }: 
   const [err, setErr] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
-  const [pick, setPick] = useState<Proposal | null>(null);
-  const [name, setName] = useState(""); const [slug, setSlug] = useState(""); const [category, setCategory] = useState("snack");
+  // The panel mounts fresh each time it opens, so a candidate handed in seeds the form directly.
+  const [pick, setPick] = useState<Proposal | null>(initialPick ?? null);
+  const [name, setName] = useState(initialPick ? (initialPick.brand ? `${initialPick.name} (${initialPick.brand})` : initialPick.name) : "");
+  const [slug, setSlug] = useState(initialPick ? slugify(initialPick.name) : "");
+  const [category, setCategory] = useState<string>(initialPick ? guessCategory(initialPick.name) : "snack");
   const [isRaw, setIsRaw] = useState(false); const [unit, setUnit] = useState("g"); const [gramsPerUnit, setGramsPerUnit] = useState("");
-  const [macros, setMacros] = useState<Record<MacroKey, string>>({ calories_per_100g: "", protein_per_100g: "", carbs_per_100g: "", fat_per_100g: "", fiber_per_100g: "" });
+  const [macros, setMacros] = useState<Record<MacroKey, string>>(() => {
+    const m = { calories_per_100g: "", protein_per_100g: "", carbs_per_100g: "", fat_per_100g: "", fiber_per_100g: "" } as Record<MacroKey, string>;
+    if (initialPick) for (const [k] of MACROS) { const v = initialPick[k]; m[k] = v == null ? "" : String(v); }
+    return m;
+  });
   const [existing, setExisting] = useState<{ msg: string; presets: { id: string; name: string }[] } | null>(null);
 
   async function research() {
@@ -104,7 +103,7 @@ export function IngredientResearchPanel({ initialQuery, onConfirmed, onClose }: 
             <button key={p.id} data-testid={`proposal-${i}`} className="w-full rounded-md border p-2 text-left hover:bg-muted" onClick={() => choose(p)}>
               <div className="text-sm">{p.name}{p.brand ? ` · ${p.brand}` : ""}</div>
               <div className="text-xs text-muted-foreground tabular-nums">{fmt(p.calories_per_100g)} kcal · P {fmt(p.protein_per_100g)} · C {fmt(p.carbs_per_100g)} · F {fmt(p.fat_per_100g)} · fib {fmt(p.fiber_per_100g)} /100 g</div>
-              <div className="flex items-center justify-between text-xs"><a className="text-primary underline" href={p.source_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{p.source === "usda" ? "USDA" : "Open Food Facts"} · {Math.round(p.confidence * 100)}%</a>{p.flags.length ? <span className="text-amber-500">{p.flags.join(", ")}</span> : null}</div>
+              <div className="flex items-center justify-between text-xs">{p.source_url ? <a className="text-primary underline" href={p.source_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{sourceLabel(p)} · {Math.round(p.confidence * 100)}%</a> : <span className="text-amber-500">{sourceLabel(p)} · {Math.round(p.confidence * 100)}%</span>}{p.flags.length ? <span className="text-amber-500">{p.flags.join(", ")}</span> : null}</div>
             </button>
           ))}
         </div>

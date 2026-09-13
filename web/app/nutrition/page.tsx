@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getDb } from "@/lib/db";
+import { listIngredients } from "@/lib/ingredient-catalog";
 import { getLivePlan } from "@/lib/live-plan";
 import { NutritionDashboard } from "@/components/nutrition-dashboard";
 import { NutritionOnboarding } from "@/components/nutrition-onboarding";
@@ -178,8 +179,7 @@ async function getPresets() {
 }
 
 async function getIngredients() {
-  const sql = getDb();
-  return sql`SELECT * FROM ingredients WHERE status = 'confirmed' ORDER BY category, name`;
+  return listIngredients(getDb());
 }
 
 /**

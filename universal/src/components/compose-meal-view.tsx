@@ -1,13 +1,14 @@
 import { useState, useMemo, useEffect } from "react";
-import { View, ScrollView, TextInput, Pressable } from "react-native";
+import { View, ScrollView, TextInput, Pressable, ActivityIndicator } from "react-native";
 import { IngredientResearchSheet } from "./ingredient-research-sheet";
 import { Text, Button } from "soma-style";
 import {
   logComposedMeal, deleteMeal, savePreset,
   isCountBased, countToGrams, gramsToCount, rawToCooked, cookedToRaw, hasRawCookedToggle,
-  type Ingredient, type ComposeItem,
+  researchIngredient, estimateIngredient, confirmIngredient,
+  type Ingredient, type ComposeItem, type IngredientProposal,
 } from "../lib/api";
-import { solvePortions, computeItemMacros, type Ingredient as MEIngredient } from "macro-engine-core";
+import { solvePortions, computeItemMacros, rankIngredients, recentlyUsed, quickAddDefaults, canQuickAdd, isEstimated, type Ingredient as MEIngredient } from "macro-engine-core";
 
 /** The app Ingredient is structurally the macro-engine-core Ingredient (only `unit`
  *  differs by null vs undefined); cast so the app shares web's solver + macro math. */
@@ -62,6 +63,23 @@ export function ComposeMealView({
 }) {
   const [search, setSearch] = useState("");
   const [researchOpen, setResearchOpen] = useState(false);
+  // Beyond the catalog (soma#934): candidates from USDA / Open Food Facts loaded on demand, a Claude
+  // estimate, the ingredients confirmed in this session (usable before the parent's refetch lands),
+  // and the candidate being edited in the sheet.
+  const [more, setMore] = useState<{ query: string; proposals: IngredientProposal[]; warnings: string[] } | null>(null);
+  const [moreBusy, setMoreBusy] = useState(false);
+  const [estimate, setEstimate] = useState<{ query: string; proposal: IngredientProposal } | null>(null);
+  const [estimateBusy, setEstimateBusy] = useState(false);
+  const [adding, setAdding] = useState<number | null>(null);
+  const [sourceErr, setSourceErr] = useState<string | null>(null);
+  const [added, setAdded] = useState<Ingredient[]>([]);
+  const [editPick, setEditPick] = useState<IngredientProposal | null>(null);
+  // Typed portions (soma#934): the quantity is a field, not only a stepper. A draft holds the keystrokes
+  // until the field is left, so "1" on the way to "120" never lands as 1 g.
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  // The field is controlled with exactly the text the keyboard produced: rewriting the value while typing
+  // (tried once, to replace the first keystroke in JS) makes Android move the caret and duplicate digits.
+  // Selection on focus stays native; a person taps and then types, and the selection is in place by then.
   const [grams, setGrams] = useState<Record<string, number>>(initialGrams ?? {});
   const [busy, setBusy] = useState(false);
   const [cookedMode, setCookedMode] = useState<Set<string>>(new Set());
@@ -75,22 +93,29 @@ export function ComposeMealView({
   const [seenInit, setSeenInit] = useState(initKey);
   if (seenInit !== initKey) { setSeenInit(initKey); if (initialGrams) setGrams(initialGrams); }
 
-  const byId = useMemo(() => new Map(ingredients.map((i) => [i.id, i])), [ingredients]);
+  // The catalog plus what was confirmed here this session (the parent's refetch replaces it).
+  const catalog = useMemo(() => {
+    if (!added.length) return ingredients;
+    const have = new Set(ingredients.map((i) => i.id));
+    return [...ingredients, ...added.filter((a) => !have.has(a.id))];
+  }, [ingredients, added]);
+  const byId = useMemo(() => new Map(catalog.map((i) => [i.id, i])), [catalog]);
   const selectedIds = Object.keys(grams).filter((id) => (grams[id] ?? 0) > 0 && byId.has(id));
 
-  const filtered = search.trim()
-    ? ingredients.filter((i) => i.name.toLowerCase().includes(search.trim().toLowerCase()))
-    : ingredients;
+  const query = search.trim();
+  // With a query: one ranked list, the ones already used first. Without: "Recently used", then the categories.
+  const ranked = useMemo(() => (query ? rankIngredients(catalog, query) : []), [catalog, query]);
+  const recent = useMemo(() => (query ? [] : recentlyUsed(catalog, 8)), [catalog, query]);
   const groups = useMemo(() => {
     const m = new Map<string, Ingredient[]>();
-    for (const ing of filtered) {
+    for (const ing of query ? [] : catalog) {
       const c = ing.category || "other";
       if (!m.has(c)) m.set(c, []);
       m.get(c)!.push(ing);
     }
     const order = [...CATEGORY_ORDER, ...[...m.keys()].filter((c) => !CATEGORY_ORDER.includes(c))];
     return order.filter((c) => m.has(c)).map((c) => [c, m.get(c)!] as const);
-  }, [filtered]);
+  }, [catalog, query]);
 
   const totals = selectedIds.reduce(
     (a, id) => {
@@ -110,10 +135,10 @@ export function ComposeMealView({
   // Web parity: adding an ingredient re-solves the whole selection to the slot's
   // kcal budget (+30g MPS protein floor) via solvePortions, so the preview totals
   // land near the budget immediately instead of dropping in a flat 100g.
-  const add = (id: string) => setGrams((g) => {
-    const ids = new Set(Object.keys(g).filter((k) => (g[k] ?? 0) > 0 && byId.has(k)));
+  const addWith = (id: string, lookup: Map<string, Ingredient>) => setGrams((g) => {
+    const ids = new Set(Object.keys(g).filter((k) => (g[k] ?? 0) > 0 && lookup.has(k)));
     ids.add(id);
-    const sel = [...ids].map((k) => byId.get(k)).filter((x): x is Ingredient => !!x);
+    const sel = [...ids].map((k) => lookup.get(k)).filter((x): x is Ingredient => !!x);
     if (!slotBudget || slotBudget <= 0 || sel.length === 0) {
       return { ...g, [id]: g[id] && g[id] > 0 ? g[id] : 100 };
     }
@@ -121,12 +146,122 @@ export function ComposeMealView({
     for (const p of solvePortions(sel.map(mei), { calories: slotBudget })) next[p.ingredient_id] = p.grams;
     return next;
   });
+  const add = (id: string) => addWith(id, byId);
   const setG = (id: string, v: number) => setGrams((g) => ({ ...g, [id]: Math.max(0, Math.round(v)) }));
+  // Every keystroke lands (Android does not blur a field when the keyboard hides, so a commit on blur
+  // alone can lose the typed value); the draft only keeps what is shown while typing.
+  // A cleared field or a leading "0" (on the way to "0.5") must not zero the row: zero grams deselects the
+  // ingredient, the field unmounts, and the next keystrokes land in the next row (seen on the device tour).
+  const parseQty = (raw: string): number | null => {
+    const t = raw.trim().replace(",", ".");
+    if (t === "") return null;
+    const v = Number(t);
+    return Number.isFinite(v) && v >= 0 ? v : null;
+  };
+  const applyQty = (id: string, ing: Ingredient, asCount: boolean, asCooked: boolean, raw: string) => {
+    const v = parseQty(raw);
+    if (v == null || v <= 0) return;
+    if (asCount) setG(id, countToGrams(ing, v));
+    else if (asCooked) setG(id, cookedToRaw(ing, v));
+    else setG(id, v);
+  };
+  /** Leaving the field: an explicit 0 removes the row; an empty field keeps the last value. */
+  const finishQty = (id: string, ing: Ingredient, asCount: boolean, asCooked: boolean) => {
+    const raw = draft[id];
+    if (raw != null && parseQty(raw) === 0) setG(id, 0);
+    else if (raw != null) applyQty(id, ing, asCount, asCooked, raw);
+    setDraft((d) => { if (!(id in d)) return d; const n = { ...d }; delete n[id]; return n; });
+  };
   const remove = (id: string) => setGrams((g) => { const n = { ...g }; delete n[id]; return n; });
   const toggleSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>) => (id: string) =>
     setter((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleCooked = toggleSet(setCookedMode);
   const toggleGramMode = toggleSet(setGramMode);
+
+  // ── Beyond the catalog: search more (USDA + Open Food Facts), estimate with Claude, one-tap add ──
+  async function searchMore() {
+    if (query.length < 2) return;
+    setMoreBusy(true); setSourceErr(null);
+    try { const r = await researchIngredient(query); setMore({ query, proposals: r.proposals, warnings: r.warnings }); }
+    catch (e) { setSourceErr(String((e as Error).message ?? e)); }
+    finally { setMoreBusy(false); }
+  }
+  async function askClaude() {
+    if (query.length < 2) return;
+    setEstimateBusy(true); setSourceErr(null);
+    try { const r = await estimateIngredient(query); setEstimate({ query, proposal: r.proposal }); }
+    catch (e) { setSourceErr(String((e as Error).message ?? e)); }
+    finally { setEstimateBusy(false); }
+  }
+  /** A confirmed catalog row lands in the meal at once, before the parent's refetch. */
+  function adopt(ing: Ingredient) {
+    setAdded((a) => [...a.filter((x) => x.id !== ing.id), ing]);
+    const lookup = new Map(byId); lookup.set(ing.id, ing);
+    addWith(ing.id, lookup);
+    onIngredientAdded?.(ing);
+    setSearch(""); setMore(null); setEstimate(null);
+  }
+  /** One tap: confirm the candidate with the shared defaults and put it in the meal. A candidate with an
+   *  unknown macro goes through the edit sheet instead (an unknown is not 0). */
+  async function quickAdd(p: IngredientProposal) {
+    if (!canQuickAdd(p)) { setEditPick(p); setResearchOpen(true); return; }
+    setAdding(p.id); setSourceErr(null);
+    const d = quickAddDefaults(p);
+    const r = await confirmIngredient({
+      proposal_id: p.id, ...d,
+      calories_per_100g: p.calories_per_100g!, protein_per_100g: p.protein_per_100g!, carbs_per_100g: p.carbs_per_100g!,
+      fat_per_100g: p.fat_per_100g!, fiber_per_100g: p.fiber_per_100g!,
+    });
+    setAdding(null);
+    if (r.ok && r.ingredient) { adopt(r.ingredient); return; }
+    if (r.status === 409) {
+      // The id is taken: the catalog already has this food. Use that row rather than overwrite it blind.
+      const have = byId.get(d.id);
+      if (have) { add(have.id); setSearch(""); return; }
+      setEditPick(p); setResearchOpen(true); return;
+    }
+    setSourceErr(r.error ?? `HTTP ${r.status}`);
+  }
+
+  const fmtN = (v: number | null) => (v == null ? "?" : String(v));
+  const estBadge = <Text variant="micro" className="rounded-full border border-warm px-1 text-warm">est.</Text>;
+  const renderRow = (ing: Ingredient) => {
+    const on = (grams[ing.id] ?? 0) > 0;
+    return (
+      <Pressable key={ing.id} onPress={() => (on ? remove(ing.id) : add(ing.id))} className="flex-row items-center justify-between border-b border-border-subtle py-1.5">
+        <View className="flex-1 flex-row items-center gap-1.5 pr-2">
+          <Text variant="caption" className={on ? "text-teal" : "text-text"} numberOfLines={1}>{ing.name}</Text>
+          {isEstimated(ing) ? estBadge : null}
+        </View>
+        <Text variant="micro" className="text-text-muted tabular-nums">{on ? "✓ " : ""}{Math.round(ing.calories_per_100g)}/100g</Text>
+      </Pressable>
+    );
+  };
+  const sourceLabel = (p: IngredientProposal) => (p.source === "usda" ? "USDA" : p.source === "off" ? "Open Food Facts" : "Claude estimate");
+  const renderProposal = (p: IngredientProposal) => {
+    const est = p.source === "claude";
+    const flags = p.flags.filter((f) => f !== "estimated");
+    return (
+      <View key={p.id} testID={`candidate-${p.id}`} className="rounded-md border border-border-subtle p-2">
+        <View className="flex-row items-start justify-between gap-2">
+          <View className="flex-1">
+            <View className="flex-row items-center gap-1.5">
+              <Text variant="caption" className="text-text" numberOfLines={2}>{p.name}{p.brand ? ` · ${p.brand}` : ""}</Text>
+              {est ? estBadge : null}
+            </View>
+            <Text variant="micro" className="text-text-muted tabular-nums">{fmtN(p.calories_per_100g)} kcal · P {fmtN(p.protein_per_100g)} · C {fmtN(p.carbs_per_100g)} · F {fmtN(p.fat_per_100g)} · fib {fmtN(p.fiber_per_100g)} /100 g</Text>
+            <Text variant="micro" className={est ? "text-warm" : "text-teal"}>{sourceLabel(p)} · {Math.round(p.confidence * 100)}%{flags.length ? ` · ${flags.join(", ")}` : ""}</Text>
+          </View>
+          <View className="items-end gap-1">
+            <Pressable testID={est ? "estimate-add" : `add-${p.id}`} onPress={() => quickAdd(p)} disabled={adding != null}>
+              <Button label={adding === p.id ? "…" : canQuickAdd(p) ? "Add" : "Fill in…"} variant="primary" size="sm" disabled={adding != null} onPress={() => quickAdd(p)} />
+            </Pressable>
+            <Pressable testID={`edit-${p.id}`} onPress={() => { setEditPick(p); setResearchOpen(true); }} hitSlop={6}><Text variant="micro" className="text-text-muted">edit</Text></Pressable>
+          </View>
+        </View>
+      </View>
+    );
+  };
 
   // Clamp whole-egg grams to the yolk cap when the max changes (mirrors web):
   // adjusted during render, not in an effect.
@@ -208,22 +343,23 @@ export function ComposeMealView({
             const canCook = hasRawCookedToggle(ing);
             const asCooked = canCook && cookedMode.has(id);
 
+            let qty: number;
             let displayVal: string;
             let onMinus: () => void;
             let onPlus: () => void;
             if (asCount) {
               const count = gramsToCount(ing, g);
               const step = Number(ing.unit_step) || 1;
-              displayVal = `${count} ${ing.unit || "pcs"}`;
+              displayVal = `${count} ${ing.unit || "pcs"}`; qty = count;
               onMinus = () => setG(id, countToGrams(ing, Math.max(0, count - step)));
               onPlus = () => setG(id, countToGrams(ing, count + step));
             } else if (asCooked) {
               const cooked = rawToCooked(ing, g);
-              displayVal = `${cooked} g`;
+              displayVal = `${cooked} g`; qty = cooked;
               onMinus = () => setG(id, cookedToRaw(ing, Math.max(0, cooked - 10)));
               onPlus = () => setG(id, cookedToRaw(ing, cooked + 10));
             } else {
-              displayVal = `${g} g`;
+              displayVal = `${g} g`; qty = g;
               onMinus = () => setG(id, g - 10);
               onPlus = () => setG(id, g + 10);
             }
@@ -231,17 +367,30 @@ export function ComposeMealView({
             return (
               <View key={id} className="border-b border-border-subtle pb-1.5">
                 <View className="flex-row items-center gap-2">
-                  <View className="flex-1">
-                    <Text variant="caption" className="text-text" numberOfLines={1}>{ing.name}</Text>
+                  <View className="min-w-0 flex-1">
+                    <View className="flex-row items-center gap-1.5"><Text variant="caption" className="shrink text-text" numberOfLines={1}>{ing.name}</Text>{isEstimated(ing) ? estBadge : null}</View>
                     <Text variant="micro" className="text-text-muted tabular-nums">
                       {Math.round(m.calories)} kcal · P{Math.round(m.protein)} C{Math.round(m.carbs)} F{Math.round(m.fat)}
                     </Text>
                   </View>
-                  <View className="flex-row items-center gap-1">
-                    <Button label="−" variant="ghost" size="sm" onPress={onMinus} />
-                    <Text variant="caption" className="w-16 text-center tabular-nums">{displayVal}</Text>
-                    <Button label="+" variant="ghost" size="sm" onPress={onPlus} />
-                    <Button label="✕" variant="ghost" size="sm" onPress={() => remove(id)} />
+                  <View className="shrink-0 flex-row items-center gap-1">
+                    <Pressable testID={`minus-${id}`} onPress={onMinus}><Button label="−" variant="ghost" size="sm" onPress={onMinus} /></Pressable>
+                    <View className="w-20 flex-row items-center justify-center" accessibilityLabel={displayVal}>
+                      <TextInput
+                        testID={`qty-${id}`}
+                        value={draft[id] ?? String(qty)}
+                        onChangeText={(t) => { setDraft((d) => ({ ...d, [id]: t })); applyQty(id, ing, asCount, asCooked, t); }}
+                        onEndEditing={() => finishQty(id, ing, asCount, asCooked)}
+                        onSubmitEditing={() => finishQty(id, ing, asCount, asCooked)}
+                        keyboardType="decimal-pad"
+                        selectTextOnFocus
+                        className="min-w-[34px] text-center text-text tabular-nums"
+                        style={{ padding: 0, fontSize: 13 }}
+                      />
+                      <Text variant="caption" className="text-text-muted"> {asCount ? ing.unit || "pcs" : "g"}</Text>
+                    </View>
+                    <Pressable testID={`plus-${id}`} onPress={onPlus}><Button label="+" variant="ghost" size="sm" onPress={onPlus} /></Pressable>
+                    <Pressable testID={`remove-${id}`} onPress={() => remove(id)}><Button label="✕" variant="ghost" size="sm" onPress={() => remove(id)} /></Pressable>
                   </View>
                 </View>
                 {canCook || isCountBased(ing) ? (
@@ -288,52 +437,79 @@ export function ComposeMealView({
             <Text variant="caption" className="font-semibold tabular-nums">
               {Math.round(totals.calories)} kcal · P{Math.round(totals.protein)} C{Math.round(totals.carbs)} F{Math.round(totals.fat)}
             </Text>
-            <Button label={busy ? "…" : editMealId != null ? "Save changes" : "Log meal"} variant="primary" size="sm" disabled={busy || selectedIds.length === 0} onPress={onLog} />
+            <Pressable testID="log-meal" onPress={onLog} disabled={busy || selectedIds.length === 0}><Button label={busy ? "…" : editMealId != null ? "Save changes" : "Log meal"} variant="primary" size="sm" disabled={busy || selectedIds.length === 0} onPress={onLog} /></Pressable>
           </View>
         </View>
       ) : null}
 
       {/* Search + category-grouped ingredient picker */}
       <TextInput
+        testID="compose-search"
         placeholder="Search ingredients…"
         placeholderTextColor="#5a7a8a"
         value={search}
         onChangeText={setSearch}
         className="rounded-md border border-border-subtle px-3 py-2 text-text"
       />
-      {/* T3a: the catalog is not the world. Research a food from USDA / Open Food Facts and confirm it — above the
-          list so it is reachable without scrolling 80+ rows (a person or a Maestro flow). */}
-      <Pressable testID="research-row" onPress={() => setResearchOpen(true)} className="flex-row items-center gap-2 py-1">
-        <Text variant="caption" className="text-teal">{search.trim() ? `Not finding it? Research “${search.trim()}”…` : "Not finding it? Research an ingredient…"}</Text>
-      </Pressable>
       <ScrollView className="max-h-72" keyboardShouldPersistTaps="handled">
-        {groups.length === 0 ? (
-          <Text variant="caption" className="text-text-muted">No ingredients match.</Text>
-        ) : groups.map(([cat, list]) => (
-          <View key={cat} className="mb-2">
-            <Text variant="micro" className="mb-1 text-text-muted">{CATEGORY_LABELS[cat] ?? cat}</Text>
-            {list.map((ing) => {
-              const on = (grams[ing.id] ?? 0) > 0;
-              return (
-                <Pressable key={ing.id} onPress={() => (on ? remove(ing.id) : add(ing.id))} className="flex-row items-center justify-between border-b border-border-subtle py-1.5">
-                  <Text variant="caption" className={on ? "text-teal" : "text-text"} numberOfLines={1}>{ing.name}</Text>
-                  <Text variant="micro" className="text-text-muted tabular-nums">{on ? "✓ " : ""}{Math.round(ing.calories_per_100g)}/100g</Text>
+        {query ? (
+          ranked.length === 0 ? <Text variant="caption" className="text-text-muted">{"Nothing in your catalog matches \u201c" + query + "\u201d."}</Text> : ranked.map(renderRow)
+        ) : (
+          <>
+            {recent.length ? (
+              <View className="mb-2">
+                <Text variant="micro" className="mb-1 text-text-muted">Recently used</Text>
+                {recent.map(renderRow)}
+              </View>
+            ) : null}
+            {groups.map(([cat, list]) => (
+              <View key={cat} className="mb-2">
+                <Text variant="micro" className="mb-1 text-text-muted">{CATEGORY_LABELS[cat] ?? cat}</Text>
+                {list.map(renderRow)}
+              </View>
+            ))}
+          </>
+        )}
+
+        {/* Beyond the catalog (soma#934), on demand and never while typing: the food tables first, then Claude.
+            Sits under the results like a "load more" so it is reachable exactly when the catalog ran out. */}
+        {query.length >= 2 ? (
+          <View className="mt-2 gap-2">
+            {more?.query === query ? (
+              <View className="gap-1">
+                <Text variant="micro" className="text-text-muted">{"From USDA & Open Food Facts"}</Text>
+                {more.proposals.length === 0 ? <Text variant="caption" className="text-text-muted">{"Nothing in USDA or Open Food Facts for \u201c" + query + "\u201d."}</Text> : more.proposals.map(renderProposal)}
+                {more.warnings.map((w) => <Text key={w} variant="micro" className="text-warm">{w}</Text>)}
+              </View>
+            ) : (
+              <Pressable testID="search-more" onPress={searchMore} disabled={moreBusy} className="flex-row items-center justify-center gap-2 rounded-md border border-border-subtle py-2">
+                {moreBusy ? <ActivityIndicator size="small" /> : null}
+                <Text variant="caption" className="text-teal">{moreBusy ? "Searching USDA & Open Food Facts\u2026" : "Search USDA & Open Food Facts for \u201c" + query + "\u201d"}</Text>
+              </Pressable>
+            )}
+            {more?.query === query ? (
+              estimate?.query === query ? (
+                <View className="gap-1">
+                  <Text variant="micro" className="text-text-muted">Estimated by Claude</Text>
+                  {renderProposal(estimate.proposal)}
+                </View>
+              ) : (
+                <Pressable testID="estimate-row" onPress={askClaude} disabled={estimateBusy} className="flex-row items-center justify-center gap-2 rounded-md border border-border-subtle py-2">
+                  {estimateBusy ? <ActivityIndicator size="small" /> : null}
+                  <Text variant="caption" className="text-warm">{estimateBusy ? "Asking Claude\u2026 this takes 10\u201330 s" : "Estimate \u201c" + query + "\u201d with Claude"}</Text>
                 </Pressable>
-              );
-            })}
+              )
+            ) : null}
+            {sourceErr ? <Text variant="micro" className="text-danger">{sourceErr}</Text> : null}
           </View>
-        ))}
+        ) : null}
       </ScrollView>
       <IngredientResearchSheet
         visible={researchOpen}
-        initialQuery={search.trim()}
-        onClose={() => setResearchOpen(false)}
-        onConfirmed={(ing) => {
-          onIngredientAdded?.(ing);
-          // select it right away; the row renders once the parent's refetch lands
-          setGrams((g) => ({ ...g, [ing.id]: 100 }));
-          setSearch("");
-        }}
+        initialQuery={query}
+        initialPick={editPick}
+        onClose={() => { setResearchOpen(false); setEditPick(null); }}
+        onConfirmed={(ing) => adopt(ing)}
       />
     </View>
   );

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { View, ScrollView, TextInput, Pressable, ActivityIndicator, Linking } from "react-native";
 import { Text, Button, Modal } from "soma-style";
 import { researchIngredient, confirmIngredient, type IngredientProposal, type Ingredient } from "../lib/api";
+import { slugify, guessCategory } from "macro-engine-core";
 
 /* T3a — ingredient research (soma#678): the owner types a food, soma proposes candidates from
  * the local USDA table and Open Food Facts with source + confidence, the owner picks one, edits,
@@ -14,31 +15,17 @@ const MACROS = [
 ] as const;
 type MacroKey = (typeof MACROS)[number][0];
 
-function slugify(name: string) {
-  return name.toLowerCase().normalize("NFKD").replace(/[^\x00-\x7f]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
-}
-const guessCategory = (name: string): string => {
-  const n = name.toLowerCase();
-  if (/kefir|yog|milk|cheese|skyr|quark|cottage/.test(n)) return "dairy";
-  if (/chicken|beef|pork|turkey|fish|salmon|tuna|egg|tofu|whey|shrimp|lamb/.test(n)) return "protein";
-  if (/rice|pasta|bread|oat|potato|quinoa|noodle|tortilla|cereal/.test(n)) return "carbs";
-  if (/apple|banana|berry|orange|grape|mango|melon|kiwi|pear|peach/.test(n)) return "fruit";
-  if (/oil|butter|nut|almond|peanut|avocado|seed|tahini/.test(n)) return "fat";
-  if (/broccoli|spinach|tomato|lettuce|pepper|onion|carrot|cucumber|zucchini|salad|vegetable/.test(n)) return "vegetable";
-  return "snack";
-};
-
 function SourceBadge({ p }: { p: IngredientProposal }) {
-  const label = p.source === "usda" ? "USDA" : "Open Food Facts";
-  return (
-    <Pressable onPress={() => Linking.openURL(p.source_url)} hitSlop={6}>
-      <Text variant="micro" className="text-teal">{label} · {Math.round(p.confidence * 100)}% ↗</Text>
-    </Pressable>
-  );
+  const est = p.source === "claude";
+  const label = p.source === "usda" ? "USDA" : p.source === "off" ? "Open Food Facts" : est ? "Claude estimate" : p.source;
+  const inner = <Text variant="micro" className={est ? "text-warm" : "text-teal"}>{label} · {Math.round(p.confidence * 100)}%{p.source_url ? " ↗" : ""}</Text>;
+  return p.source_url ? <Pressable onPress={() => Linking.openURL(p.source_url)} hitSlop={6}>{inner}</Pressable> : inner;
 }
 
-export function IngredientResearchSheet({ visible, initialQuery, onClose, onConfirmed }: {
+export function IngredientResearchSheet({ visible, initialQuery, initialPick, onClose, onConfirmed }: {
   visible: boolean; initialQuery: string; onClose: () => void;
+  /** Open straight on the confirm form for this candidate (the picker's "edit" affordance, soma#934). */
+  initialPick?: IngredientProposal | null;
   /** Called with the catalog row after a successful confirm; the parent refetches presets. */
   onConfirmed: (ing: Ingredient) => void;
 }) {
@@ -53,6 +40,9 @@ export function IngredientResearchSheet({ visible, initialQuery, onClose, onConf
   const [isRaw, setIsRaw] = useState(false); const [unit, setUnit] = useState("g"); const [gramsPerUnit, setGramsPerUnit] = useState("");
   const [macros, setMacros] = useState<Record<MacroKey, string>>({ calories_per_100g: "", protein_per_100g: "", carbs_per_100g: "", fat_per_100g: "", fiber_per_100g: "" });
   const [existing, setExisting] = useState<{ name: string; presets: { id: string; name: string }[] } | null>(null);
+  // Opened on a candidate: land on its confirm form at once (adjusted during render, not in an effect).
+  const [seenPick, setSeenPick] = useState<number | null>(null);
+  if (visible && initialPick && seenPick !== initialPick.id) { setSeenPick(initialPick.id); choose(initialPick); }
 
   async function research() {
     const q = query.trim(); if (q.length < 2) return;
@@ -87,7 +77,7 @@ export function IngredientResearchSheet({ visible, initialQuery, onClose, onConf
     if (r.status === 409) { setExisting({ name: r.error ?? "exists", presets: r.presets_using ?? [] }); return; }
     setErr(r.error ?? `HTTP ${r.status}`);
   }
-  function reset() { setProposals(null); setPick(null); setErr(null); setWarnings([]); setExisting(null); }
+  function reset() { setProposals(null); setPick(null); setErr(null); setWarnings([]); setExisting(null); setSeenPick(null); }
 
   const fmt = (v: number | null) => (v == null ? "?" : String(v));
   return (
