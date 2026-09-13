@@ -14,12 +14,12 @@ import {
 
 // --- Types ---
 
-interface HrPoint {
+export interface HrPoint {
   elapsed_sec: number;
   hr: number;
 }
 
-interface ExerciseSet {
+export interface ExerciseSet {
   exercise: string | null;
   start_sec: number;
   duration_sec: number;
@@ -28,7 +28,7 @@ interface ExerciseSet {
   set_type: string;
 }
 
-interface HrZone {
+export interface HrZone {
   zone: number;
   seconds: number;
   low: number;
