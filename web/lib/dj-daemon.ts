@@ -1,3 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any --
+   The daemon reads Spotify and Garmin payloads whose shapes are theirs, and it drives a live
+   session: narrowing every field is its own change with its own runtime verification, not part
+   of the mechanical lint campaign (soma#958). */
 /**
  * Live DJ daemon — TS port of sync/src/dj_daemon.py. Polls Garmin HR + Spotify
  * every 30 s and dynamically queues BPM-matched songs. Long-running process:

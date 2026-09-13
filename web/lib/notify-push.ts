@@ -5,6 +5,7 @@
  */
 import webpush from "web-push";
 import type { QueryFn } from "./db";
+import { num, rec } from "@/lib/json";
 
 export type PushEvent = "sync" | "sync_workout" | "sync_run" | "sync_error" | "milestone" | "playlist_ready";
 
@@ -50,10 +51,11 @@ export async function sendPush(
       await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
       await sql`UPDATE push_subscriptions SET last_used_at = NOW() WHERE id = ${s.id}`;
       sent += 1;
-    } catch (e: any) {
-      const code = e?.statusCode;
+    } catch (e) {
+      // web-push rejects with a WebPushError carrying the endpoint's HTTP status.
+      const code = num(rec(e)?.statusCode);
       if (code === 410 || code === 404) await sql`DELETE FROM push_subscriptions WHERE id = ${s.id}`;
-      else console.warn(`Push failed for sub ${s.id}: ${e?.message ?? e}`);
+      else console.warn(`Push failed for sub ${s.id}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
   return sent;
