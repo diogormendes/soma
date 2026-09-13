@@ -96,8 +96,8 @@ export async function POST(request: Request) {
       garminDeleted = stdout.includes("Deleted activity") && stdout.includes("from Garmin");
       const match = stdout.match(/Deleted (\d+) rows/);
       dbRowsDeleted = match ? parseInt(match[1]) : 0;
-    } catch (error: any) {
-      console.error("[dedup] Delete failed:", error.message);
+    } catch (error) {
+      console.error("[dedup] Delete failed:", error instanceof Error ? error.message : error);
       // Even if Garmin delete fails, clean up DB
       await sql`DELETE FROM garmin_activity_raw WHERE activity_id = ${deleteId}`;
       dbRowsDeleted = -1; // indicate fallback
@@ -110,8 +110,8 @@ export async function POST(request: Request) {
       garminDeleted,
       dbRowsDeleted,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Resolve error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }

@@ -31,7 +31,7 @@ export async function GET() {
              EXISTS(SELECT 1 FROM hevy_raw_data LIMIT 1) AS has_data,
              (SELECT MAX(synced_at) FROM hevy_raw_data) AS last_sync
     `.catch(() => [] as { platform: string; has_data: boolean; last_sync: string | null }[]);
-    const syncMap = Object.fromEntries((syncService as any[]).map((r: any) => [r.platform, r]));
+    const syncMap = Object.fromEntries(syncService.map((r) => [r.platform, r]));
 
     // Web's Pipeline Operations → Backfill tab reads backfill_progress on the server; the app
     // needs it from the API (soma#795). Absent table → empty list, never a 500.
@@ -102,7 +102,7 @@ export async function GET() {
     // Build platform status including non-connected ones
     const platforms = ["garmin", "hevy", "strava", "surfr"];
     const credMap = Object.fromEntries(
-      (credentials as any[]).map((c: any) => [c.platform, c])
+      credentials.map((c) => [c.platform, c])
     );
 
     const status = platforms.map((p) => ({

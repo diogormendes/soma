@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import type { HevyExercise, HevyWorkout } from "@/lib/hevy-types";
 
 // --- Helpers ---
 
@@ -27,15 +28,26 @@ const EST_SET_SEC = 40;
 const EST_REST_SEC = 25;
 const EST_EX_REST_SEC = 60;
 
+/** One synthesised set of the exercise-timing overlay. */
+interface SynthSet {
+  exercise: string;
+  start_sec: number;
+  duration_sec: number;
+  reps: number;
+  weight: number;
+  set_type: string;
+  avg_hr?: number | null;
+}
+
 /** Synthesize exercise timing overlay from Hevy data and compute per-set avg HR via interpolation. */
 function synthesizeExerciseSets(
   timeline: HrPoint[],
-  workout: any,
-): any[] {
+  workout: HevyWorkout,
+): SynthSet[] {
   const totalDuration = timeline[timeline.length - 1].elapsed_sec;
   const allSets: Array<{ exercise: string; reps: number; weight: number; type: string }> = [];
-  for (const ex of workout.exercises) {
-    for (const s of ex.sets) {
+  for (const ex of workout.exercises ?? []) {
+    for (const s of ex.sets ?? []) {
       allSets.push({
         exercise: ex.title || "Unknown",
         reps: s.reps || 0,
@@ -48,10 +60,10 @@ function synthesizeExerciseSets(
 
   const rawTotal = allSets.length * EST_SET_SEC +
     (allSets.length - 1) * EST_REST_SEC +
-    (workout.exercises.length - 1) * (EST_EX_REST_SEC - EST_REST_SEC);
+    ((workout.exercises?.length ?? 0) - 1) * (EST_EX_REST_SEC - EST_REST_SEC);
   const scale = rawTotal > 0 ? totalDuration / rawTotal : 1;
 
-  const synthSets: any[] = [];
+  const synthSets: SynthSet[] = [];
   let cursor = 0;
   let prevExercise = "";
   for (const s of allSets) {
@@ -75,8 +87,8 @@ function synthesizeExerciseSets(
 
   // Compute per-set avg HR via interpolation at set midpoint
   let setIdx = 0;
-  for (const ex of workout.exercises) {
-    for (const s of ex.sets) {
+  for (const ex of workout.exercises ?? []) {
+    for (const s of ex.sets ?? []) {
       if (setIdx < synthSets.length) {
         const synth = synthSets[setIdx];
         const midpoint = synth.start_sec + synth.duration_sec / 2;
@@ -118,7 +130,7 @@ export async function GET(
   const workout = {
     ...raw,
     exercises: Array.isArray(raw.exercises)
-      ? raw.exercises.map((ex: any) => ({
+      ? (raw.exercises as HevyExercise[]).map((ex) => ({
           ...ex,
           sets: Array.isArray(ex.sets) ? ex.sets : [],
         }))
@@ -170,7 +182,7 @@ export async function GET(
     }
   }
 
-  let garmin: Record<string, any> | null = null;
+  let garmin: Record<string, unknown> | null = null;
   if (garminActivityId && enrichedHr) {
     // Fetch HR zones for the matched activity
     const zoneRows = await sql`
@@ -188,8 +200,8 @@ export async function GET(
         : zoneData?.hrTimeInZones ? zoneData.hrTimeInZones
         : [];
       // Sort by zone number and calculate high boundaries from next zone's low
-      const sorted = [...zones].sort((a: any, b: any) => a.zoneNumber - b.zoneNumber);
-      hrZones = sorted.map((z: any, i: number) => ({
+      const sorted = [...zones].sort((a, b) => Number(a.zoneNumber) - Number(b.zoneNumber));
+      hrZones = sorted.map((z, i: number) => ({
         zone: z.zoneNumber,
         seconds: z.secsInZone || 0,
         low: z.zoneLowBoundary || 0,
@@ -215,8 +227,9 @@ export async function GET(
     }
 
     // Synthesize exercise overlay from Hevy data + compute per-set HR via interpolation
-    if (garmin.hr_timeline?.length > 0 && workout.exercises.length > 0) {
-      garmin.exercise_sets = synthesizeExerciseSets(garmin.hr_timeline, workout);
+    const timeline = (garmin.hr_timeline ?? []) as HrPoint[];
+    if (timeline.length > 0 && workout.exercises.length > 0) {
+      garmin.exercise_sets = synthesizeExerciseSets(timeline, workout);
     }
   } else if (enrichedHr) {
     // Enrichment data exists but no Garmin activity link — show HR/calories + timeline
@@ -236,7 +249,7 @@ export async function GET(
 
       // Synthesize exercise overlay + per-set HR via interpolation
       if (workout.exercises.length > 0) {
-        garmin.exercise_sets = synthesizeExerciseSets(garmin.hr_timeline, workout);
+        garmin.exercise_sets = synthesizeExerciseSets((garmin.hr_timeline ?? []) as HrPoint[], workout);
       }
     }
   }

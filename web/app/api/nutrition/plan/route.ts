@@ -14,6 +14,7 @@ import { trendAte } from "@/lib/trend-ate";
 import { computeAlcoholDisplacement } from "macro-engine-core";
 import { todayAthlete } from "@/lib/athlete-tz";
 import { isMissingRelation, warnMissingRelationOnce } from "@/lib/missing-relation";
+import { num, rec } from "@/lib/json";
 
 
 const VALID_MODES: readonly Mode[] = [
@@ -361,7 +362,7 @@ async function planForDay(req: NextRequest) {
     let effectiveGymCal = 0;
     const gymBreakdownFinal: { title: string; calories: number; predicted: number; actual: boolean }[] = [];
     for (const workout of selectedWorkouts) {
-      const predictedEntry = gymBreakdown.find((g: any) => g.title === workout);
+      const predictedEntry = gymBreakdown.find((g) => g.title === workout);
       const predCal = predictedEntry?.calories ?? 0;
       if (actualGymByTitle[workout] !== undefined) {
         effectiveGymCal += actualGymByTitle[workout];
@@ -374,7 +375,7 @@ async function planForDay(req: NextRequest) {
 
     // Use sleep-adjusted deficit from plan JSON if available, otherwise profile default
     // The sync engine sets plan->deficit_used based on sleep quality (0 for severe, halved for moderate)
-    const planJsonDeficit = plan?.plan ? Number((plan.plan as any).deficit_used) : null;
+    const planJsonDeficit = plan?.plan ? num(rec(plan.plan)?.deficit_used) : null;
     const effectiveDeficit = manualOverride
       ? (plan.deficit_used != null ? Number(plan.deficit_used) : defaultDeficit)
       : (planJsonDeficit != null ? planJsonDeficit : defaultDeficit);
@@ -587,7 +588,7 @@ async function planForDay(req: NextRequest) {
 
   // Compute burn per day from stored plan data (consistent with budget card model)
   const computeBurn = (r: Record<string, unknown>, isCurrentDay: boolean) => {
-    if (isCurrentDay && breakdown) return Number((breakdown as any).totalBurn) || 0;
+    if (isCurrentDay && breakdown) return num(rec(breakdown)?.totalBurn) ?? 0;
     // Reconstruct from stored values: burn = target + deficit
     const target = Number(r.target_calories) || 0;
     const defUsed = Number(r.deficit_used) || goalDeficit;
