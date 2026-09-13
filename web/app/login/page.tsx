@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { signIn } from "@/auth";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import Image from "next/image";
 
 export const metadata: Metadata = { title: "Login" };
 
@@ -19,7 +20,7 @@ export default async function LoginPage({
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="w-full max-w-sm space-y-6 rounded-xl border border-border bg-card p-8 shadow-lg">
         <div className="space-y-2 text-center">
-          <img src="/soma-icon.png" alt="soma" className="mx-auto h-12 w-12" />
+          <Image src="/soma-icon.png" alt="soma" width={48} height={48} className="mx-auto h-12 w-12" priority />
           <h1 className="text-2xl font-semibold tracking-tight">soma</h1>
           <p className="text-sm text-muted-foreground">
             Sign in to access your health dashboard

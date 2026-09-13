@@ -30,7 +30,7 @@ import { cutoffIso } from "@/lib/date-range";
 
 export const revalidate = 300;
 
-const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
+const _ACTIVITY_ICONS: Record<string, React.ReactNode> = {
   kiteboarding_v2: <Wind className="h-4 w-4 text-cyan-400" />,
   wind_kite_surfing: <Wind className="h-4 w-4 text-cyan-400" />,
   resort_snowboarding: <Snowflake className="h-4 w-4 text-blue-300" />,
@@ -970,7 +970,7 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
               const totalDist = walks.reduce((s: number, w: any) => s + Number(w.distance_km || 0), 0);
               const totalElev = walks.reduce((s: number, w: any) => s + Number(w.elev_gain || 0), 0);
               const avgDuration = walks.reduce((s: number, w: any) => s + Number(w.duration_min || 0), 0) / walks.length;
-              const totalCal = walks.reduce((s: number, w: any) => s + Number(w.calories || 0), 0);
+              const _totalCal = walks.reduce((s: number, w: any) => s + Number(w.calories || 0), 0);
               return (
                 <>
                   <StatCard title="Total Walks" value={walks.length} icon={<PersonStanding className="h-4 w-4 text-emerald-400" />} />
@@ -1021,7 +1021,7 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
               const totalElev = rides.reduce((s: number, r: any) => s + Number(r.elev_gain || 0), 0);
               const validSpeeds = rides.filter((r: any) => r.max_speed_kmh && Number(r.max_speed_kmh) > 0).map((r: any) => Number(r.max_speed_kmh));
               const topSpeed = validSpeeds.length > 0 ? Math.max(...validSpeeds) : 0;
-              const avgSpeed = rides.filter((r: any) => Number(r.avg_speed_kmh) > 0).reduce((s: number, r: any) => s + Number(r.avg_speed_kmh), 0) / rides.filter((r: any) => Number(r.avg_speed_kmh) > 0).length;
+              const _avgSpeed = rides.filter((r: any) => Number(r.avg_speed_kmh) > 0).reduce((s: number, r: any) => s + Number(r.avg_speed_kmh), 0) / rides.filter((r: any) => Number(r.avg_speed_kmh) > 0).length;
               return (
                 <>
                   <StatCard title="Total Rides" value={rides.length} icon={<Bike className="h-4 w-4 text-yellow-400" />} />

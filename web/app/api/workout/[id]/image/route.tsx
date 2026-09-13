@@ -1,3 +1,6 @@
+/* eslint-disable @next/next/no-img-element, jsx-a11y/alt-text --
+   These `img` elements are satori nodes for `@vercel/og`, not DOM: the route renders a PNG on
+   the server. next/image cannot appear here, and there is no accessibility tree in a PNG. */
 import { ImageResponse } from "@vercel/og";
 import { getDb } from "@/lib/db";
 import {
@@ -230,13 +233,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     try { durationS = (new Date(workout.end_time).getTime() - new Date(startTime).getTime()) / 1000; } catch { /**/ }
   }
 
-  let workingSets = 0, totalVolume = 0, totalReps = 0;
+  let workingSets = 0, totalVolume = 0;
   for (const ex of exercises) {
     for (const s of ex.sets || []) {
       if (s.type === "normal" && (s.weight_kg || 0) > 0 && (s.reps || 0) > 0) {
         workingSets++;
         totalVolume += (s.weight_kg || 0) * (s.reps || 0);
-        totalReps += s.reps || 0;
       }
     }
   }
@@ -252,7 +254,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }))
   );
   const maxVolume = Math.max(...ALL_MUSCLE_GROUPS.map((mg) => muscleData[mg].total), 1);
-  const topMuscles = ALL_MUSCLE_GROUPS
+  const _topMuscles = ALL_MUSCLE_GROUPS
     .filter((mg) => muscleData[mg].total > 0)
     .sort((a, b) => muscleData[b].total - muscleData[a].total)
     .slice(0, 6);
@@ -269,9 +271,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const hrMinVal = hrSamples.length > 0 ? Math.min(...hrSamples) : null;
   const hrMaxVal = hrSamples.length > 0 ? Math.max(...hrSamples) : null;
   const exerciseSegments = getExerciseSegments(exercises);
-  const totalSets = exerciseSegments.reduce((sum, s) => sum + s.sets, 0);
+  const _totalSets = exerciseSegments.reduce((sum, s) => sum + s.sets, 0);
   const hrImgWidth = IMG_W - SIDE * 2;
-  const hrImgHeight = Math.round(hrImgWidth * (180 / 984));
+  const _hrImgHeight = Math.round(hrImgWidth * (180 / 984));
 
   // Exercise list (cap based on HR presence)
   const segColors = ["#3b82f6", "#22c55e", "#f97316", "#a855f7", "#ef4444", "#06b6d4", "#eab308", "#ec4899"];

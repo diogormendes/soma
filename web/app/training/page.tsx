@@ -178,7 +178,7 @@ async function getTrajectoryData(
   // Rest days come from the LIVE plan's days passed in (already gated by the
   // live rule), not from a raw status='active' join that would resurrect a
   // dormant plan's calendar (#701).
-  const restDatesSet = new Set(planDays.filter((d: any) => d.run_type === "rest").map((d: any) => d.day_date));
+  const _restDatesSet = new Set(planDays.filter((d: any) => d.run_type === "rest").map((d: any) => d.day_date));
 
   // Race-calibrated VDOT from Banister model — no Garmin fallback
   const banisterCurrentVdot = banister?.current_vdot ? Number(banister.current_vdot) : 0;
@@ -339,7 +339,7 @@ async function getTrajectoryData(
     .filter((t) => t.actual !== null)
     .map((t) => ({ date: t.date, vdot: t.actual as number }));
 
-  const lastActualDate = actualPoints.length > 0
+  const _lastActualDate = actualPoints.length > 0
     ? actualPoints[actualPoints.length - 1].date : null;
 
   for (const point of trajectory) {
@@ -354,7 +354,7 @@ async function getTrajectoryData(
 
 export default async function TrainingPage() {
   const today = todayAthlete();
-  const [planForPage, readiness, pmcLatest, fitnessLatest, referenceData, banisterParams, trailingLoad, lifecycle] = await Promise.all([
+  const [planForPage, _readiness, _pmcLatest, _fitnessLatest, referenceData, banisterParams, trailingLoad, lifecycle] = await Promise.all([
     getPlanForPage(),
     getReadiness(),
     getPMCLatest(),

@@ -52,7 +52,7 @@ function formatSeconds(sec: number): string {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function vdotToHmPace(vdot: number): string {
+function _vdotToHmPace(vdot: number): string {
   const hmSeconds = hmSecondsFromVdot(vdot);
   const secPerKm = Math.round(hmSeconds / 21.0975); // round total sec/km first
   const min = Math.floor(secPerKm / 60);
@@ -79,7 +79,7 @@ function formatTimeDelta(seconds: number): string {
   return `${sign}${m}:${String(s).padStart(2, "0")}`;
 }
 
-const PROJECTED_COLOR = "oklch(70% 0.18 200)"; // teal — Banister prediction
+const _PROJECTED_COLOR = "oklch(70% 0.18 200)"; // teal — Banister prediction
 
 // ── Colors for secondary dimension lines ─────────────────────
 
@@ -171,7 +171,7 @@ function makeCustomTooltip(projectedDays?: ProjectedDay[] | null, goalVdot?: num
 
     const optimal = data.optimal;
     const actual = data.actual;
-    const projected = data.projectedVdot;
+    const _projected = data.projectedVdot;
     const shadow = data.shadow;
     const gap = actual !== null && actual !== undefined ? (optimal - actual).toFixed(1) : null;
     const dateStr = new Date(data.date + "T00:00:00").toLocaleDateString("en-US", {
@@ -546,7 +546,7 @@ export function TrajectoryChart({
   const planStartMs = new Date(chartData[0].date + "T00:00:00").getTime();
   const planDurationMs = raceMs - planStartMs;
   const inflectionMs = planStartMs + planDurationMs * 0.4;
-  const inflectionDate = new Date(inflectionMs).toISOString().split("T")[0];
+  const _inflectionDate = new Date(inflectionMs).toISOString().split("T")[0];
   // Find the optimal VDOT at the inflection point (nearest date)
   const inflectionEntry = chartData.reduce((best, d) => {
     const dMs = new Date(d.date + "T00:00:00").getTime();

@@ -679,7 +679,7 @@ async function getLastWorkoutDetail() {
   };
 }
 
-const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
+const _ACTIVITY_ICONS: Record<string, React.ReactNode> = {
   running: <Footprints className="h-3.5 w-3.5 text-green-400" />,
   strength_training: <Dumbbell className="h-3.5 w-3.5 text-orange-400" />,
   kiteboarding_v2: <Wind className="h-3.5 w-3.5 text-cyan-400" />,
@@ -696,7 +696,7 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
   stand_up_paddleboarding_v2: <Waves className="h-3.5 w-3.5 text-cyan-300" />,
 };
 
-const ACTIVITY_BAR_COLORS: Record<string, string> = {
+const _ACTIVITY_BAR_COLORS: Record<string, string> = {
   running: "bg-green-500/70",
   strength_training: "bg-orange-500/70",
   kiteboarding_v2: "bg-cyan-500/70",
@@ -712,7 +712,7 @@ const ACTIVITY_BAR_COLORS: Record<string, string> = {
   other: "bg-violet-400/70",
 };
 
-const ACTIVITY_LABELS: Record<string, string> = {
+const _ACTIVITY_LABELS: Record<string, string> = {
   running: "Run",
   strength_training: "Gym",
   kiteboarding_v2: "Kite",
@@ -742,7 +742,7 @@ const MERGE_TYPES: Record<string, string> = {
   open_water_swimming: "lap_swimming",
 };
 
-function formatDuration(mins: number) {
+function _formatDuration(mins: number) {
   const h = Math.floor(mins / 60);
   const m = Math.round(mins % 60);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;

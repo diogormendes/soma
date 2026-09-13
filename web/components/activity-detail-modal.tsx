@@ -6,10 +6,8 @@ import {
   Sheet,
   SheetContent,
   SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Download, Upload, Check, Loader2 } from "lucide-react";
 import { ActivityPerformanceChart } from "@/components/activity-performance-chart";
@@ -58,8 +56,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
       const resp = await fetch(`/api/activity/${activityId}/strava-photo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branding: showBranding }),
-      });
+        body: JSON.stringify({ branding: showBranding }) });
       const json = await resp.json().catch(() => ({}));
       if (!resp.ok) {
         setUploadError((json as { error?: string }).error ?? "Upload failed");
@@ -117,8 +114,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                 weekday: "long",
                 month: "long",
                 day: "numeric",
-                year: "numeric",
-              })}
+                year: "numeric" })}
             </div>
           )}
         </SheetHeader>
@@ -322,8 +318,7 @@ export function ActivityDetailModal({ activityId, onClose }: ActivityDetailModal
                         .filter((l: any) => l.averageSpeed > 0 && l.distance > 0)
                         .map((l: any) => ({
                           pace: 1000 / l.averageSpeed / 60,
-                          hr: l.averageHR,
-                        }));
+                          hr: l.averageHR }));
                       if (paceData.length < 2) return null;
                       const minPace = Math.min(...paceData.map((p: any) => p.pace));
                       const maxPace = Math.max(...paceData.map((p: any) => p.pace));

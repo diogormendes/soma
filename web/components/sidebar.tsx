@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import {
   LayoutDashboard,
@@ -15,8 +15,7 @@ import {
   Music2,
   UtensilsCrossed,
   Menu,
-  X,
-} from "lucide-react";
+  X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SyncButton } from "@/components/sync-button";
 import { SomaLogo } from "@/components/soma-logo";

@@ -17,7 +17,7 @@ import { ClickableTopExercises } from "@/components/clickable-top-exercises";
 import { ClickablePersonalRecords } from "@/components/clickable-personal-records";
 import { TimeRangeSelector } from "@/components/time-range-selector";
 import { rangeToDays } from "@/lib/time-ranges";
-import { getExerciseMuscles, ALL_MUSCLE_GROUPS, type MuscleGroup } from "@/lib/muscle-groups";
+import { getExerciseMuscles, ALL_MUSCLE_GROUPS } from "@/lib/muscle-groups";
 import {
   Dumbbell,
   Clock,
@@ -26,8 +26,7 @@ import {
   Calendar,
   Target,
   HeartPulse,
-  Heart,
-} from "lucide-react";
+  Heart } from "lucide-react";
 import { cutoffIso } from "@/lib/date-range";
 
 export const revalidate = 300;
@@ -356,8 +355,7 @@ async function getConfigurableProgression(cutoff: string) {
 
   return {
     exercises: exercises.map((e: any) => ({ exercise: String(e.exercise), count: Number(e.count) })),
-    progression,
-  };
+    progression };
 }
 
 async function getWorkoutFrequencyByWeekDetailed(cutoff: string) {
@@ -390,8 +388,7 @@ async function getWorkoutFrequencyByWeekDetailed(cutoff: string) {
       title: r.title,
       date: dateStr,
       exercises: exercises,
-      duration_min: Number(r.duration_min),
-    });
+      duration_min: Number(r.duration_min) });
   }
   // Compute avg duration
   for (const w of weekMap.values()) {
@@ -480,8 +477,7 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
-    ...(sameYear ? {} : { year: "2-digit" }),
-  });
+    ...(sameYear ? {} : { year: "2-digit" }) });
 }
 
 export default async function WorkoutsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
@@ -524,8 +520,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
     .filter((w: any) => w.calories != null)
     .map((w: any) => ({ date: normalizeDate(w.date), value: Number(w.calories), label: String(w.title) }));
   const cumulativeTimeline = (workoutTimeline as any[]).map((w: any, i: number) => ({
-    date: normalizeDate(w.date), value: i + 1, label: `#${i + 1}: ${String(w.title)}`,
-  }));
+    date: normalizeDate(w.date), value: i + 1, label: `#${i + 1}: ${String(w.title)}` }));
   const monthlyCountMap = new Map<string, number>();
   for (const w of workoutTimeline as any[]) {
     const month = normalizeDate(w.date).slice(0, 7);
@@ -557,8 +552,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
           icon: <Dumbbell className="h-4 w-4 text-primary" />,
           timelineData: cumulativeTimeline,
           timelineLabel: "Cumulative Workout Count",
-          timelineUnit: "workouts",
-        },
+          timelineUnit: "workouts" },
         {
           label: "Avg Duration",
           value: stats?.avg_duration_min ? `${Math.round(Number(stats.avg_duration_min))}m` : "—",
@@ -566,8 +560,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
           icon: <Clock className="h-4 w-4 text-blue-400" />,
           timelineData: durationTimeline,
           timelineLabel: "Duration Per Workout",
-          timelineUnit: "min",
-        },
+          timelineUnit: "min" },
         {
           label: "Training Span",
           value: `${totalWeeks} weeks`,
@@ -575,8 +568,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
           icon: <Calendar className="h-4 w-4 text-green-400" />,
           timelineData: monthlyCountTimeline,
           timelineLabel: "Workouts Per Month",
-          timelineUnit: "workouts",
-        },
+          timelineUnit: "workouts" },
         {
           label: "Avg Calories",
           value: calorieStats?.avg_calories ? `${Number(calorieStats.avg_calories)} kcal` : "—",
@@ -586,8 +578,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
           icon: <HeartPulse className="h-4 w-4 text-red-400" />,
           timelineData: caloriesTimeline,
           timelineLabel: "Calories Per Workout",
-          timelineUnit: "kcal",
-        },
+          timelineUnit: "kcal" },
       ]} />
 
       {/* Muscle Body Map + Charts Row */}
@@ -605,8 +596,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
             const cap = median * 3;
             return recent.map(v => ({
               ...v,
-              total_volume: Math.min(Number(v.total_volume), cap),
-            }));
+              total_volume: Math.min(Number(v.total_volume), cap) }));
           })()} />
         </ExpandableChartCard>
 
@@ -655,8 +645,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
                 : e.last_performed ? String(e.last_performed).slice(0, 10) : undefined,
               recent_weights: Array.isArray(e.recent_weights)
                 ? e.recent_weights.map(Number)
-                : [],
-            }))} />
+                : [] }))} />
           </CardContent>
         </Card>
 
@@ -671,8 +660,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
             <ClickablePersonalRecords records={exercisePRs.map((pr: any) => ({
               exercise: String(pr.exercise),
               pr_weight: Number(pr.pr_weight),
-              reps_at_pr: pr.reps_at_pr ? Number(pr.reps_at_pr) : null,
-            }))} />
+              reps_at_pr: pr.reps_at_pr ? Number(pr.reps_at_pr) : null }))} />
           </CardContent>
         </Card>
       </div>
@@ -697,8 +685,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
                 exercises: typeof w.exercises === "string" ? JSON.parse(w.exercises) : w.exercises,
                 avg_hr: w.avg_hr ? Number(w.avg_hr) : undefined,
                 max_hr: w.max_hr ? Number(w.max_hr) : undefined,
-                garmin_calories: w.garmin_calories ? Number(w.garmin_calories) : undefined,
-              }))}
+                garmin_calories: w.garmin_calories ? Number(w.garmin_calories) : undefined }))}
               totalCount={totalWorkoutCount}
             />
           </CardContent>
@@ -739,8 +726,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
             {(() => {
               const mgColors: Record<string, string> = {
                 Chest: "bg-red-500", Back: "bg-green-500", Shoulders: "bg-orange-500",
-                Arms: "bg-cyan-500", Legs: "bg-blue-500", Core: "bg-yellow-500",
-              };
+                Arms: "bg-cyan-500", Legs: "bg-blue-500", Core: "bg-yellow-500" };
               const monthMap = new Map<string, Map<string, number>>();
               const allGroups = new Set<string>();
               for (const r of monthlyMuscle as any[]) {
@@ -811,8 +797,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
             avg_hr: Number(r.avg_hr),
             max_hr: Number(r.max_hr),
             title: String(r.title),
-            duration_min: Number(r.duration_min),
-          }))} />
+            duration_min: Number(r.duration_min) }))} />
         </ExpandableChartCard>
       )}
     </div>

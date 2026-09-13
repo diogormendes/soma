@@ -171,7 +171,7 @@ export function OutlierChart({
   const ticks = buildTicks(sorted, 10);
 
   const handleClick = useCallback(
-    (_: any, __: any, e: any) => {
+    (_: any, __: any, _e: any) => {
       // Recharts Scatter onClick gives (entry, index, event)
       // But the shape of args varies; we handle both patterns.
       const point = _ as SetPoint | undefined;

@@ -3,13 +3,8 @@
 import {
   LineChart,
   Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts";
+  ResponsiveContainer } from "recharts";
 
 interface ProgressEntry {
   exercise: string;
@@ -21,15 +16,13 @@ const COLORS: Record<string, string> = {
   "Bench Press (Barbell)": "oklch(72% 0.19 50)",
   "Overhead Press (Barbell)": "oklch(65% 0.18 250)",
   "Leg Press (Machine)": "oklch(62% 0.17 142)",
-  "Iso-Lateral Row (Machine)": "oklch(58% 0.22 290)",
-};
+  "Iso-Lateral Row (Machine)": "oklch(58% 0.22 290)" };
 
 const SHORT_NAMES: Record<string, string> = {
   "Bench Press (Barbell)": "Bench",
   "Overhead Press (Barbell)": "OHP",
   "Leg Press (Machine)": "Leg Press",
-  "Iso-Lateral Row (Machine)": "Row",
-};
+  "Iso-Lateral Row (Machine)": "Row" };
 
 export function ExerciseProgressChart({ data }: { data: ProgressEntry[] }) {
   if (!data || data.length === 0) {
@@ -46,8 +39,7 @@ export function ExerciseProgressChart({ data }: { data: ProgressEntry[] }) {
     if (!byExercise.has(row.exercise)) byExercise.set(row.exercise, []);
     byExercise.get(row.exercise)!.push({
       date: String(row.workout_date),
-      weight: Number(row.max_weight),
-    });
+      weight: Number(row.max_weight) });
   }
 
   const exercises = Array.from(byExercise.keys());

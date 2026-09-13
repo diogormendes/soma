@@ -5,16 +5,15 @@ import {
   Sheet,
   SheetContent,
   SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { HRZoneChart } from "@/components/hr-zone-chart";
 import { WorkoutHrTimeline } from "@/components/workout-hr-timeline";
-import { HeartPulse, Flame, Dumbbell, Download } from "lucide-react";
+import { HeartPulse, Dumbbell, Download } from "lucide-react";
 import { MuscleBodyMap } from "./muscle-body-map";
-import { getExerciseMuscles, ALL_MUSCLE_GROUPS, type MuscleGroup } from "@/lib/muscle-groups";
+import { getExerciseMuscles, ALL_MUSCLE_GROUPS } from "@/lib/muscle-groups";
 
 const KG_TO_LBS = 2.20462;
 
@@ -115,8 +114,7 @@ export function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetailModalPro
                 weekday: "long",
                 month: "long",
                 day: "numeric",
-                year: "numeric",
-              })}
+                year: "numeric" })}
             </div>
           )}
         </SheetHeader>

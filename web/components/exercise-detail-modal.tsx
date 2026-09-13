@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { MUSCLE_LABELS, MUSCLE_COLORS, type MuscleGroup } from "@/lib/muscle-groups";
@@ -17,9 +16,8 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import { Trophy, TrendingUp, Calendar, Dumbbell, Heart } from "lucide-react";
+  ResponsiveContainer } from "recharts";
+import { Trophy, TrendingUp, Dumbbell, Heart } from "lucide-react";
 
 interface ExerciseData {
   name: string;
@@ -52,8 +50,7 @@ const METRIC_LABELS: Record<ChartMetric, string> = {
   maxWeight: "Max Weight",
   totalVolume: "Total Volume",
   estimated1RM: "Est. 1RM",
-  maxReps: "Max Reps",
-};
+  maxReps: "Max Reps" };
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
@@ -62,8 +59,7 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
-    ...(sameYear ? {} : { year: "2-digit" }),
-  });
+    ...(sameYear ? {} : { year: "2-digit" }) });
 }
 
 function RecordCard({ label, value, unit, context, icon }: {
@@ -111,8 +107,7 @@ function ChartTooltipContent({ active, payload }: any) {
 
 export function ExerciseDetailModal({
   exerciseName,
-  onClose,
-}: {
+  onClose }: {
   exerciseName: string | null;
   onClose: () => void;
 }) {

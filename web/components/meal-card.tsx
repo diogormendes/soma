@@ -421,7 +421,7 @@ export function MealCard({
       setLastComposedItems(null);
       setLastComposedTotals(null);
       onMealLogged(slot); // refresh to show the new preset in the picker
-    } catch (err) {
+    } catch (_err) {
       setSaveError("Network error — could not save");
     } finally {
       setSaving(false);

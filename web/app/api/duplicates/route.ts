@@ -47,7 +47,7 @@ export async function GET() {
       allIds.add(Number(r.id_b));
     });
 
-    let detailCounts: Record<number, number> = {};
+    const detailCounts: Record<number, number> = {};
     if (allIds.size > 0) {
       const idArray = Array.from(allIds);
       const counts = await sql`

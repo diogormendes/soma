@@ -95,7 +95,7 @@ export function ComparisonCharts({ data, hoveredDate, onHoverDate }: ComparisonC
   );
 }
 
-function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminLabel, ourColor, hoveredDate, onHoverDate, invertY, formatValue, tightYAxis }: {
+function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminLabel, ourColor, hoveredDate: _hoveredDate, onHoverDate, invertY, formatValue, tightYAxis }: {
   title: string;
   subtitle: string;
   data: any[];

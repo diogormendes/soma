@@ -86,7 +86,7 @@ const runTypeColors: Record<string, { bg: string; text: string }> = {
   race: { bg: "bg-purple-500/10", text: "text-purple-400" },
 };
 
-const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const _dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function formatPace(secPerKm: number): string {
   const m = Math.floor(secPerKm / 60);

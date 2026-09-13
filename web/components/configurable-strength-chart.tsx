@@ -4,12 +4,8 @@ import { useState, useMemo } from "react";
 import {
   LineChart,
   Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+  ResponsiveContainer } from "recharts";
 
 interface ProgressEntry {
   exercise: string;
@@ -31,8 +27,7 @@ function formatDate(dateStr: string): string {
 export function ConfigurableStrengthChart({
   data,
   availableExercises,
-  expanded,
-}: {
+  expanded }: {
   data: ProgressEntry[];
   availableExercises: { exercise: string; count: number }[];
   expanded?: boolean;
@@ -60,8 +55,7 @@ export function ConfigurableStrengthChart({
       if (!grouped.has(row.exercise)) grouped.set(row.exercise, []);
       grouped.get(row.exercise)!.push({
         date: String(row.workout_date),
-        weight: Number(row.max_weight),
-      });
+        weight: Number(row.max_weight) });
     }
     return grouped;
   }, [data, selected]);
@@ -98,8 +92,7 @@ export function ConfigurableStrengthChart({
             style={{
               borderColor: colorMap[ex],
               color: colorMap[ex],
-              backgroundColor: `${colorMap[ex]}15`,
-            }}
+              backgroundColor: `${colorMap[ex]}15` }}
             title="Click to remove"
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: colorMap[ex] }} />

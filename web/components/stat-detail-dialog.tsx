@@ -302,7 +302,7 @@ function SummaryStat({
 function MetricChart({
   config,
   data,
-  range,
+  range: _range,
 }: {
   config: MetricConfig;
   data: MetricResponse;

@@ -17,7 +17,7 @@ const COL_X: Record<NodeColumn, number> = {
   output: 1000,
 };
 
-const COL_LABELS: Record<NodeColumn, string> = {
+const _COL_LABELS: Record<NodeColumn, string> = {
   raw: "Signals",
   zscore: "Standardized",
   pmc: "Load Model",
@@ -194,8 +194,8 @@ function svgHeight(nodes: GraphNode[]): number {
 export function ComputationGraphView({
   graph,
   shadowGraph,
-  sliderValue,
-  onSliderChange,
+  sliderValue: _sliderValue,
+  onSliderChange: _onSliderChange,
   hoveredDate,
   hideOverrides,
   calibration,

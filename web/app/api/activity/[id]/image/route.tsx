@@ -1,3 +1,6 @@
+/* eslint-disable @next/next/no-img-element, jsx-a11y/alt-text --
+   These `img` elements are satori nodes for `@vercel/og`, not DOM: the route renders a PNG on
+   the server. next/image cannot appear here, and there is no accessibility tree in a PNG. */
 import { ImageResponse } from "@vercel/og";
 import sharp from "sharp";
 import { getDb } from "@/lib/db";
@@ -81,8 +84,8 @@ function selectZoom(minLat: number, maxLat: number, minLng: number, maxLng: numb
 // Used to frame the route consistently regardless of its shape (no aspect-ratio bias).
 function boundingCircle(pts: { x: number; y: number }[]) {
   const d2 = (a: { x: number; y: number }, b: { x: number; y: number }) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
-  let p1 = pts.reduce((a, b) => (d2(pts[0], b) > d2(pts[0], a) ? b : a), pts[0]);
-  let p2 = pts.reduce((a, b) => (d2(p1, b) > d2(p1, a) ? b : a), pts[0]);
+  const p1 = pts.reduce((a, b) => (d2(pts[0], b) > d2(pts[0], a) ? b : a), pts[0]);
+  const p2 = pts.reduce((a, b) => (d2(p1, b) > d2(p1, a) ? b : a), pts[0]);
   let cx = (p1.x + p2.x) / 2, cy = (p1.y + p2.y) / 2;
   let r = Math.sqrt(d2(p1, p2)) / 2;
   for (const p of pts) {
@@ -527,11 +530,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const duration  = summary.duration > 0 ? formatDuration(summary.duration) : null;
   const movingDur = summary.movingDuration > 0 ? formatDuration(summary.movingDuration) : null;
   const pace      = summary.averageSpeed > 0 ? formatPace(summary.averageSpeed) : null;
-  const maxSpeedKmh = summary.maxSpeed > 0 ? (summary.maxSpeed * 3.6).toFixed(1) : null;
-  const avgSpeedKmh = summary.averageSpeed > 0 ? (summary.averageSpeed * 3.6).toFixed(1) : null;
   // Kiteboarding speeds are shown in knots (project preference).
   const maxSpeedKn = summary.maxSpeed > 0 ? (summary.maxSpeed * 1.94384).toFixed(1) : null;
-  const avgSpeedKn = summary.averageSpeed > 0 ? (summary.averageSpeed * 1.94384).toFixed(1) : null;
+  const _avgSpeedKn = summary.averageSpeed > 0 ? (summary.averageSpeed * 1.94384).toFixed(1) : null;
   // Per-jump data (height + GPS position) extracted from the FIT into garmin_activity_raw.
   const kiteData = data["kite_jumps"] ?? {};
   const jumps: any[] = Array.isArray(kiteData.jumps) ? kiteData.jumps : [];
@@ -570,9 +571,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const maxHr     = summary.maxHR > 0 ? Math.round(summary.maxHR) : null;
   const calories  = summary.calories > 0 ? Math.round(summary.calories) : null;
   const elevGain  = summary.elevationGain > 0 ? Math.round(summary.elevationGain) : null;
-  const vo2       = summary.vO2MaxValue > 0 ? Number(summary.vO2MaxValue).toFixed(1) : null;
+  const _vo2       = summary.vO2MaxValue > 0 ? Number(summary.vO2MaxValue).toFixed(1) : null;
   const teRaw     = summary.aerobicTrainingEffect > 0 ? Number(summary.aerobicTrainingEffect) : null;
-  const te        = teRaw != null ? teRaw.toFixed(1) : null;
+  const _te        = teRaw != null ? teRaw.toFixed(1) : null;
   const teLabel   = teRaw != null ? getTrainingEffectLabel(teRaw) : null;
   const teColor   = teRaw != null ? getTrainingEffectColor(teRaw) : "#fb923c";
   const cadence   = summary.averageRunningCadenceInStepsPerMinute > 0 ? Math.round(summary.averageRunningCadenceInStepsPerMinute) : null;
@@ -715,7 +716,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const hrChart   = renderChartSvg(tsHr,   "#f43f5e", CHART_W, CHART_H, false, (v) => Math.round(v).toString(), distNum);
   const elevChart = renderChartSvg(tsElev, "#4ade80", CHART_W, CHART_H, false, (v) => `${Math.round(v)}m`, distNum);
   const cadChart  = renderChartSvg(tsCad,  "#a78bfa", CHART_W, CHART_H, false, (v) => Math.round(v).toString(), distNum);
-  const speedChart = renderChartSvg(tsSpeed, "#22d3ee", CHART_W, CHART_H, false, (v) => `${Math.round(v)}`, distNum);
 
   // ── Peak values for chart labels ──
   const validPace = tsPace.filter((v): v is number => v != null && isFinite(v) && v > 2 && v < 15);
@@ -724,8 +724,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const peakElev = validElev.length > 0 ? Math.round(Math.max(...validElev)) : null;
   const validCad = tsCad.filter((v): v is number => v != null && isFinite(v));
   const peakCad = validCad.length > 0 ? Math.round(Math.max(...validCad) * 2) : null; // tsCad is /2 (per-foot), summary is total spm
-  const validSpeed = tsSpeed.filter((v): v is number => v != null && isFinite(v));
-  const peakSpeed = validSpeed.length > 0 ? Math.round(Math.max(...validSpeed)) : null;
 
   // ── Subtitle parts (drop the run-specific training-effect label for kite) ──
   const subtitleParts: { text: string; color?: string }[] = [];
@@ -734,53 +732,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (weatherStr)          subtitleParts.push({ text: weatherStr, color: "#71717a" });
 
   // ── Sport profile: which metric cards, charts, and map legend to render ──
-  type CardProps = { label: string; val: string; unit: string; color: string };
-  type ChartProps = { svg: string; label: string; avg: string; peak?: string; color: string; totalDistKm?: number; avgPrefix?: string };
-  let metricRows: CardProps[][];
-  let chartRows: ChartProps[][];
-  let legendGrad: string, legendSlow: string, legendFast: string;
-
-  if (isKite) {
-    metricRows = [
-      [
-        ...(distKm ? [{ label: "Distance", val: distKm, unit: "km", color: "#22c55e" }] : []),
-        ...(maxSpeedKmh ? [{ label: "Max Speed", val: maxSpeedKmh, unit: "km/h", color: "#22d3ee" }] : []),
-      ],
-      [
-        ...(avgSpeedKmh ? [{ label: "Avg Speed", val: avgSpeedKmh, unit: "km/h", color: "#38bdf8" }] : []),
-        ...(calories ? [{ label: "Calories", val: String(calories), unit: "kcal", color: "#f97316" }] : []),
-      ],
-    ];
-    chartRows = [[
-      { svg: speedChart, label: "Speed", avg: avgSpeedKmh ?? "—", peak: peakSpeed ? `${peakSpeed}` : undefined, color: "#22d3ee", totalDistKm: distNum, avgPrefix: "avg" },
-      { svg: hrChart, label: "HR", avg: avgHr ? `${avgHr}` : "—", peak: maxHr ? `${maxHr}` : undefined, color: "#f43f5e", totalDistKm: distNum },
-    ]];
-    legendGrad = "linear-gradient(to right, #0c4a6e, #06b6d4, #cffbff)";
-    legendSlow = "#38bdf8"; legendFast = "#cffbff";
-  } else {
-    metricRows = [
-      [
-        ...(distKm ? [{ label: "Distance", val: distKm, unit: "km", color: "#22c55e" }] : []),
-        ...(pace ? [{ label: "Pace", val: pace, unit: "/km", color: "#00e5ff" }] : []),
-      ],
-      [
-        ...(avgHr ? [{ label: "Avg HR", val: String(avgHr), unit: "bpm", color: "#f43f5e" }] : []),
-        ...(calories ? [{ label: "Calories", val: String(calories), unit: "kcal", color: "#f97316" }] : []),
-      ],
-    ];
-    chartRows = [
-      [
-        { svg: paceChart, label: "Pace", avg: pace ?? "—", peak: peakPace ?? undefined, color: "#00e5ff", totalDistKm: distNum },
-        { svg: hrChart, label: "HR", avg: avgHr ? `${avgHr}` : "—", peak: maxHr ? `${maxHr}` : undefined, color: "#f43f5e", totalDistKm: distNum },
-      ],
-      [
-        { svg: elevChart, label: "Elev", avg: elevGain ? `+${elevGain}m` : "—", peak: peakElev ? `${peakElev}m` : undefined, color: "#4ade80", totalDistKm: distNum, avgPrefix: "gain" },
-        { svg: cadChart, label: "Cadence", avg: cadence ? `${cadence}` : "—", peak: peakCad ? `${peakCad}` : undefined, color: "#a78bfa", totalDistKm: distNum },
-      ],
-    ];
-    legendGrad = "linear-gradient(to right, #00e5ff, #ffab00, #ff1744)";
-    legendSlow = "#00e5ff"; legendFast = "#ff1744";
-  }
+  // The metric cards, chart rows and speed-legend colours this branch built were never read:
+  // the layout below composes its own. Removed with the lint campaign (soma#958); the branch
+  // itself carried no other effect.
 
   // ── Layout helpers ──
   function MetricCard({ label, val, unit, color }: { label: string; val: string; unit: string; color: string }) {

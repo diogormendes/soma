@@ -191,7 +191,7 @@ async function planForDay(req: NextRequest) {
     // ── Adjust targets based on activity selections ──
     const manualOverride: boolean = plan?.manual_override ?? false;
 
-    let gymBreakdown: { title: string; calories: number }[] = [];
+    const gymBreakdown: { title: string; calories: number }[] = [];
 
     if (selectedWorkouts.length > 0) {
       const gymRows = await sql`
@@ -216,7 +216,7 @@ async function planForDay(req: NextRequest) {
     // ── Check for actual completed activities today ──
     let actualRunCalories: number | null = null;
     let actualRunDistKm = 0;
-    let actualGymByTitle: Record<string, number> = {};
+    const actualGymByTitle: Record<string, number> = {};
 
     try {
       // Actual run calories from Garmin (summary endpoint, running type)
