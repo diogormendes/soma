@@ -20,3 +20,21 @@ describe("driverFor", () => {
     expect(() => driverFor("not a url")).toThrow(/DATABASE_URL/);
   });
 });
+
+import { afterEach, beforeEach } from "vitest";
+import { getDb } from "./db";
+
+/* soma#940: `next build` must never need a database. During the build phase getDb() hands back
+ * the empty stub whatever DATABASE_URL says, so a prerendered ISR route gets a placeholder and
+ * the first request after deploy fills it. Before this, the stub applied only when the variable
+ * was missing, and production builds ran real queries against the gateway host. */
+describe("getDb during next build", () => {
+  const saved = { phase: process.env.NEXT_PHASE, url: process.env.DATABASE_URL, npm: process.env.npm_lifecycle_event };
+  beforeEach(() => { process.env.NEXT_PHASE = "phase-production-build"; process.env.DATABASE_URL = "postgresql://soma_ro:x@pg.gkos.dev/soma"; delete process.env.npm_lifecycle_event; });
+  afterEach(() => { process.env.NEXT_PHASE = saved.phase; process.env.DATABASE_URL = saved.url; if (saved.npm) process.env.npm_lifecycle_event = saved.npm; });
+  it("answers every query with an empty array instead of opening a connection", async () => {
+    const sql = getDb();
+    const rows = await sql`SELECT 1 AS one FROM nutrition_day`;
+    expect(rows).toEqual([]);
+  });
+});

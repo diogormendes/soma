@@ -87,14 +87,19 @@ function isBuildPhase(): boolean {
 }
 
 export function getDb(): QueryFn {
+  // `next build` never needs a database (soma#940). Prerendered pages and ISR route handlers get
+  // the empty stub whatever DATABASE_URL says; the first request after deploy regenerates them with
+  // real data. Until 2026-09-13 the stub applied only when the variable was MISSING, so production
+  // builds (where it is set) ran real queries at build time, and one unreachable host took every
+  // build down for four days (soma#938).
+  if (isBuildPhase()) {
+    return (_strings, ..._values) => Promise.resolve([]);
+  }
   const url = process.env.DATABASE_URL;
   if (!url) {
     // ⚠️ THE STUB USED TO APPLY AT RUNTIME TOO, so an unset variable in production rendered every
     // page as "no data" and looked like a quiet day rather than a broken deployment. That is
     // exactly how a missing key on the portfolio went unnoticed through three builds.
-    if (isBuildPhase()) {
-      return (_strings, ..._values) => Promise.resolve([]);
-    }
     throw new Error("DATABASE_URL is not set");
   }
   return driverFor(url) === "http" ? (neon(url) as QueryFn) : localDb(url);
