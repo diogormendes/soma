@@ -11,6 +11,7 @@ import {
   Line,
 } from "recharts";
 import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
+import type { ChartName, ChartValue } from "@/lib/chart-types";
 
 interface PaceEntry {
   date: string;
@@ -87,9 +88,9 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
           tickFormatter={formatPace}
         />
         <Tooltip
-          formatter={(value: any, name: any) => {
-            if (name === "trend") return [formatPace(value) + "/km", "Trend"];
-            if (name === "pace") return [formatPace(value) + "/km", "Pace"];
+          formatter={(value: ChartValue, name: ChartName) => {
+            if (name === "trend") return [formatPace(Number(value)) + "/km", "Trend"];
+            if (name === "pace") return [formatPace(Number(value)) + "/km", "Pace"];
             return [`${value} km`, "Distance"];
           }}
           labelFormatter={(label) =>
@@ -111,11 +112,16 @@ export function PaceChart({ data }: { data: PaceEntry[] }) {
           dataKey="pace"
           fill="oklch(65% 0.14 175)"
           name="pace"
-          shape={(props: any) => (
+          shape={(props: {
+            cx?: number;
+            cy?: number;
+            fill?: string;
+            payload?: PaceEntry;
+          }) => (
             <circle
               cx={props.cx}
               cy={props.cy}
-              r={computeRadius(props.payload.distance)}
+              r={computeRadius(props.payload?.distance ?? 0)}
               fill={props.fill}
               opacity={0.5}
             />

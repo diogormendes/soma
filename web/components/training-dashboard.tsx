@@ -20,11 +20,11 @@ import {
   DEFAULT_BASE_PACE,
   recomputeGraphForSlider,
   adjustStepTargets,
-  colorForNode,
-} from "@/lib/training-engine";
+  colorForNode } from "@/lib/training-engine";
 import { hmSecondsFromVdot } from "banister";
-import { normalizeSteps } from "@/lib/normalize-steps";
-import { runForwardSimulation, type ProjectedDay, type SimulationSeeds, type ComparisonData } from "banister";
+import { normalizeSteps, type NormalizedStep } from "@/lib/normalize-steps";
+import type { PlanDayWithPlan } from "@/lib/live-plan";
+import { runForwardSimulation, type ProjectedDay, type SimulationSeeds } from "banister";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -54,9 +54,10 @@ export interface TrajectoryNorms {
 }
 
 interface TrainingDashboardProps {
-  planDays: any[];
+  planDays: PlanDayWithPlan[];
   today: string;
-  raceInfo: { race_date: string; goal_time_seconds: number; plan_name: string } | null;
+  // A plan can exist without a goal time or a name; only the race date is required to be here.
+  raceInfo: { race_date: string; goal_time_seconds: number | null; plan_name: string | null } | null;
   trajectoryData: { date: string; optimal: number; actual: number | null; projectedVdot?: number | null; ctl: number | null; readiness: number | null; weightEffect: number | null }[];
   trajectoryNorms: TrajectoryNorms | null;
   currentVdot: number;
@@ -141,9 +142,7 @@ function buildReferenceMetrics(
           : "\u2014",
         garmin: latestReadiness?.garmin_readiness_score != null
           ? String(Math.round(Number(latestReadiness.garmin_readiness_score)))
-          : "\u2014",
-      },
-    },
+          : "\u2014" } },
     {
       id: "race-prediction",
       label: "Race Prediction",
@@ -151,8 +150,7 @@ function buildReferenceMetrics(
       sparkline: racePredSparkline,
       color: "oklch(65% 0.15 160)",
       tooltip:
-        "Predicted half-marathon time from current VDOT. Based on Daniels/Gilbert VO2 model.",
-    },
+        "Predicted half-marathon time from current VDOT. Based on Daniels/Gilbert VO2 model." },
     {
       id: "decoupling",
       label: "Pace:HR Decoupling",
@@ -168,8 +166,7 @@ function buildReferenceMetrics(
       thresholds: [
         { label: "<3% good", color: "oklch(65% 0.15 142)" },
         { label: ">5% caution", color: "oklch(65% 0.15 50)" },
-      ],
-    },
+      ] },
     {
       id: "ef-trend",
       label: "Efficiency Factor",
@@ -181,8 +178,7 @@ function buildReferenceMetrics(
         .map((d) => Number(d.efficiency_factor)),
       color: "oklch(65% 0.15 200)",
       tooltip:
-        "Speed / heart rate. Rising = improving running economy. Measures how fast you go per heartbeat.",
-    },
+        "Speed / heart rate. Rising = improving running economy. Measures how fast you go per heartbeat." },
     {
       id: "weight-trend",
       label: "Weight Trend",
@@ -194,8 +190,7 @@ function buildReferenceMetrics(
         .map((w) => Number(w.weight_kg)),
       color: "oklch(65% 0.12 50)",
       tooltip:
-        "Recent weight from fitness trajectory. Every 1 kg of fat loss \u2248 1:00\u20131:15 faster HM at your fitness level.",
-    },
+        "Recent weight from fitness trajectory. Every 1 kg of fat loss \u2248 1:00\u20131:15 faster HM at your fitness level." },
   ];
 }
 
@@ -258,8 +253,7 @@ export function TrainingDashboard({
   goalVdot,
   referenceData,
   engagement,
-  fallback,
-}: TrainingDashboardProps) {
+  fallback }: TrainingDashboardProps) {
   // A plan is live unless the server said otherwise. Everything that is
   // ABOUT the plan (schedule, next session, edits) hides when it is not;
   // everything from Garmin (load, fitness, readiness, comparison) stays.
@@ -280,7 +274,7 @@ export function TrainingDashboard({
   const [forwardSimSeeds, setForwardSimSeeds] = useState<SimulationSeeds | null>(null);
 
   // Edited workout steps (dayId -> modified steps) from inline editing
-  const [editedSteps, setEditedSteps] = useState<Map<number, any[]>>(new Map());
+  const [editedSteps, setEditedSteps] = useState<Map<number, NormalizedStep[]>>(new Map());
 
   // Cache of fetched graph data per date (avoids re-fetching on re-hover)
   const graphCacheRef = useRef<Map<string, ComputationGraph>>(new Map());
@@ -303,8 +297,7 @@ export function TrainingDashboard({
       setForwardSimSeeds(simData);
       const projected = runForwardSimulation({
         ...simData,
-        sliderMultiplier: sliderValue,
-      });
+        sliderMultiplier: sliderValue });
       setForwardSim(projected);
     }
   }, [today, sliderValue]);
@@ -340,8 +333,7 @@ export function TrainingDashboard({
     if (!forwardSimSeeds) return;
     const projected = runForwardSimulation({
       ...forwardSimSeeds,
-      sliderMultiplier: sliderValue,
-    });
+      sliderMultiplier: sliderValue });
     setForwardSim(projected);
   }, [sliderValue, forwardSimSeeds]);
 
@@ -387,8 +379,7 @@ export function TrainingDashboard({
       readinessMin: allReadMin,
       readinessRange: Math.max(allReadMax - allReadMin, 1),
       weightMin: trajectoryNorms.weightMin,
-      weightRange: trajectoryNorms.weightRange,
-    };
+      weightRange: trajectoryNorms.weightRange };
   }, [trajectoryNorms, trajectoryFromSim]);
 
   // Merge forward sim projections into trajectory data (fills future dims)
@@ -441,8 +432,7 @@ export function TrainingDashboard({
         readiness: readinessNorm,
         weightEffect: weightNorm,
         simCtl: sim.ctl,
-        simTsb: sim.tsb,
-      };
+        simTsb: sim.tsb };
     });
   }, [trajectoryData, trajectoryFromSim, expandedNorms, today]);
 
@@ -456,8 +446,7 @@ export function TrainingDashboard({
       return {
         date: entry.date,
         optimal: currentVdot + scaledGap,
-        actual: entry.actual,
-      };
+        actual: entry.actual };
     });
   }, [trajectoryData, sliderValue, currentVdot]);
 
@@ -473,33 +462,36 @@ export function TrainingDashboard({
     const combined = rf * ff * wf;
     const delta = combined - 1.0;
 
-    const todayIdx = planDays.findIndex((d: any) => d.day_date >= today);
+    const todayIdx = planDays.findIndex((d) => d.day_date >= today);
     const futureDays = todayIdx >= 0 ? planDays.slice(todayIdx) : [];
 
     const origPace = DEFAULT_BASE_PACE * combined;
     const newPace = DEFAULT_BASE_PACE * (1.0 + delta * sliderValue);
 
     return futureDays
-      .filter((d: any) => d.run_type !== "rest")
-      .map((d: any) => {
+      .filter((d) => d.run_type !== "rest")
+      .map((d) => {
         const distFactor = sliderValue > 1.0 ? 1.0 + (sliderValue - 1.0) * 0.3 : 1.0 - (1.0 - sliderValue) * 0.3;
 
         // Adjust per-step targets (pace/HR) using the day-level pace ratio
         let adjustedSteps: import("@/lib/normalize-steps").NormalizedStep[] | undefined;
-        if (d.workout_steps && Array.isArray(d.workout_steps) && d.workout_steps.length > 0) {
+        if (Array.isArray(d.workout_steps) && d.workout_steps.length > 0) {
           const baseSteps = normalizeSteps(d.workout_steps);
           adjustedSteps = adjustStepTargets(baseSteps, sliderValue, newPace, origPace);
         }
 
+        // A plan day can carry no distance and no run type; a delta over nothing is zero, and
+        // the label falls back to the empty string rather than rendering "null".
+        const originalDistance = d.target_distance_km ?? 0;
         return {
           dayId: d.id,
           dayDate: d.day_date,
           originalPace: Math.round(origPace * 10) / 10,
           newPace: Math.round(newPace * 10) / 10,
-          originalDistance: d.target_distance_km,
-          newDistance: Math.round(d.target_distance_km * distFactor * 10) / 10,
-          originalType: d.run_type,
-          newType: d.run_type,
+          originalDistance,
+          newDistance: Math.round(originalDistance * distFactor * 10) / 10,
+          originalType: d.run_type ?? "",
+          newType: d.run_type ?? "",
           changed: sliderValue !== 1.0,
           adjustedSteps,
         };
@@ -572,8 +564,7 @@ export function TrainingDashboard({
 
       try {
         const res = await fetch(`/api/training/graph?date=${date}`, {
-          signal: controller.signal,
-        });
+          signal: controller.signal });
         if (res.ok) {
           const data: GraphApiResponse = await res.json();
           graphCacheRef.current.set(date, data.graph);
@@ -596,15 +587,14 @@ export function TrainingDashboard({
 
     try {
       // Merge delta workouts + edited steps into a single payload
-      const workoutMap = new Map<number, { dayId: number; newDistance?: number; newType?: string; workoutSteps?: any }>();
+      const workoutMap = new Map<number, { dayId: number; newDistance?: number; newType?: string; workoutSteps?: NormalizedStep[] }>();
 
       // Add slider-derived delta workouts
       for (const w of deltaWorkouts) {
         workoutMap.set(w.dayId, {
           dayId: w.dayId,
           newDistance: w.newDistance,
-          newType: w.newType,
-        });
+          newType: w.newType });
       }
 
       // Overlay edited steps
@@ -618,9 +608,7 @@ export function TrainingDashboard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sliderFactor: sliderValue,
-          updatedWorkouts: Array.from(workoutMap.values()),
-        }),
-      });
+          updatedWorkouts: Array.from(workoutMap.values()) }) });
 
       if (res.ok) {
         setSaveResult("success");
@@ -679,8 +667,7 @@ export function TrainingDashboard({
             color:
               ov.severity === "red"
                 ? "oklch(80% 0.12 25)"
-                : "oklch(85% 0.12 85)",
-          }}
+                : "oklch(85% 0.12 85)" }}
         >
           {ov.severity === "red" ? (
             <ShieldAlert className="h-4 w-4 shrink-0" />

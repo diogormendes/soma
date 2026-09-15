@@ -73,14 +73,14 @@ export function WeightTrendChart({ data }: { data: WeightPoint[] }) {
             fontSize: "12px",
             color: "var(--card-foreground)",
           }}
-          labelFormatter={(d: any) =>
+          labelFormatter={(d) =>
             new Date(String(d)).toLocaleDateString("en-US", {
               weekday: "short",
               month: "short",
               day: "numeric",
             })
           }
-          formatter={(value: any, name: any) => {
+          formatter={(value, name) => {
             if (name === "weight_kg") return [`${Number(value).toFixed(1)} kg`, "Weight"];
             if (name === "body_fat") return [`${Number(value).toFixed(1)}%`, "Body Fat"];
             return [value, name];

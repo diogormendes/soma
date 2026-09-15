@@ -81,7 +81,7 @@ interface Goalpost {
 export function ComposeMealView({
   portions: initialPortions,
   ingredients,
-  budget,
+  budget: _budget,
   dayTargets,
   dayConsumed,
   weightKg,
@@ -138,22 +138,25 @@ export function ComposeMealView({
 
   // Emit totals to parent for live budget preview
   const onTotalsRef = useRef(onTotalsChange);
-  onTotalsRef.current = onTotalsChange;
+  useEffect(() => {
+    onTotalsRef.current = onTotalsChange;
+  }, [onTotalsChange]);
   useEffect(() => {
     onTotalsRef.current?.(totals);
   }, [totals]);
 
-  // Clamp whole egg grams when maxYolks changes
-  useEffect(() => {
+  // Clamp whole egg grams when the yolk cap changes: state adjusted during render (React's
+  // derived-state pattern) instead of a setState inside an effect.
+  const [clampedFor, setClampedFor] = useState(maxYolks);
+  if (clampedFor !== maxYolks) {
+    setClampedFor(maxYolks);
     const wholeEgg = portions.find(p => p.ingredient_id === "eggs_whole");
     if (wholeEgg) {
       const ing = ingMap.get("eggs_whole");
       const maxGrams = (ing?.grams_per_unit || 50) * maxYolks;
-      if (wholeEgg.grams > maxGrams) {
-        handlePortionChange("eggs_whole", maxGrams);
-      }
+      if (wholeEgg.grams > maxGrams) handlePortionChange("eggs_whole", maxGrams);
     }
-  }, [maxYolks]);
+  }
 
   const totalGrams = useMemo(() => portions.reduce((s, p) => s + p.grams, 0), [portions]);
   const volumeScore = totals.calories > 0 ? totalGrams / totals.calories : 0;
@@ -254,7 +257,8 @@ export function ComposeMealView({
                     className="text-[10px] text-muted-foreground ml-0.5 hover:text-foreground"
                     onClick={() => setGramMode((prev) => {
                       const next = new Set(prev);
-                      next.has(p.ingredient_id) ? next.delete(p.ingredient_id) : next.add(p.ingredient_id);
+                      if (next.has(p.ingredient_id)) next.delete(p.ingredient_id);
+                      else next.add(p.ingredient_id);
                       return next;
                     })}
                   >

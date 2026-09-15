@@ -13,6 +13,7 @@ import {
   ReferenceArea,
 } from "recharts";
 import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
+import type { ChartName, ChartValue } from "@/lib/chart-types";
 
 interface PMCEntry {
   date: string;
@@ -73,13 +74,13 @@ export function PMCChart({ data, raceDate }: PMCChartProps) {
               weekday: "short", month: "short", day: "numeric",
             })
           }
-          formatter={(value: any, name: any) => {
+          formatter={(value: ChartValue, name: ChartName) => {
             const labels: Record<string, string> = {
               ctl: "Fitness (CTL)",
               atl: "Fatigue (ATL)",
               tsb: "Form (TSB)",
             };
-            return [value, labels[name] || name];
+            return [value, (name && labels[name]) || name];
           }}
         />
         <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeDasharray="3 3" strokeOpacity={0.4} />

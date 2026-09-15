@@ -3,9 +3,10 @@
 import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { ConfigurableStrengthChart } from "@/components/configurable-strength-chart";
 import { TrendingUp } from "lucide-react";
+import type { ProgressEntry } from "./configurable-strength-chart";
 
 interface Props {
-  data: any[];
+  data: ProgressEntry[];
   availableExercises: { exercise: string; count: number }[];
 }
 

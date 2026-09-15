@@ -12,8 +12,29 @@ import type { QueryFn } from "./db";
 
 const r0 = (x: number) => Math.round(x); // Python round(); values here don't hit binary ties
 
+/** The summary fields this description reads. Garmin omits any of them on a given activity. */
+export interface RunSummary {
+  distance?: number;
+  averageSpeed?: number;
+  averageHR?: number;
+  elevationGain?: number;
+  calories?: number;
+  maxHR?: number;
+  vO2MaxValue?: number;
+  aerobicTrainingEffect?: number;
+  averageRunningCadenceInStepsPerMinute?: number;
+}
+
+/** One entry of Garmin's `hr_zones` payload. */
+export interface RunHrZone {
+  secsInZone?: number;
+}
+
 /** Rich stats description for a Garmin run. Pure. Port of generate_run_strava_description. */
-export function generateRunStravaDescription(summary: Record<string, any>, hrZones: Array<Record<string, any>> | null = null): string {
+export function generateRunStravaDescription(
+  summary: RunSummary,
+  hrZones: RunHrZone[] | null = null,
+): string {
   const lines: string[] = [];
   const SEP = "  ·  ";
 
@@ -69,7 +90,10 @@ export function generateRunStravaDescription(summary: Record<string, any>, hrZon
 }
 
 /** Fetch stored HR-zones JSON for an activity, or null. Port of _get_activity_hr_zones. */
-export async function getActivityHrZones(sql: QueryFn, activityId: number): Promise<Array<Record<string, any>> | null> {
+export async function getActivityHrZones(
+  sql: QueryFn,
+  activityId: number,
+): Promise<RunHrZone[] | null> {
   const rows = await sql`
     SELECT raw_json FROM garmin_activity_raw WHERE activity_id = ${activityId} AND endpoint_name = 'hr_zones'`;
   if (!rows.length) return null;

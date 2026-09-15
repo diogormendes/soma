@@ -2,7 +2,13 @@ import { describe, it, expect } from "vitest";
 import { resolveHrDecision, filterHrInWindow, windowDates } from "./hevy-enrich";
 import golden from "./hevy-enrich.golden.json";
 
-const g = golden as any;
+// The fixture's shape, stated once.
+const g = golden as {
+  cases: {
+    in: { daily: number[]; recent: number[] };
+    out: { source: string; samples: number[] };
+  }[];
+};
 
 describe("resolveHrDecision — Python parity (resolve_hr_samples decision)", () => {
   it("matches Python across all branches (daily / avg_N / static, round-half-even)", () => {

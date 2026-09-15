@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import type { MealItem } from "@/lib/meal-types";
 
 export async function POST(req: NextRequest) {
   const { date, changedSlot, lockedSlots = [] } = await req.json();
@@ -15,10 +16,10 @@ export async function POST(req: NextRequest) {
   // 2. Get all meals and drinks
   const mealRows = await sql`SELECT id, meal_slot, items, calories FROM meal_log WHERE date = ${date} ORDER BY logged_at`;
   const drinkRows = await sql`SELECT calories FROM drink_log WHERE date = ${date}`;
-  const drinkCal = drinkRows.reduce((s: number, r: any) => s + (Number(r.calories) || 0), 0);
+  const drinkCal = drinkRows.reduce((s: number, r) => s + (Number(r.calories) || 0), 0);
 
   // 3. Total eaten
-  const totalEaten = mealRows.reduce((s: number, m: any) => s + (Number(m.calories) || 0), 0) + drinkCal;
+  const totalEaten = mealRows.reduce((s: number, m) => s + (Number(m.calories) || 0), 0) + drinkCal;
   const remaining = dayTarget - totalEaten;
 
   // If under or at budget, no adjustment needed
@@ -63,10 +64,10 @@ export async function POST(req: NextRequest) {
     if (mealSlotOrder <= changedSlotOrder) continue;
     // Skip locked slots
     if (lockedSet.has(mealSlot)) continue;
-    const items = meal.items as any[];
+    const items = meal.items as MealItem[];
     if (!items) continue;
-    items.forEach((item: any, idx: number) => {
-      const ing = ingMap[item.ingredient_id];
+    items.forEach((item, idx: number) => {
+      const ing = item.ingredient_id ? ingMap[item.ingredient_id] : undefined;
       if (!ing || ing.priority >= 99) return; // never shrink veggies
       const grams = Number(item.grams) || 0;
       if (grams <= 10) return; // too small to shrink
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
         mealId: Number(meal.id),
         slot: meal.meal_slot as string,
         idx,
-        id: item.ingredient_id,
+        id: item.ingredient_id ?? "",
         name: (item.name || item.ingredient_id || "").replace(/_/g, " "),
         grams,
         calories: Number(item.calories) || 0,
@@ -89,7 +90,7 @@ export async function POST(req: NextRequest) {
 
   // 6. Reduce items
   const changes: { slot: string; ingredient: string; from: number; to: number }[] = [];
-  const mealUpdates: Record<number, any[]> = {};
+  const mealUpdates: Record<number, MealItem[]> = {};
 
   for (const item of adjustable) {
     if (calToRemove <= 0) break;
@@ -110,14 +111,15 @@ export async function POST(req: NextRequest) {
 
     // Clone meal items for update
     if (!mealUpdates[item.mealId]) {
-      const meal = mealRows.find((m: any) => Number(m.id) === item.mealId);
+      const meal = mealRows.find((m) => Number(m.id) === item.mealId);
       mealUpdates[item.mealId] = JSON.parse(JSON.stringify(meal?.items || []));
     }
     const mItem = mealUpdates[item.mealId][item.idx];
     if (mItem) {
-      const ratio = newGrams / item.grams;
+      const ratio = newGrams / (item.grams || 1);
       mItem.grams = newGrams;
-      if (mItem.cooked_grams) mItem.cooked_grams = Math.round(mItem.cooked_grams * ratio);
+      const cooked = Number(mItem.cooked_grams) || 0;
+      if (cooked) mItem.cooked_grams = Math.round(cooked * ratio);
       mItem.calories = Math.round((mItem.calories || 0) * ratio);
       mItem.protein = Math.round(((mItem.protein || 0) * ratio) * 10) / 10;
       mItem.carbs = Math.round(((mItem.carbs || 0) * ratio) * 10) / 10;
@@ -128,11 +130,11 @@ export async function POST(req: NextRequest) {
 
   // 7. Write updates
   for (const [mealId, items] of Object.entries(mealUpdates)) {
-    const cal = items.reduce((s: number, i: any) => s + (Number(i.calories) || 0), 0);
-    const p = items.reduce((s: number, i: any) => s + (Number(i.protein) || 0), 0);
-    const c = items.reduce((s: number, i: any) => s + (Number(i.carbs) || 0), 0);
-    const f = items.reduce((s: number, i: any) => s + (Number(i.fat) || 0), 0);
-    const fi = items.reduce((s: number, i: any) => s + (Number(i.fiber) || 0), 0);
+    const cal = items.reduce((s: number, i) => s + (Number(i.calories) || 0), 0);
+    const p = items.reduce((s: number, i) => s + (Number(i.protein) || 0), 0);
+    const c = items.reduce((s: number, i) => s + (Number(i.carbs) || 0), 0);
+    const f = items.reduce((s: number, i) => s + (Number(i.fat) || 0), 0);
+    const fi = items.reduce((s: number, i) => s + (Number(i.fiber) || 0), 0);
 
     await sql`UPDATE meal_log SET items = ${JSON.stringify(items)}::jsonb,
       calories = ${cal}, protein = ${p}, carbs = ${c}, fat = ${f}, fiber = ${fi}

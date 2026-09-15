@@ -5,6 +5,9 @@ import { Pool } from "pg";
 export type QueryFn = (
   strings: TemplateStringsArray,
   ...values: unknown[]
+// A row is whatever the query selected; typing it `unknown` would push a narrowing change
+// through every route at once, which soma#958 tracks separately.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 ) => Promise<Record<string, any>[]>;
 
 /**

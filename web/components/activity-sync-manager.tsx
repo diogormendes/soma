@@ -121,7 +121,7 @@ function formatDate(dateStr: string): string {
 function SyncStatusBadge({
   status,
   destinationId,
-  syncedFrom,
+  syncedFrom: _syncedFrom,
 }: {
   status: "sent" | "error" | "external" | null;
   destinationId: string | null;
