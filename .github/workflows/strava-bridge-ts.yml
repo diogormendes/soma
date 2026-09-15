@@ -6,9 +6,10 @@ name: Bridge activities to Strava (TS)
 # web edit page HEADED under xvfb (headless is reCAPTCHA-blocked).
 #
 # Now the scheduled bridge (#187 cutover — replaced the Python strava-bridge.yml).
-# Scheduled runs forward live; manual dispatch defaults to a dry run. Dedup is
-# double-guarded (strava_bridge_uploads ledger + Strava external_ids), so it can
-# never duplicate an activity already on Strava.
+# Scheduled runs forward live; manual dispatch defaults to a dry run. Dedup rests on the
+# strava_bridge_uploads ledger, which is claimed before the upload and resolved after Strava
+# confirms the activity. The Strava external_ids check beside it covers history only: nothing has
+# filled strava_raw_data since the Strava API ingest was retired (soma#971).
 
 on:
   schedule:

@@ -60,6 +60,40 @@ async function recordUpload(db: Db, gid: number, sid: number): Promise<void> {
   );
 }
 
+/**
+ * Claim an activity in the ledger BEFORE its FIT is uploaded.
+ *
+ * The ledger is the only live guard against forwarding the same workout twice
+ * (soma#971), and it was written only after Strava confirmed the new activity.
+ * Between the upload returning and that write there is a window minutes wide,
+ * because the forward poll waits up to twelve: a crash inside it leaves the
+ * activity on Strava and absent from the ledger, and the next run forwards it
+ * again. Claiming first closes that window.
+ *
+ * `strava_activity_id` stays null until it is known, which costs no schema
+ * change and still excludes the activity from `findMissed`, since that only
+ * asks whether the id is in the ledger at all.
+ */
+async function claimUpload(db: Db, gid: number): Promise<void> {
+  await db.query(
+    "INSERT INTO strava_bridge_uploads (garmin_activity_id, uploaded_at) VALUES ($1, NOW()) ON CONFLICT (garmin_activity_id) DO NOTHING",
+    [gid],
+  );
+}
+
+/**
+ * Drop a claim for an activity that definitely did not reach Strava.
+ *
+ * Only for the cases where nothing was sent or nothing arrived: an upload that
+ * threw, or a forward that never appeared. A claim kept in either case would
+ * mean the workout is never retried, which is a worse outcome than the
+ * duplicate the claim exists to prevent. A claim is kept only when the upload
+ * returned, because then the bytes may already be on Garmin.
+ */
+async function releaseClaim(db: Db, gid: number): Promise<void> {
+  await db.query("DELETE FROM strava_bridge_uploads WHERE garmin_activity_id=$1 AND strava_activity_id IS NULL", [gid]);
+}
+
 async function main(): Promise<void> {
   const live = process.env.BRIDGE_LIVE === "1";
   const databaseUrl = process.env.DATABASE_URL!;
@@ -106,7 +140,16 @@ async function main(): Promise<void> {
       const { path: img, note: imgNote } = await imagePathFor(db, gid);
       const fit = await downloadFit(garmin, gid);
       const before = await ownActivityIds(page);
-      await uploadFit(token, fit, `bridge_${gid}.fit`); // facterino forwards to Strava
+      // Claim first: a crash after the upload would otherwise leave Strava with
+      // the activity and the ledger without it, and the next run would forward
+      // it again (soma#971).
+      await claimUpload(db, gid);
+      try {
+        await uploadFit(token, fit, `bridge_${gid}.fit`); // facterino forwards to Strava
+      } catch (e) {
+        await releaseClaim(db, gid); // nothing was sent, so it must stay retryable
+        throw e;
+      }
       let newId: string | null = null;
       for (let i = 0; i < FORWARD_TRIES; i++) {
         await new Promise((r) => setTimeout(r, FORWARD_POLL_MS));
@@ -114,8 +157,13 @@ async function main(): Promise<void> {
         try { diff = [...(await ownActivityIds(page))].filter((id) => !before.has(id)); } catch { continue; }
         if (diff.length) { newId = diff.sort((x, y) => Number(x) - Number(y)).at(-1)!; break; }
       }
-      if (!newId) { issues.push(`${name}: forward not seen in ${(FORWARD_TRIES * FORWARD_POLL_MS) / 60000}min`); continue; }
-      await recordUpload(db, gid, Number(newId)); // record BEFORE finalize → never a duplicate
+      if (!newId) {
+        // It never arrived, so it stays retryable, exactly as before the claim existed.
+        await releaseClaim(db, gid);
+        issues.push(`${name}: forward not seen in ${(FORWARD_TRIES * FORWARD_POLL_MS) / 60000}min`);
+        continue;
+      }
+      await recordUpload(db, gid, Number(newId)); // resolve the claim BEFORE finalize
       await setActivityDetails(page, Number(newId), { title: name, description: desc, imagePath: img, replacePhoto: true });
       pushed.push(`${name}->strava/${newId}${img ? "" : " NO_PHOTO"}`);
       if (!img) issues.push(`${name}: NO_PHOTO (${imgNote || "no image"}) — re-finalize with the refinalize-strava workflow`);
