@@ -54,7 +54,7 @@ export function MileageChart({ data }: { data: MileageEntry[] }) {
         />
         <Tooltip
           cursor={{ fill: "var(--muted)", opacity: 0.3 }}
-          formatter={(value: any, name: any) => {
+          formatter={(value, name) => {
             if (name === "km") return [`${value} km`, "Distance"];
             return [value, name];
           }}

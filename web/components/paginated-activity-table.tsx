@@ -77,6 +77,18 @@ function formatDuration(mins: number) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+// Module-level, not created inside the table's render: a component created during render is a
+// new type every render and loses its state (soma#958).
+function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
+  if (sortKey !== col)
+    return <ChevronsUpDown className="h-3 w-3 opacity-30 inline ml-1" />;
+  return sortDir === "asc" ? (
+    <ChevronUp className="h-3 w-3 inline ml-1" />
+  ) : (
+    <ChevronDown className="h-3 w-3 inline ml-1" />
+  );
+}
+
 export function PaginatedActivityTable({ activities }: { activities: Activity[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -92,16 +104,6 @@ export function PaginatedActivityTable({ activities }: { activities: Activity[] 
       setSortDir("desc");
     }
     setPage(0);
-  }
-
-  function SortIcon({ col }: { col: SortKey }) {
-    if (sortKey !== col)
-      return <ChevronsUpDown className="h-3 w-3 opacity-30 inline ml-1" />;
-    return sortDir === "asc" ? (
-      <ChevronUp className="h-3 w-3 inline ml-1" />
-    ) : (
-      <ChevronDown className="h-3 w-3 inline ml-1" />
-    );
   }
 
   const searchLower = search.toLowerCase();
@@ -205,7 +207,7 @@ export function PaginatedActivityTable({ activities }: { activities: Activity[] 
                 className="text-left py-2 font-medium cursor-pointer hover:text-foreground select-none"
                 onClick={() => toggleSort("date")}
               >
-                Date <SortIcon col="date" />
+                Date <SortIcon col="date" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th className="text-left py-2 font-medium">Type</th>
               <th className="text-left py-2 font-medium">Name</th>
@@ -213,31 +215,31 @@ export function PaginatedActivityTable({ activities }: { activities: Activity[] 
                 className="text-right py-2 font-medium cursor-pointer hover:text-foreground select-none"
                 onClick={() => toggleSort("distance_km")}
               >
-                Distance <SortIcon col="distance_km" />
+                Distance <SortIcon col="distance_km" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th
                 className="text-right py-2 font-medium cursor-pointer hover:text-foreground select-none"
                 onClick={() => toggleSort("duration_min")}
               >
-                Duration <SortIcon col="duration_min" />
+                Duration <SortIcon col="duration_min" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th
                 className="text-right py-2 font-medium cursor-pointer hover:text-foreground select-none hidden sm:table-cell"
                 onClick={() => toggleSort("avg_hr")}
               >
-                HR <SortIcon col="avg_hr" />
+                HR <SortIcon col="avg_hr" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th
                 className="text-right py-2 font-medium cursor-pointer hover:text-foreground select-none hidden sm:table-cell"
                 onClick={() => toggleSort("calories")}
               >
-                Cal <SortIcon col="calories" />
+                Cal <SortIcon col="calories" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th
                 className="text-right py-2 font-medium cursor-pointer hover:text-foreground select-none hidden lg:table-cell"
                 onClick={() => toggleSort("elev_gain")}
               >
-                Elev <SortIcon col="elev_gain" />
+                Elev <SortIcon col="elev_gain" sortKey={sortKey} sortDir={sortDir} />
               </th>
             </tr>
           </thead>

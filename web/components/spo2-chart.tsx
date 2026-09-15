@@ -11,6 +11,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
+import type { ChartName, ChartValue } from "@/lib/chart-types";
 
 interface SpO2Entry {
   date: string;
@@ -73,13 +74,13 @@ export function SpO2Chart({ data }: { data: SpO2Entry[] }) {
             fontSize: "12px",
             color: "var(--card-foreground)",
           }}
-          formatter={(value: any, name: any) => {
+          formatter={(value: ChartValue, name: ChartName) => {
             const labels: Record<string, string> = {
               avg: "Average SpO2",
               sleep: "Sleep SpO2",
               low: "Lowest",
             };
-            return [`${value}%`, labels[name] || name];
+            return [`${value}%`, (name && labels[name]) || name];
           }}
         />
         <ReferenceLine

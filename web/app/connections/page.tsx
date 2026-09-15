@@ -109,6 +109,15 @@ interface SyncLogEntry {
   last_sync: string;
 }
 
+/** One row of `sync_log`, as components/pipeline-operations renders it. */
+interface SyncRunLog {
+  id: number;
+  sync_type: string;
+  status: string;
+  records_synced: number;
+  started_at: string;
+}
+
 interface SyncServiceStatus {
   platform: string;
   has_data: boolean;
@@ -416,7 +425,7 @@ async function getPageData() {
     syncServiceStatus: syncServiceStatus as unknown as SyncServiceStatus[],
     backfillProgress: backfillProgress as unknown as BackfillProgress[],
     dataCounts,
-    syncRunLogs: syncRunLogs as unknown as any[],
+    syncRunLogs: syncRunLogs as unknown as SyncRunLog[],
     mergedActivities,
     telegramConfigured,
     pushSubCount,

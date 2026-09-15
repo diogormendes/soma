@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getRouteSamples, thinSamples } from "@/lib/activity-routes";
+import { rec, str } from "@/lib/json";
 
 export const runtime = "nodejs";
 export const revalidate = 300;
@@ -26,14 +27,14 @@ export async function GET() {
   // GPS samples from activity_routes (soma#814) instead of six details blobs per call.
   const samples = await getRouteSamples(sql, rows.map((r) => String(r.activity_id)));
   const result = rows.map((row) => {
-    const summary = row.summary as any;
+    const summary = rec(row.summary) ?? {};
     const gps_points = thinSamples(samples.get(String(row.activity_id)) ?? [], 8).map(([, lat, lng, speed]) => ({
       lat, lng, hr: null as null, speed, elev: null as null, cadence: null as null, dist_m: null as null,
     }));
     return {
       activity_id: String(row.activity_id),
-      name: summary.activityName || "Run",
-      date: (summary.startTimeLocal || "").slice(0, 10),
+      name: str(summary.activityName) ?? "Run",
+      date: (str(summary.startTimeLocal) ?? "").slice(0, 10),
       distance_km: (Number(summary.distance) || 0) / 1000,
       duration_s: Number(summary.duration) || 0,
       gps_points,

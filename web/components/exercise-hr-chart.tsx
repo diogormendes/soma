@@ -182,7 +182,7 @@ export function ExerciseHrChart({
       {sorted.map((ex) => {
         const pct = ((ex.avg_hr - minHr) / range) * 70 + 30;
         const intensity = (ex.avg_hr - minHr) / range;
-        const hue = 0 + (1 - intensity) * 220;
+        const _hue = 0 + (1 - intensity) * 220;
         return (
           <div
             key={ex.exercise}

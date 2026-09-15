@@ -288,7 +288,6 @@ async function postImpl(req: NextRequest) {
               const detail = detailParts.join("\n");
 
               // Server-side log so the dev terminal shows what the user saw.
-              // eslint-disable-next-line no-console
               console.error(
                 `[chat] spawn failed: ${headline}\n${detail.slice(0, 4000)}`
               );

@@ -49,7 +49,7 @@ export function HRPaceChart({ data }: { data: HRPaceEntry[] }) {
   }
 
   // Group by year for color coding
-  const byYear = new Map<string, any[]>();
+  const byYear = new Map<string, HRPaceEntry[]>();
   for (const d of data) {
     const year = d.date.slice(0, 4);
     if (!byYear.has(year)) byYear.set(year, []);

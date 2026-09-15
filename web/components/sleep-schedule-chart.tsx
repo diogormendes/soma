@@ -116,14 +116,14 @@ export function SleepScheduleChart({ data }: { data: SleepSchedulePoint[] }) {
             fontSize: "12px",
             color: "var(--card-foreground)",
           }}
-          labelFormatter={(d: any) =>
+          labelFormatter={(d) =>
             new Date(d instanceof Date ? d.toISOString() : String(d)).toLocaleDateString("en-US", {
               weekday: "short",
               month: "short",
               day: "numeric",
             })
           }
-          formatter={(value: any, name: any) => {
+          formatter={(value, name) => {
             const h = Number(value);
             const actual = h > 24 ? h - 24 : h;
             const label = name === "bedtime" ? "Bedtime" : "Wake Time";

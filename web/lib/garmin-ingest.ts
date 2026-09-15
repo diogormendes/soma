@@ -152,11 +152,18 @@ export async function syncActivityDetails(client: GarminClient, sql: QueryFn, ac
   return count;
 }
 
+/** The fields this sync reads off one entry of Garmin's activity list. */
+interface ActivityListEntry {
+  activityId?: number;
+  activityType?: { typeKey?: string | null } | null;
+  startTimeGMT?: string | null;
+}
+
 /** Discover activities for a date, store list + per-activity summaries + details, return ids. */
 export async function syncActivitiesForDate(client: GarminClient, sql: QueryFn, date: string): Promise<number[]> {
   try {
     const req = buildRequest(DISCOVERY_ENDPOINTS.activities_list, { cdate: date });
-    const activities = (await client.connectapi(toPath(req))) as Array<Record<string, any>>;
+    const activities = (await client.connectapi(toPath(req))) as ActivityListEntry[];
     if (!activities || !activities.length) return [];
     await upsertRaw(sql, date, "activities_list", activities);
     const ids: number[] = [];

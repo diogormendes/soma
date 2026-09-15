@@ -60,7 +60,7 @@ export function RHRChart({ data }: { data: RHREntry[] }) {
           />
         )}
         <Tooltip
-          formatter={(value: any) => [`${value} bpm`, "Resting HR"]}
+          formatter={(value) => [`${value} bpm`, "Resting HR"]}
           labelFormatter={(label) =>
             new Date(label).toLocaleDateString("en-US", {
               weekday: "short",

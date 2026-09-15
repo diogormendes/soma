@@ -64,14 +64,14 @@ export function CalorieTrendChart({ data }: { data: CaloriePoint[] }) {
             fontSize: "12px",
             color: "var(--card-foreground)",
           }}
-          labelFormatter={(d: any) =>
+          labelFormatter={(d) =>
             new Date(String(d)).toLocaleDateString("en-US", {
               weekday: "short",
               month: "short",
               day: "numeric",
             })
           }
-          formatter={(value: any, name: any) => {
+          formatter={(value, name) => {
             const label = name === "active" ? "Active" : "BMR";
             return [`${Number(value).toLocaleString()} kcal`, label];
           }}

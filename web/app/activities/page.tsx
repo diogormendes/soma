@@ -26,10 +26,12 @@ import {
   Heart,
   Activity,
 } from "lucide-react";
+import { cutoffIso } from "@/lib/date-range";
+import type { Numeric } from "@/lib/json";
 
 export const revalidate = 300;
 
-const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
+const _ACTIVITY_ICONS: Record<string, React.ReactNode> = {
   kiteboarding_v2: <Wind className="h-4 w-4 text-cyan-400" />,
   wind_kite_surfing: <Wind className="h-4 w-4 text-cyan-400" />,
   resort_snowboarding: <Snowflake className="h-4 w-4 text-blue-300" />,
@@ -78,6 +80,115 @@ const SPORT_GROUPS: Record<string, string[]> = {
   Other: ["other", "indoor_cycling"],
 };
 
+/**
+ * The shape each query below selects. These are read straight off `garmin_activity_raw`, so a
+ * column that is `SUM(...)` or `COUNT(*)` comes back as a `Numeric`: the driver decides whether
+ * it is a number or a string, and an empty group is null. Every reader already wraps them in
+ * `Number(...)`.
+ */
+interface SummaryRow {
+  type_key: string;
+  count: Numeric;
+  total_km: Numeric;
+  total_hours: Numeric;
+  total_cal: Numeric;
+  total_elev: Numeric;
+}
+
+interface KiteRow {
+  name: string;
+  date: string;
+  max_speed_kts: Numeric;
+  avg_speed_kts: Numeric;
+  distance_km: Numeric;
+  duration_min: Numeric;
+  avg_hr: Numeric;
+  calories: Numeric;
+  wind_speed_mps: Numeric;
+  wind_gust_mps: Numeric;
+  wind_direction: Numeric;
+  weather_desc: string | null;
+  temp_c: Numeric;
+}
+
+interface SnowRow {
+  name: string;
+  date: string;
+  max_speed_kmh: Numeric;
+  distance_km: Numeric;
+  duration_min: Numeric;
+  elev_gain: Numeric;
+  avg_hr: Numeric;
+}
+
+interface MonthlyRow {
+  month: string;
+  type_key: string;
+  count: Numeric;
+}
+
+interface YearlyRow {
+  year: Numeric;
+  type_key: string;
+  count: Numeric;
+  total_km: Numeric;
+  total_hours: Numeric;
+}
+
+interface CyclingRow {
+  date: string;
+  name: string;
+  distance_km: Numeric;
+  duration_min: Numeric;
+  avg_speed_kmh: Numeric;
+  max_speed_kmh: Numeric;
+  elev_gain: Numeric;
+  avg_hr: Numeric;
+  calories: Numeric;
+  type_key: string;
+}
+
+interface TimeBreakdownRow {
+  category: string;
+  hours: Numeric;
+  sessions: Numeric;
+}
+
+interface SwimmingRow {
+  date: string;
+  name: string;
+  distance_m: Numeric;
+  duration_min: Numeric;
+  avg_hr: Numeric;
+  calories: Numeric;
+  avg_swolf: string | null;
+  avg_strokes: string | null;
+}
+
+interface WalkingRow {
+  date: string;
+  name: string;
+  distance_km: Numeric;
+  duration_min: Numeric;
+  elev_gain: Numeric;
+  avg_hr: Numeric;
+  calories: Numeric;
+  avg_speed_kmh: Numeric;
+}
+
+interface ActivityRow {
+  activity_id: string;
+  type_key: string;
+  date: string;
+  name: string;
+  distance_km: Numeric;
+  duration_min: Numeric;
+  avg_hr: Numeric;
+  calories: Numeric;
+  elev_gain: Numeric;
+  max_speed: Numeric;
+}
+
 async function getActivitySummary(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
@@ -95,7 +206,7 @@ async function getActivitySummary(cutoff: string) {
     GROUP BY type_key
     ORDER BY count DESC
   `;
-  return rows;
+  return rows as SummaryRow[];
 }
 
 async function getKiteSessions(cutoff: string) {
@@ -122,7 +233,7 @@ async function getKiteSessions(cutoff: string) {
       AND (s.raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (s.raw_json->>'startTimeLocal')::text ASC
   `;
-  return rows;
+  return rows as KiteRow[];
 }
 
 async function getSnowSessions(cutoff: string) {
@@ -142,7 +253,7 @@ async function getSnowSessions(cutoff: string) {
       AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
   `;
-  return rows;
+  return rows as SnowRow[];
 }
 
 async function getMonthlyDistribution(cutoff: string) {
@@ -159,7 +270,7 @@ async function getMonthlyDistribution(cutoff: string) {
     GROUP BY month, type_key
     ORDER BY month ASC
   `;
-  return rows;
+  return rows as MonthlyRow[];
 }
 
 async function getYearlySportBreakdown(cutoff: string) {
@@ -178,7 +289,7 @@ async function getYearlySportBreakdown(cutoff: string) {
     GROUP BY year, type_key
     ORDER BY year DESC, count DESC
   `;
-  return rows;
+  return rows as YearlyRow[];
 }
 
 async function getCyclingSessions(cutoff: string) {
@@ -201,7 +312,7 @@ async function getCyclingSessions(cutoff: string) {
       AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
   `;
-  return rows;
+  return rows as CyclingRow[];
 }
 
 async function getTimeBreakdown(cutoff: string) {
@@ -227,7 +338,7 @@ async function getTimeBreakdown(cutoff: string) {
     GROUP BY category
     ORDER BY hours DESC
   `;
-  return rows;
+  return rows as TimeBreakdownRow[];
 }
 
 async function getSwimmingSessions(cutoff: string) {
@@ -248,7 +359,7 @@ async function getSwimmingSessions(cutoff: string) {
       AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
   `;
-  return rows;
+  return rows as SwimmingRow[];
 }
 
 async function getWalkingSessions(cutoff: string) {
@@ -269,7 +380,7 @@ async function getWalkingSessions(cutoff: string) {
       AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
   `;
-  return rows;
+  return rows as WalkingRow[];
 }
 
 async function getAllActivities(cutoff: string) {
@@ -292,7 +403,7 @@ async function getAllActivities(cutoff: string) {
       AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
   `;
-  return rows;
+  return rows as ActivityRow[];
 }
 
 function formatDuration(mins: number) {
@@ -332,7 +443,7 @@ function extractResort(name: string): string {
 export default async function ActivitiesPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const params = await searchParams;
   const rangeDays = rangeToDays(params.range);
-  const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
+  const cutoff = cutoffIso(rangeDays);
 
   const [summary, kiteSessions, snowSessions, monthlyRaw, activities, yearlySports, cyclingSessions, timeBreakdown, walkingSessions, swimmingSessions] =
     await Promise.all([
@@ -379,7 +490,7 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
     }));
 
   // Kite stats
-  const kiteData = kiteSessions.map((k: any) => ({
+  const kiteData = kiteSessions.map((k) => ({
     date: k.date,
     maxSpeedKts: Number(Number(k.max_speed_kts).toFixed(1)),
     distanceKm: Number(Number(k.distance_km).toFixed(1)),
@@ -396,15 +507,15 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
     tempC: k.temp_c ? Number(k.temp_c) : null,
   }));
 
-  const validKiteSessions = kiteData.filter((k: any) => k.maxSpeedKts > 0);
+  const validKiteSessions = kiteData.filter((k) => k.maxSpeedKts > 0);
   const topSpeed = validKiteSessions.length
-    ? Math.max(...validKiteSessions.map((k: any) => k.maxSpeedKts))
+    ? Math.max(...validKiteSessions.map((k) => k.maxSpeedKts))
     : 0;
   const avgSpeed = validKiteSessions.length
-    ? validKiteSessions.reduce((s: number, k: any) => s + k.maxSpeedKts, 0) / validKiteSessions.length
+    ? validKiteSessions.reduce((s: number, k) => s + k.maxSpeedKts, 0) / validKiteSessions.length
     : 0;
-  const bestJump = Math.max(...kiteData.map((k: any) => k.jump), 0);
-  const totalKiteKm = kiteData.reduce((s: number, k: any) => s + k.distanceKm, 0);
+  const bestJump = Math.max(...kiteData.map((k) => k.jump), 0);
+  const totalKiteKm = kiteData.reduce((s: number, k) => s + k.distanceKm, 0);
 
   // Kite spot frequency
   const spotCounts: Record<string, number> = {};
@@ -416,16 +527,21 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
     .slice(0, 5);
 
   // Wind stats for kite
-  const kiteWithWind = kiteData.filter((k: any) => k.windSpeedKts !== null && k.windSpeedKts > 0);
+  // The predicate is spelled out so the rest of this block reads a number, not a number | null:
+  // a plain .filter() narrows nothing, and every wind figure below depends on it.
+  const kiteWithWind = kiteData.filter(
+    (k): k is (typeof kiteData)[number] & { windSpeedKts: number } =>
+      k.windSpeedKts !== null && k.windSpeedKts > 0,
+  );
   const avgWindSpeed = kiteWithWind.length
-    ? kiteWithWind.reduce((s: number, k: any) => s + k.windSpeedKts, 0) / kiteWithWind.length
+    ? kiteWithWind.reduce((s: number, k) => s + k.windSpeedKts, 0) / kiteWithWind.length
     : 0;
   const maxWindGust = kiteWithWind.length
-    ? Math.max(...kiteWithWind.map((k: any) => k.windGustKts || 0))
+    ? Math.max(...kiteWithWind.map((k) => k.windGustKts || 0))
     : 0;
 
   // Snow stats
-  const snowData = snowSessions.map((s: any) => ({
+  const snowData = snowSessions.map((s) => ({
     name: s.name,
     date: s.date,
     resort: extractResort(s.name),
@@ -436,11 +552,11 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
     avgHr: Number(s.avg_hr),
   }));
 
-  const totalVertical = snowData.reduce((s: number, d: any) => s + d.elevGain, 0);
+  const totalVertical = snowData.reduce((s: number, d) => s + d.elevGain, 0);
   const topSnowSpeed = snowData.length
-    ? Math.max(...snowData.map((d: any) => d.maxSpeedKmh))
+    ? Math.max(...snowData.map((d) => d.maxSpeedKmh))
     : 0;
-  const totalSnowKm = snowData.reduce((s: number, d: any) => s + d.distanceKm, 0);
+  const totalSnowKm = snowData.reduce((s: number, d) => s + d.distanceKm, 0);
 
   // Snow resort frequency
   const resortCounts: Record<string, number> = {};
@@ -498,10 +614,10 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
       </ExpandableChartCard>
 
       {/* Yearly Sport Breakdown */}
-      {(yearlySports as any[]).length > 0 && (() => {
+      {yearlySports.length > 0 && (() => {
         // Group by year
         const yearMap = new Map<number, { type_key: string; label: string; count: number; total_km: number; total_hours: number }[]>();
-        for (const row of yearlySports as any[]) {
+        for (const row of yearlySports) {
           const year = Number(row.year);
           if (!yearMap.has(year)) yearMap.set(year, []);
           const label = ACTIVITY_LABELS[row.type_key] || row.type_key;
@@ -678,16 +794,16 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
                   ))}
                 </div>
                 {/* Jump Records */}
-                {kiteData.some((k: any) => k.jump > 0) && (
+                {kiteData.some((k) => k.jump > 0) && (
                   <div className="mt-6 pt-4 border-t border-border">
                     <h4 className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">
                       Jump Records
                     </h4>
                     <div className="space-y-2">
                       {kiteData
-                        .filter((k: any) => k.jump > 0)
-                        .sort((a: any, b: any) => b.jump - a.jump)
-                        .map((k: any, i: number) => (
+                        .filter((k) => k.jump > 0)
+                        .sort((a, b) => b.jump - a.jump)
+                        .map((k, i: number) => (
                           <div
                             key={i}
                             className="flex items-center justify-between text-sm"
@@ -745,10 +861,10 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
                 </div>
                 <div className="space-y-2">
                   {kiteData
-                    .filter((k: any) => k.windSpeedKts)
-                    .sort((a: any, b: any) => b.date.localeCompare(a.date))
+                    .filter((k) => k.windSpeedKts)
+                    .sort((a, b) => b.date.localeCompare(a.date))
                     .slice(0, 10)
-                    .map((k: any, i: number) => (
+                    .map((k, i: number) => (
                       <div key={i} className="flex items-center justify-between text-sm border-b border-border/20 pb-2">
                         <div className="flex items-center gap-2">
                           <Wind className="h-3.5 w-3.5 text-cyan-400" />
@@ -756,7 +872,9 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
                         </div>
                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
                           <span>{k.windSpeedKts} kts</span>
-                          {k.windGustKts > 0 && <span className="text-cyan-400">gusts {k.windGustKts}</span>}
+                          {k.windGustKts !== null && k.windGustKts > 0 && (
+                            <span className="text-cyan-400">gusts {k.windGustKts}</span>
+                          )}
                           {k.tempC !== null && <span>{k.tempC}°C</span>}
                           <span className="w-20 text-right">
                             {new Date(k.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}
@@ -813,14 +931,14 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
                 <div className="space-y-3">
                   {topResorts.map(([resort, count]) => {
                     const resortSessions = snowData.filter(
-                      (d: any) => d.resort === resort
+                      (d) => d.resort === resort
                     );
                     const resortVert = resortSessions.reduce(
-                      (s: number, d: any) => s + d.elevGain,
+                      (s: number, d) => s + d.elevGain,
                       0
                     );
                     const resortTopSpeed = Math.max(
-                      ...resortSessions.map((d: any) => d.maxSpeedKmh)
+                      ...resortSessions.map((d) => d.maxSpeedKmh)
                     );
                     return (
                       <div key={resort} className="border-b border-border/50 pb-3 last:border-0 last:pb-0">
@@ -854,9 +972,9 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
               <CardContent>
                 <div className="space-y-3">
                   {snowData
-                    .sort((a: any, b: any) => b.elevGain - a.elevGain)
+                    .sort((a, b) => b.elevGain - a.elevGain)
                     .slice(0, 5)
-                    .map((d: any, i: number) => (
+                    .map((d, i: number) => (
                       <div
                         key={i}
                         className="flex items-center justify-between text-sm"
@@ -892,21 +1010,21 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
       )}
 
       {/* Total Time Breakdown */}
-      {(timeBreakdown as any[]).length > 0 && (
+      {timeBreakdown.length > 0 && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <Clock className="h-4 w-4 text-blue-400" />
               Total Training Time Breakdown
               <span className="ml-auto text-xs font-normal">
-                {Math.round((timeBreakdown as any[]).reduce((s: number, t: any) => s + Number(t.hours), 0))}h total
+                {Math.round(timeBreakdown.reduce((s: number, t) => s + Number(t.hours), 0))}h total
               </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
             {(() => {
-              const data = timeBreakdown as any[];
-              const totalH = data.reduce((s: number, t: any) => s + Number(t.hours), 0);
+              const data = timeBreakdown;
+              const totalH = data.reduce((s: number, t) => s + Number(t.hours), 0);
               const catColors: Record<string, string> = {
                 Gym: "bg-orange-500", Running: "bg-green-500", Walking: "bg-emerald-400",
                 Cycling: "bg-yellow-500", Kite: "bg-cyan-500", Snow: "bg-blue-400",
@@ -916,7 +1034,7 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
                 <div>
                   {/* Stacked bar */}
                   <div className="flex h-8 rounded-lg overflow-hidden mb-4">
-                    {data.map((t: any) => {
+                    {data.map((t) => {
                       const pct = totalH > 0 ? (Number(t.hours) / totalH) * 100 : 0;
                       if (pct < 0.5) return null;
                       return (
@@ -933,7 +1051,7 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
                   </div>
                   {/* Details grid */}
                   <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
-                    {data.map((t: any) => {
+                    {data.map((t) => {
                       const hours = Number(t.hours);
                       const pct = totalH > 0 ? ((hours / totalH) * 100).toFixed(0) : "0";
                       return (
@@ -957,7 +1075,7 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
       )}
 
       {/* Walking Section */}
-      {(walkingSessions as any[]).length >= 5 && (
+      {walkingSessions.length >= 5 && (
         <div className="mb-6">
           <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
             <PersonStanding className="h-5 w-5 text-emerald-400" />
@@ -965,11 +1083,11 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             {(() => {
-              const walks = walkingSessions as any[];
-              const totalDist = walks.reduce((s: number, w: any) => s + Number(w.distance_km || 0), 0);
-              const totalElev = walks.reduce((s: number, w: any) => s + Number(w.elev_gain || 0), 0);
-              const avgDuration = walks.reduce((s: number, w: any) => s + Number(w.duration_min || 0), 0) / walks.length;
-              const totalCal = walks.reduce((s: number, w: any) => s + Number(w.calories || 0), 0);
+              const walks = walkingSessions;
+              const totalDist = walks.reduce((s: number, w) => s + Number(w.distance_km || 0), 0);
+              const totalElev = walks.reduce((s: number, w) => s + Number(w.elev_gain || 0), 0);
+              const avgDuration = walks.reduce((s: number, w) => s + Number(w.duration_min || 0), 0) / walks.length;
+              const _totalCal = walks.reduce((s: number, w) => s + Number(w.calories || 0), 0);
               return (
                 <>
                   <StatCard title="Total Walks" value={walks.length} icon={<PersonStanding className="h-4 w-4 text-emerald-400" />} />
@@ -986,7 +1104,7 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {(walkingSessions as any[]).slice(0, 8).map((w: any, i: number) => (
+                {walkingSessions.slice(0, 8).map((w, i: number) => (
                   <div key={i} className="flex items-center justify-between text-sm border-b border-border/20 pb-2">
                     <div className="flex items-center gap-2">
                       <PersonStanding className="h-3.5 w-3.5 text-emerald-400" />
@@ -1007,7 +1125,7 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
       )}
 
       {/* Cycling Section */}
-      {(cyclingSessions as any[]).length >= 5 && (
+      {cyclingSessions.length >= 5 && (
         <div className="mb-6">
           <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
             <Bike className="h-5 w-5 text-yellow-400" />
@@ -1015,12 +1133,12 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             {(() => {
-              const rides = cyclingSessions as any[];
-              const totalDist = rides.reduce((s: number, r: any) => s + Number(r.distance_km || 0), 0);
-              const totalElev = rides.reduce((s: number, r: any) => s + Number(r.elev_gain || 0), 0);
-              const validSpeeds = rides.filter((r: any) => r.max_speed_kmh && Number(r.max_speed_kmh) > 0).map((r: any) => Number(r.max_speed_kmh));
+              const rides = cyclingSessions;
+              const totalDist = rides.reduce((s: number, r) => s + Number(r.distance_km || 0), 0);
+              const totalElev = rides.reduce((s: number, r) => s + Number(r.elev_gain || 0), 0);
+              const validSpeeds = rides.filter((r) => r.max_speed_kmh && Number(r.max_speed_kmh) > 0).map((r) => Number(r.max_speed_kmh));
               const topSpeed = validSpeeds.length > 0 ? Math.max(...validSpeeds) : 0;
-              const avgSpeed = rides.filter((r: any) => Number(r.avg_speed_kmh) > 0).reduce((s: number, r: any) => s + Number(r.avg_speed_kmh), 0) / rides.filter((r: any) => Number(r.avg_speed_kmh) > 0).length;
+              const _avgSpeed = rides.filter((r) => Number(r.avg_speed_kmh) > 0).reduce((s: number, r) => s + Number(r.avg_speed_kmh), 0) / rides.filter((r) => Number(r.avg_speed_kmh) > 0).length;
               return (
                 <>
                   <StatCard title="Total Rides" value={rides.length} icon={<Bike className="h-4 w-4 text-yellow-400" />} />
@@ -1038,7 +1156,7 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {(cyclingSessions as any[]).slice(0, 8).map((r: any, i: number) => (
+                {cyclingSessions.slice(0, 8).map((r, i: number) => (
                   <div key={i} className="flex items-center justify-between text-sm border-b border-border/20 pb-2">
                     <div className="flex items-center gap-2">
                       <Bike className="h-3.5 w-3.5 text-yellow-400" />
@@ -1059,7 +1177,7 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
       )}
 
       {/* Swimming Section */}
-      {(swimmingSessions as any[]).length >= 3 && (
+      {swimmingSessions.length >= 3 && (
         <div className="mb-6">
           <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
             <Waves className="h-5 w-5 text-blue-400" />
@@ -1067,11 +1185,11 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             {(() => {
-              const swims = swimmingSessions as any[];
-              const totalDist = swims.reduce((s: number, sw: any) => s + Number(sw.distance_m || 0), 0);
+              const swims = swimmingSessions;
+              const totalDist = swims.reduce((s: number, sw) => s + Number(sw.distance_m || 0), 0);
               const avgDist = totalDist / swims.length;
-              const totalDuration = swims.reduce((s: number, sw: any) => s + Number(sw.duration_min || 0), 0);
-              const totalCal = swims.reduce((s: number, sw: any) => s + Number(sw.calories || 0), 0);
+              const totalDuration = swims.reduce((s: number, sw) => s + Number(sw.duration_min || 0), 0);
+              const totalCal = swims.reduce((s: number, sw) => s + Number(sw.calories || 0), 0);
               return (
                 <>
                   <StatCard title="Total Swims" value={swims.length} icon={<Waves className="h-4 w-4 text-blue-400" />} />
@@ -1088,7 +1206,7 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {(swimmingSessions as any[]).map((sw: any, i: number) => (
+                {swimmingSessions.map((sw, i: number) => (
                   <div key={i} className="flex items-center justify-between text-sm border-b border-border/20 pb-2">
                     <div className="flex items-center gap-2">
                       <Waves className="h-3.5 w-3.5 text-blue-400" />
@@ -1117,7 +1235,7 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
         </CardHeader>
         <CardContent>
           <PaginatedActivityTable
-            activities={(activities as any[]).map((a: any) => ({
+            activities={activities.map((a) => ({
               activity_id: a.activity_id,
               type_key: a.type_key,
               date: a.date,

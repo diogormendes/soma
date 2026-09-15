@@ -25,7 +25,20 @@ const mean = (xs: number[]): number => xs.reduce((s, v) => s + v, 0) / xs.length
  * Extract HR values whose timestamp falls in [startMs, endMs] from raw
  * heart_rates JSON rows. Pure port of get_daily_hr_for_window's filter.
  */
-export function filterHrInWindow(rawJsons: any[], startMs: number, endMs: number): number[] {
+/**
+ * One stored `heart_rates` row: Garmin's [timestampMs, bpm] pairs for a day. The pairs are
+ * typed loosely because the reader below checks the length and the element types itself, and a
+ * malformed entry has to be skipped rather than rejected at the boundary.
+ */
+export interface HeartRateRaw {
+  heartRateValues?: ReadonlyArray<ReadonlyArray<number | null>> | null;
+}
+
+export function filterHrInWindow(
+  rawJsons: HeartRateRaw[],
+  startMs: number,
+  endMs: number,
+): number[] {
   const out: number[] = [];
   for (const raw of rawJsons) {
     const values = raw?.heartRateValues ?? [];

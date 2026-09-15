@@ -1,6 +1,6 @@
 /** Strength load, DB half: training_load rows from Hevy workouts. The 1RM/RPE/load formulas live in banister. */
 import type { QueryFn } from "./db";
-import { estimate1rm, estimateRpe, getRunningRelevance, computeStrengthLoad, extractExercises } from "banister";
+import { computeStrengthLoad, extractExercises } from "banister";
 export { estimate1rm, estimateRpe, getRunningRelevance, computeStrengthLoad } from "banister";
 export type { StrengthSet, StrengthExercise, StrengthLoad } from "banister";
 

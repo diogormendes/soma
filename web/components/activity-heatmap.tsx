@@ -17,7 +17,9 @@ import {
 } from "lucide-react";
 
 interface ActivityInfo {
-  activity_id: string;
+  // A Hevy-only day has no Garmin activity behind it, so this is null there. Both click paths
+  // below reach the workout modal by workout_id in that case.
+  activity_id: string | null;
   type_key: string;
   name: string;
   workout_id?: string;

@@ -1,5 +1,9 @@
+/* eslint-disable @next/next/no-img-element, jsx-a11y/alt-text --
+   These `img` elements are satori nodes for `@vercel/og`, not DOM: the route renders a PNG on
+   the server. next/image cannot appear here, and there is no accessibility tree in a PNG. */
 import { ImageResponse } from "@vercel/og";
 import { getDb } from "@/lib/db";
+import type { HevyExercise, HevySet } from "@/lib/hevy-types";
 import {
   aggregateMuscleVolumes,
   MUSCLE_COLORS,
@@ -101,18 +105,18 @@ function hexToRgba(hex: string, alpha: number): string {
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(2)})`;
 }
-function getTopSet(sets: any[]): { weight: number; reps: number } | null {
-  const working = (sets || []).filter((s: any) => s.type === "normal" && (s.weight_kg || 0) > 0 && (s.reps || 0) > 0);
+function getTopSet(sets: HevySet[]): { weight: number; reps: number } | null {
+  const working = (sets || []).filter((s) => s.type === "normal" && (s.weight_kg || 0) > 0 && (s.reps || 0) > 0);
   if (!working.length) return null;
-  const top = working.sort((a: any, b: any) => (b.weight_kg * b.reps) - (a.weight_kg * a.reps))[0];
-  return { weight: top.weight_kg, reps: top.reps };
+  const top = working.sort((a, b) => ((b.weight_kg ?? 0) * (b.reps ?? 0)) - ((a.weight_kg ?? 0) * (a.reps ?? 0)))[0];
+  return { weight: top.weight_kg ?? 0, reps: top.reps ?? 0 };
 }
 
 // HR chart SVG with min/max labels
 function renderHrChartSvg(
   hrSamples: number[],
   durationS: number,
-  exercises: any[],
+  exercises: HevyExercise[],
   avgHr: number | null,
 ): string {
   if (!hrSamples.length || !durationS) return "";
@@ -140,7 +144,7 @@ function renderHrChartSvg(
   const bottomY = PAD_TOP + chartH;
   const areaPath = `${linePath} L${(PAD_LEFT + chartW).toFixed(1)},${bottomY} L${PAD_LEFT},${bottomY} Z`;
 
-  const totalSets = exercises.reduce((sum: number, ex: any) => sum + (ex.sets?.length || 0), 0);
+  const totalSets = exercises.reduce((sum: number, ex) => sum + (ex.sets?.length || 0), 0);
   const segColors = ["#3b82f6", "#22c55e", "#f97316", "#a855f7", "#ef4444", "#06b6d4", "#eab308", "#ec4899"];
   let segSvg = "";
   let setOffset = 0;
@@ -166,7 +170,7 @@ function renderHrChartSvg(
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${segSvg}<path d="${areaPath}" fill="rgba(244,63,94,0.18)"/><path d="${linePath}" fill="none" stroke="#f43f5e" stroke-width="2"/>${avgLine}</svg>`;
 }
 
-function getExerciseSegments(exercises: any[]): { title: string; sets: number; color: string }[] {
+function getExerciseSegments(exercises: HevyExercise[]): { title: string; sets: number; color: string }[] {
   const segColors = ["#3b82f6", "#22c55e", "#f97316", "#a855f7", "#ef4444", "#06b6d4", "#eab308", "#ec4899"];
   return exercises.map((ex, i) => ({
     title: ex.title || "Unknown",
@@ -214,7 +218,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!workoutRows.length) return new Response("Not found", { status: 404 });
 
   const workout = workoutRows[0].raw_json;
-  const exercises = Array.isArray(workout.exercises) ? workout.exercises : [];
+  const exercises: HevyExercise[] = Array.isArray(workout.exercises) ? workout.exercises : [];
 
   const enrichmentRows = await sql`
     SELECT avg_hr, max_hr, calories, duration_s, hr_samples, hr_source
@@ -230,13 +234,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     try { durationS = (new Date(workout.end_time).getTime() - new Date(startTime).getTime()) / 1000; } catch { /**/ }
   }
 
-  let workingSets = 0, totalVolume = 0, totalReps = 0;
+  let workingSets = 0, totalVolume = 0;
   for (const ex of exercises) {
     for (const s of ex.sets || []) {
       if (s.type === "normal" && (s.weight_kg || 0) > 0 && (s.reps || 0) > 0) {
         workingSets++;
         totalVolume += (s.weight_kg || 0) * (s.reps || 0);
-        totalReps += s.reps || 0;
       }
     }
   }
@@ -246,13 +249,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   // Muscle data
   const muscleData = aggregateMuscleVolumes(
-    exercises.map((ex: any) => ({
+    exercises.map((ex) => ({
       title: ex.title || "",
-      sets: (ex.sets || []).map((s: any) => ({ type: s.type || "normal", weight_kg: s.weight_kg || 0, reps: s.reps || 0 })),
+      sets: (ex.sets || []).map((s) => ({ type: s.type || "normal", weight_kg: s.weight_kg || 0, reps: s.reps || 0 })),
     }))
   );
   const maxVolume = Math.max(...ALL_MUSCLE_GROUPS.map((mg) => muscleData[mg].total), 1);
-  const topMuscles = ALL_MUSCLE_GROUPS
+  const _topMuscles = ALL_MUSCLE_GROUPS
     .filter((mg) => muscleData[mg].total > 0)
     .sort((a, b) => muscleData[b].total - muscleData[a].total)
     .slice(0, 6);
@@ -269,9 +272,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const hrMinVal = hrSamples.length > 0 ? Math.min(...hrSamples) : null;
   const hrMaxVal = hrSamples.length > 0 ? Math.max(...hrSamples) : null;
   const exerciseSegments = getExerciseSegments(exercises);
-  const totalSets = exerciseSegments.reduce((sum, s) => sum + s.sets, 0);
+  const _totalSets = exerciseSegments.reduce((sum, s) => sum + s.sets, 0);
   const hrImgWidth = IMG_W - SIDE * 2;
-  const hrImgHeight = Math.round(hrImgWidth * (180 / 984));
+  const _hrImgHeight = Math.round(hrImgWidth * (180 / 984));
 
   // Exercise list (cap based on HR presence)
   const segColors = ["#3b82f6", "#22c55e", "#f97316", "#a855f7", "#ef4444", "#06b6d4", "#eab308", "#ec4899"];
@@ -436,8 +439,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
             {/* Exercise list */}
             <div style={{ display: "flex", flexDirection: "column", gap: 4, backgroundColor: "#111113", borderRadius: 10, padding: "8px 10px" }}>
               <div style={{ display: "flex", fontSize: 13, fontWeight: 600, color: "#52525b", letterSpacing: 2, textTransform: "uppercase" as const }}>EXERCISES</div>
-              {displayExercises.map((ex: any, i: number) => {
-                const workSets = (ex.sets || []).filter((s: any) => s.type === "normal" && (s.weight_kg || 0) > 0);
+              {displayExercises.map((ex, i: number) => {
+                const workSets = (ex.sets || []).filter((s) => s.type === "normal" && (s.weight_kg || 0) > 0);
                 const topSet = getTopSet(ex.sets || []);
                 const color = segColors[i % segColors.length];
                 return (

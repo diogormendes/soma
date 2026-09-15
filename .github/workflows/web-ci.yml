@@ -30,6 +30,26 @@ jobs:
       - name: Unit tests
         run: npx vitest run
 
+  lint:
+    # The lint-to-zero campaign (soma#958) is finished: the cap is 0, every rule is an error,
+    # and a PR that adds a finding fails here.
+    name: Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: eslint (zero findings)
+        run: npx eslint . --max-warnings 0
+
   build-without-db:
     # `next build` must never need a database (soma#940). The production DATABASE_URL names the
     # estate gateway host, which no socket can resolve; a build-time query took every production

@@ -12,7 +12,7 @@ interface MuscleGroupData {
 
 type Metric = "volume" | "sets" | "reps" | "exercises";
 
-const METRIC_LABELS: Record<Metric, string> = {
+const _METRIC_LABELS: Record<Metric, string> = {
   volume: "Volume (kg)",
   sets: "Total Sets",
   reps: "Total Reps",

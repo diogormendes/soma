@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import type { ProjectedDay } from "banister";
 import { hmSecondsFromVdot } from "banister";
+import type { ChartTooltipProps } from "@/lib/chart-types";
 
 interface TrajectoryEntry {
   date: string;
@@ -25,6 +26,36 @@ interface TrajectoryEntry {
   ctl?: number | null;
   readiness?: number | null;
   weightEffect?: number | null;
+}
+
+/** One point as this chart plots it: the entry plus the pace and shadow it derives. */
+interface TrajectoryPoint {
+  date: string;
+  optimal: number;
+  actual: number | null;
+  projectedVdot: number | null;
+  hmPace: number | null;
+  shadow: number | null;
+  ctl: number | null;
+  readiness: number | null;
+  weightEffect: number | null;
+}
+
+/** What recharts hands a custom dot renderer. */
+interface DotRenderProps {
+  cx?: number;
+  cy?: number;
+  payload?: TrajectoryPoint;
+}
+
+/**
+ * What recharts hands a custom line `shape`: the plotted points, plus the `data` this chart
+ * passes through itself. The points array is readonly and its coordinates are nullable, which
+ * is why the renderer below skips a segment whose endpoint has no y.
+ */
+interface LineShapeProps {
+  points?: ReadonlyArray<{ x?: number | null; y?: number | null }>;
+  data?: TrajectoryPoint[];
 }
 
 interface TrajectoryChartProps {
@@ -52,7 +83,7 @@ function formatSeconds(sec: number): string {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function vdotToHmPace(vdot: number): string {
+function _vdotToHmPace(vdot: number): string {
   const hmSeconds = hmSecondsFromVdot(vdot);
   const secPerKm = Math.round(hmSeconds / 21.0975); // round total sec/km first
   const min = Math.floor(secPerKm / 60);
@@ -79,7 +110,7 @@ function formatTimeDelta(seconds: number): string {
   return `${sign}${m}:${String(s).padStart(2, "0")}`;
 }
 
-const PROJECTED_COLOR = "oklch(70% 0.18 200)"; // teal — Banister prediction
+const _PROJECTED_COLOR = "oklch(70% 0.18 200)"; // teal — Banister prediction
 
 // ── Colors for secondary dimension lines ─────────────────────
 
@@ -100,7 +131,7 @@ function gapColor(actual: number, optimal: number): string {
 
 // ── Gap-colored dot for the actual line ──────────────────────
 
-function GapDot(props: any) {
+function GapDot(props: DotRenderProps) {
   const { cx, cy, payload } = props;
   if (cx == null || cy == null || payload?.actual == null) return null;
 
@@ -117,7 +148,7 @@ function GapDot(props: any) {
 
 // ── Custom active line — renders per-segment gradient ────────
 
-function GradientActiveLine(props: any) {
+function GradientActiveLine(props: LineShapeProps) {
   const { points, data } = props;
   if (!points || points.length < 2) return null;
 
@@ -125,8 +156,9 @@ function GradientActiveLine(props: any) {
   for (let i = 0; i < points.length - 1; i++) {
     const p1 = points[i];
     const p2 = points[i + 1];
-    // Skip segments where either point has null actual
-    if (p1.y == null || p2.y == null) continue;
+    // Skip a segment whose endpoints are not both plotted: recharts leaves x or y null for a
+    // point with no value, and an SVG line with a null coordinate renders at the origin.
+    if (p1?.x == null || p1?.y == null || p2?.x == null || p2?.y == null) continue;
 
     const d1 = data?.[i];
     const d2 = data?.[i + 1];
@@ -163,7 +195,7 @@ function GradientActiveLine(props: any) {
 // ── Custom tooltip ───────────────────────────────────────────
 
 function makeCustomTooltip(projectedDays?: ProjectedDay[] | null, goalVdot?: number, visibleLines?: Set<string>) {
-  return function CustomTooltip({ active, payload }: any) {
+  return function CustomTooltip({ active, payload }: ChartTooltipProps<TrajectoryPoint>) {
     if (!active || !payload?.length) return null;
 
     const data = payload[0]?.payload;
@@ -171,7 +203,7 @@ function makeCustomTooltip(projectedDays?: ProjectedDay[] | null, goalVdot?: num
 
     const optimal = data.optimal;
     const actual = data.actual;
-    const projected = data.projectedVdot;
+    const _projected = data.projectedVdot;
     const shadow = data.shadow;
     const gap = actual !== null && actual !== undefined ? (optimal - actual).toFixed(1) : null;
     const dateStr = new Date(data.date + "T00:00:00").toLocaleDateString("en-US", {
@@ -456,6 +488,21 @@ export function TrajectoryChart({
     });
   }
 
+  // Hover handlers for date emission (before the early return below: hooks run in the same
+  // order on every render).
+  const handleMouseMove = useCallback(
+    (state: { activeLabel?: string | number } | undefined) => {
+      if (onHoverDate && state?.activeLabel) {
+        onHoverDate(String(state.activeLabel));
+      }
+    },
+    [onHoverDate],
+  );
+
+  const handleMouseLeave = useCallback(() => {
+    if (onHoverDate) onHoverDate(null);
+  }, [onHoverDate]);
+
   if (!data || data.length === 0) {
     return (
       <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">
@@ -531,7 +578,7 @@ export function TrajectoryChart({
   const planStartMs = new Date(chartData[0].date + "T00:00:00").getTime();
   const planDurationMs = raceMs - planStartMs;
   const inflectionMs = planStartMs + planDurationMs * 0.4;
-  const inflectionDate = new Date(inflectionMs).toISOString().split("T")[0];
+  const _inflectionDate = new Date(inflectionMs).toISOString().split("T")[0];
   // Find the optimal VDOT at the inflection point (nearest date)
   const inflectionEntry = chartData.reduce((best, d) => {
     const dMs = new Date(d.date + "T00:00:00").getTime();
@@ -548,20 +595,6 @@ export function TrajectoryChart({
   const goalA = goalVdot;
   const goalB = goalVdot - 2;
   const goalC = goalVdot - 3.5;
-
-  // Hover handlers for date emission
-  const handleMouseMove = useCallback(
-    (state: any) => {
-      if (onHoverDate && state?.activeLabel) {
-        onHoverDate(state.activeLabel);
-      }
-    },
-    [onHoverDate],
-  );
-
-  const handleMouseLeave = useCallback(() => {
-    if (onHoverDate) onHoverDate(null);
-  }, [onHoverDate]);
 
   return (
     <div>
@@ -799,7 +832,7 @@ export function TrajectoryChart({
             dot={<GapDot />}
             connectNulls
             name="actual"
-            shape={(lineProps: any) => (
+            shape={(lineProps: LineShapeProps) => (
               <GradientActiveLine {...lineProps} data={chartData} />
             )}
           />

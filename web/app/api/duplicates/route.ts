@@ -42,12 +42,12 @@ export async function GET() {
 
     // Count detail endpoints per activity to determine which has richer data
     const allIds = new Set<number>();
-    rows.forEach((r: any) => {
+    rows.forEach((r) => {
       allIds.add(Number(r.id_a));
       allIds.add(Number(r.id_b));
     });
 
-    let detailCounts: Record<number, number> = {};
+    const detailCounts: Record<number, number> = {};
     if (allIds.size > 0) {
       const idArray = Array.from(allIds);
       const counts = await sql`
@@ -57,12 +57,12 @@ export async function GET() {
           AND endpoint_name != 'summary'
         GROUP BY activity_id
       `;
-      counts.forEach((c: any) => {
+      counts.forEach((c) => {
         detailCounts[Number(c.activity_id)] = Number(c.cnt);
       });
     }
 
-    const pairs = rows.map((r: any) => ({
+    const pairs = rows.map((r) => ({
       a: {
         id: Number(r.id_a),
         name: r.name_a,
