@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { WorkoutDetailModal } from "./workout-detail-modal";
 
 interface CalendarDay {
   day: string | Date; // YYYY-MM-DD or Date from pg
-  program: string;
+  // Hevy can return a workout with no title, and the colour map below already guards on it.
+  program: string | null;
   hevy_id: string;
 }
 
@@ -37,7 +38,7 @@ function hashStringToIndex(str: string, len: number): number {
 export function WorkoutCalendar({ data }: Props) {
   const [weeksBack, setWeeksBack] = useState(0); // 0 = current 26 weeks
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
-  const [tooltip, setTooltip] = useState<{
+  const [_tooltip, setTooltip] = useState<{
     x: number;
     y: number;
     date: string;
@@ -79,7 +80,7 @@ export function WorkoutCalendar({ data }: Props) {
     return t.toISOString().split("T")[0];
   }, []);
 
-  const { startMon, endDate, weeks } = useMemo(() => {
+  const { startMon, endDate: _endDate, weeks } = useMemo(() => {
     const today = new Date();
     const currentDay = today.getDay();
     const daysToMon = currentDay === 0 ? 6 : currentDay - 1;
@@ -114,8 +115,7 @@ export function WorkoutCalendar({ data }: Props) {
       const dayOfWeek = d.getDay() === 0 ? 6 : d.getDay() - 1;
       weeksArr[weekIdx][dayOfWeek] = {
         date: dateStr,
-        workouts: dayMap.get(dateStr) || [],
-      };
+        workouts: dayMap.get(dateStr) || [] };
       d.setDate(d.getDate() + 1);
     }
 
@@ -291,8 +291,7 @@ export function WorkoutCalendar({ data }: Props) {
                       ? { backgroundColor: color, opacity }
                       : isActive
                         ? { backgroundColor: "var(--primary)", opacity }
-                        : {}),
-                  }}
+                        : {}) }}
                   title={`${cell.date}${program ? ` — ${program}` : ""}${count > 1 ? ` (${count} workouts)` : ""}`}
                   onClick={() => handleDayClick(cell.workouts)}
                 />

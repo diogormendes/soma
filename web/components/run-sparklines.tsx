@@ -11,6 +11,7 @@ import {
   Tooltip,
 } from "recharts";
 import type { GpsPoint } from "./run-map";
+import type { ChartValue } from "@/lib/chart-types";
 
 export interface SparkPoint {
   dist_km: number;
@@ -93,7 +94,7 @@ export function RunSparklines({ points }: RunSparklinesProps) {
             <YAxis {...yAxisProps} domain={["auto", "auto"]} />
             <Tooltip
               contentStyle={tooltipStyle}
-              formatter={(v: any) => [`${v}m`, "Elev"]}
+              formatter={(v: ChartValue) => [`${v}m`, "Elev"]}
               labelFormatter={(l) => `${l} km`}
             />
             <Area
@@ -129,9 +130,10 @@ export function RunSparklines({ points }: RunSparklinesProps) {
             />
             <Tooltip
               contentStyle={tooltipStyle}
-              formatter={(v: any) => {
-                const m = Math.floor(v);
-                const s = Math.round((v - m) * 60);
+              formatter={(v: ChartValue) => {
+                const paceMin = Number(v);
+                const m = Math.floor(paceMin);
+                const s = Math.round((paceMin - m) * 60);
                 return [`${m}:${s.toString().padStart(2, "0")}/km`, "Pace"];
               }}
               labelFormatter={(l) => `${l} km`}
@@ -157,7 +159,7 @@ export function RunSparklines({ points }: RunSparklinesProps) {
             <YAxis {...yAxisProps} domain={["auto", "auto"]} />
             <Tooltip
               contentStyle={tooltipStyle}
-              formatter={(v: any) => [`${v} bpm`, "HR"]}
+              formatter={(v: ChartValue) => [`${v} bpm`, "HR"]}
               labelFormatter={(l) => `${l} km`}
             />
             <Line
@@ -191,7 +193,7 @@ export function RunSparklines({ points }: RunSparklinesProps) {
             <YAxis {...yAxisProps} domain={cadenceDomain} />
             <Tooltip
               contentStyle={tooltipStyle}
-              formatter={(v: any) => [`${v} spm`, "Cadence"]}
+              formatter={(v: ChartValue) => [`${v} spm`, "Cadence"]}
               labelFormatter={(l) => `${l} km`}
             />
             <Line

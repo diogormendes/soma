@@ -89,7 +89,7 @@ export function MonthlyActivityChart({
             return (
               <div className="bg-card text-card-foreground border border-border rounded-lg p-2 text-xs shadow-lg">
                 <div className="font-medium mb-1">{months[parseInt(m) - 1]} {y}</div>
-                {payload.filter((p: any) => p.value > 0).map((p: any) => (
+                {payload.filter((p) => p.value > 0).map((p) => (
                   <div key={p.dataKey} className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
                     <span>{p.dataKey}: {p.value}</span>

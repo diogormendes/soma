@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import type { ChartTooltipProps } from "@/lib/chart-types";
 import {
   Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  ReferenceLine, ComposedChart, Area, Bar, Cell,
-} from "recharts";
+  ReferenceLine, ComposedChart, Bar, Cell } from "recharts";
 
 interface BodyCompData {
   profile: {
@@ -69,7 +69,7 @@ export function BodyCompChart() {
   // the empty state instead of destructuring a null profile.
   if (!data || !data.profile || !data.weights?.length) return <div className="text-center text-muted-foreground py-8">No data available</div>;
 
-  const { profile, weights, goalLine, trendPrediction, calPredicted, dailyDeficits, goalDeficit } = data;
+  const { profile, weights, goalLine, trendPrediction: _trendPrediction, calPredicted, dailyDeficits, goalDeficit } = data;
 
   // Merge weights and projection into one dataset for the chart
   // Only show weights from last 3 months
@@ -87,7 +87,7 @@ export function BodyCompChart() {
   }
   // Goal line: straight from first weigh-in to target
   for (const g of (goalLine || [])) {
-    const existing = chartData.find((d: any) => d.date === g.date);
+    const existing = chartData.find((d) => d.date === g.date);
     if (existing) { existing.goalWeight = g.weight; existing.goalBf = g.bf; }
     else { chartData.push({ date: g.date, goalWeight: g.weight, goalBf: g.bf }); dateSet.add(g.date); }
   }
@@ -104,21 +104,21 @@ export function BodyCompChart() {
       const predWeight = Math.round(predicted * 10) / 10;
       if (predWeight <= profile.targetWeight) {
         // Add final point at target and stop
-        const existing = chartData.find((dd: any) => dd.date === dateStr);
+        const existing = chartData.find((dd) => dd.date === dateStr);
         if (existing) { existing.trendWeight = profile.targetWeight; existing.trendBf = profile.targetBf; }
         else { chartData.push({ date: dateStr, trendWeight: profile.targetWeight, trendBf: profile.targetBf }); dateSet.add(dateStr); }
         break;
       }
       const predFat = Math.max(0, predWeight - profile.ffm);
       const predBf = Math.round((predFat / Math.max(predWeight, 1)) * 1000) / 10;
-      const existing = chartData.find((dd: any) => dd.date === dateStr);
+      const existing = chartData.find((dd) => dd.date === dateStr);
       if (existing) { existing.trendWeight = predWeight; existing.trendBf = predBf; }
       else { chartData.push({ date: dateStr, trendWeight: predWeight, trendBf: predBf }); dateSet.add(dateStr); }
     }
     // Connect to smoothed at anchor point
     if (recentWeights.length > 0) {
       const lastActual = recentWeights[recentWeights.length - 1];
-      const overlap = chartData.find((dd: any) => dd.date === lastActual.date);
+      const overlap = chartData.find((dd) => dd.date === lastActual.date);
       if (overlap) { overlap.trendWeight = overlap.smoothed; overlap.trendBf = overlap.smoothedBf; }
     }
   }
@@ -159,7 +159,7 @@ export function BodyCompChart() {
     return Math.round((fat / w) * 1000) / 10;
   };
 
-  const showCalPredicted = (calPredicted?.length ?? 0) >= 7;
+  const _showCalPredicted = (calPredicted?.length ?? 0) >= 7;
 
   // Format date for X axis
   const formatDate = (date: string) => {
@@ -283,9 +283,9 @@ export function BodyCompChart() {
                   tickFormatter={(v: number) => `${v}kg`}
                 />
                 <Tooltip
-                  content={({ active, label }: any) => {
+                  content={({ active, label }: ChartTooltipProps) => {
                     if (!active) return null;
-                    const point = chartData.find((d: any) => d.date === label);
+                    const point = chartData.find((d) => d.date === label);
                     if (!point) return null;
                     const goal = point.goalWeight ?? interpolateGoal(String(label));
                     const pred = point.trendWeight ?? interpolatePrediction(String(label));
@@ -351,9 +351,9 @@ export function BodyCompChart() {
                   tickFormatter={(v: number) => `${v}%`}
                 />
                 <Tooltip
-                  content={({ active, label }: any) => {
+                  content={({ active, label }: ChartTooltipProps) => {
                     if (!active) return null;
-                    const point = chartData.find((d: any) => d.date === label);
+                    const point = chartData.find((d) => d.date === label);
                     if (!point) return null;
                     const goal = point.goalBf ?? interpolateGoalBf(String(label));
                     const pred = point.trendBf ?? interpolatePredBf(String(label));
@@ -391,8 +391,7 @@ export function BodyCompChart() {
           goalLine: Math.max(0, d.totalBurn - goalDeficit),
           eatenDot: d.consumed, // separate key for scatter overlay
           // A day outside the current window is context, not a sum: fade it (#728).
-          barOpacity: d.inWindow === false ? 0.3 : 1,
-        }));
+          barOpacity: d.inWindow === false ? 0.3 : 1 }));
         const outside = chartData.filter(d => d.inWindow === false).length;
         return (
         <Card>
@@ -418,7 +417,7 @@ export function BodyCompChart() {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" opacity={0.3} />
                   <XAxis
                     dataKey="date"
-                    tickFormatter={(label: any) => formatDate(String(label))}
+                    tickFormatter={(label) => formatDate(String(label))}
                     tick={{ fontSize: 11, fill: "rgba(255,255,255,0.6)" }}
                     interval={Math.max(0, Math.floor(dailyDeficits.length / 6))}
                   />
@@ -428,7 +427,7 @@ export function BodyCompChart() {
                     domain={[0, 'auto']}
                   />
                   <Tooltip
-                    content={({ active, payload, label }: any) => {
+                    content={({ active, payload, label }: ChartTooltipProps) => {
                       if (!active || !payload?.length) return null;
                       const day = chartData.find(d => d.date === label);
                       if (!day) return null;
@@ -442,8 +441,7 @@ export function BodyCompChart() {
                           borderRadius: "8px",
                           padding: "10px 14px",
                           fontSize: "12px",
-                          minWidth: 220,
-                        }}>
+                          minWidth: 220 }}>
                           <div style={{ fontWeight: "bold", marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
                             <span>{dayLabel}</span>
                             <span style={{ fontSize: 10, opacity: 0.5 }}>{day.source === "extrapolated" ? "ESTIMATED" : day.source === "partial" ? "PARTLY LOGGED" : day.isToday ? "IN PROGRESS" : day.closed ? "CLOSED" : "OPEN"}</span>
@@ -509,7 +507,7 @@ export function BodyCompChart() {
                   {/* Goal line (burn - 800) */}
                   <Line type="stepAfter" dataKey="goalLine" stroke="rgba(255,255,255,0.6)" strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={true} />
                   {/* Eaten dots */}
-                  <Line type="monotone" dataKey="eatenDot" stroke="none" strokeWidth={0} dot={(props: any) => {
+                  <Line type="monotone" dataKey="eatenDot" stroke="none" strokeWidth={0} dot={(props) => {
                     const { cx, cy, payload } = props;
                     if (payload.eatenDot == null || payload.eatenDot === 0) return <></>;
                     const deficit = payload.deficit;
@@ -547,7 +545,7 @@ export function BodyCompChart() {
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={(() => {
                   // Build cumulative data matching weight chart X-axis range
-                  const totalDeficitNeeded = -Math.round((profile.fatToLose || 5.5) * 7700);
+                  const _totalDeficitNeeded = -Math.round((profile.fatToLose || 5.5) * 7700);
                   const deficitData: { date: string; cumulative: number | null; goalPace: number | null; source?: string }[] = [];
                   // Add actual deficit data points
                   for (const d of dailyDeficits) {
@@ -585,7 +583,7 @@ export function BodyCompChart() {
                     tickFormatter={(v: number) => Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`}
                   />
                   <Tooltip
-                    content={({ active, label }: any) => {
+                    content={({ active, label }: ChartTooltipProps) => {
                       if (!active) return null;
                       const day = dailyDeficits.find(d => d.date === label);
                       // Interpolate goal pace
@@ -614,7 +612,7 @@ export function BodyCompChart() {
                   />
                   <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="4 4" />
                   <Line type="linear" dataKey="goalPace" stroke="#f97316" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-                  <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={(props: any) => {
+                  <Line type="monotone" dataKey="cumulative" stroke="#3b82f6" strokeWidth={2} dot={(props) => {
                     const { cx, cy, payload, key } = props;
                     if (payload.cumulative == null) return <g key={key} />;
                     // Hollow where the day was estimated from the scale (soma#891).

@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { hmSecondsFromVdot } from "banister";
 // Shared with the home Recovery card + the app, so a given z reads the same everywhere.
 import { readinessScore as zToPercentile } from "@/lib/readiness";
+import type { ChartValue } from "@/lib/chart-types";
 
 interface ComparisonData {
   load: { date: string; dailyLoad: number; ctl: number; atl: number }[];
@@ -95,10 +96,12 @@ export function ComparisonCharts({ data, hoveredDate, onHoverDate }: ComparisonC
   );
 }
 
-function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminLabel, ourColor, hoveredDate, onHoverDate, invertY, formatValue, tightYAxis }: {
+function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminLabel, ourColor, hoveredDate: _hoveredDate, onHoverDate, invertY, formatValue, tightYAxis }: {
   title: string;
   subtitle: string;
-  data: any[];
+  // Each card plots two series out of one row set, named by ourKey and garminKey, so the row
+  // shape differs per card and only the date is common.
+  data: ({ date: string } & Record<string, number | string | null>)[];
   ourKey: string;
   garminKey: string;
   ourLabel: string;
@@ -127,7 +130,9 @@ function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminL
   // Compute tight Y domain from actual data values with 10% padding
   let yDomain: [number, number] | undefined;
   if (tightYAxis) {
-    const vals = data.flatMap(d => [d[ourKey], d[garminKey]]).filter((v): v is number => v != null && isFinite(v));
+    const vals = data
+      .flatMap((d) => [d[ourKey], d[garminKey]])
+      .filter((v): v is number => typeof v === "number" && isFinite(v));
     if (vals.length > 0) {
       const min = Math.min(...vals);
       const max = Math.max(...vals);
@@ -145,15 +150,15 @@ function ChartCard({ title, subtitle, data, ourKey, garminKey, ourLabel, garminL
           <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
         <ResponsiveContainer width="100%" height={160}>
-          <LineChart data={data} onMouseMove={(e: any) => {
-            if (e?.activeLabel) onHoverDate(e.activeLabel);
+          <LineChart data={data} onMouseMove={(e: { activeLabel?: string | number }) => {
+            if (e?.activeLabel) onHoverDate(String(e.activeLabel));
           }} onMouseLeave={() => onHoverDate(null)}>
             <XAxis dataKey="date" hide />
             <YAxis hide={!formatValue} reversed={invertY} width={formatValue ? 52 : 0} tickFormatter={formatValue} tick={{ fontSize: 10, fill: "oklch(0.55 0 0)" }} domain={yDomain} />
             <Tooltip
               contentStyle={{ backgroundColor: "oklch(0.15 0.01 250)", border: "1px solid oklch(0.3 0.01 250)", borderRadius: "6px", fontSize: "11px" }}
               labelStyle={{ color: "oklch(0.7 0 0)" }}
-              formatter={formatValue ? (v: any) => formatValue(Number(v)) : undefined}
+              formatter={formatValue ? (v: ChartValue) => formatValue(Number(v)) : undefined}
             />
             <Line type="monotone" dataKey={ourKey} stroke={ourColor} dot={false} strokeWidth={2} name={ourLabel} connectNulls />
             <Line type="monotone" dataKey={garminKey} stroke="oklch(0.5 0.02 250)" dot={false} strokeWidth={1.5} strokeDasharray="4 3" name={garminLabel} connectNulls />

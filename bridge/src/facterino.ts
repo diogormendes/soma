@@ -63,8 +63,13 @@ function setExpirations(token: any, nowSec: number): OAuth2Token {
 
 /** oauth1→oauth2 proxy (Cloudflare edge egress). Garmin rate-limits this exchange
  *  from cloud (GitHub Actions / AWS) IPs, so it's routed through the CF Worker. */
+// The Worker moved to garmin-auth and was renamed when the Garmin Workers were
+// consolidated (garmin-auth#47, hevy2garmin#520). The old hevy2garmin-exchange
+// Worker was deleted, and because this bridge was the only caller of its
+// /oauth2 route, nothing noticed until every scheduled run 404'd for 38 hours
+// (#969). garmin-auth#59 restored the route on the consolidated Worker.
 const EXCHANGE_WORKER_URL =
-  process.env.GARMIN_EXCHANGE_WORKER_URL || "https://hevy2garmin-exchange.gkos.workers.dev/oauth2";
+  process.env.GARMIN_EXCHANGE_WORKER_URL || "https://garmin-auth-sso.gkos.workers.dev/oauth2";
 
 /**
  * Refresh the oauth2 token via garth's OAuth1-signed exchange. The signing +

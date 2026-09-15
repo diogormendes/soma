@@ -7,7 +7,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-interface HRZone {
+export interface HRZone {
   zone: number;
   seconds: number;
   low: number;

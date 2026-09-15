@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import {
   LayoutDashboard,
@@ -15,8 +15,7 @@ import {
   Music2,
   UtensilsCrossed,
   Menu,
-  X,
-} from "lucide-react";
+  X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SyncButton } from "@/components/sync-button";
 import { SomaLogo } from "@/components/soma-logo";
@@ -60,11 +59,14 @@ export function Sidebar() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [router]);
 
-  // Close drawer + clear loading on navigation
-  useEffect(() => {
+  // Close the drawer and clear the pending navigation once the path has changed: state
+  // adjusted during render (React's derived-state pattern), not a setState inside an effect.
+  const [pathAtRender, setPathAtRender] = useState(pathname);
+  if (pathname !== pathAtRender) {
+    setPathAtRender(pathname);
     setDrawerOpen(false);
     setNavigatingTo(null);
-  }, [pathname]);
+  }
 
   return (
     <>

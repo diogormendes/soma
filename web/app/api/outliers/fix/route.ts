@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import type { HevyExercise } from "@/lib/hevy-types";
 
 export const runtime = "nodejs";
 
@@ -71,11 +72,11 @@ export async function POST(req: Request) {
           start_time: workout.start_time,
           end_time: workout.end_time,
           is_private: false,
-          exercises: workout.exercises.map((ex: any) => ({
+          exercises: (workout.exercises as HevyExercise[]).map((ex) => ({
             exercise_template_id: ex.exercise_template_id,
             superset_id: ex.superset_id || null,
             notes: ex.notes || null,
-            sets: ex.sets.map((s: any) => ({
+            sets: (ex.sets ?? []).map((s) => ({
               type: s.type,
               weight_kg: s.weight_kg,
               reps: s.reps,

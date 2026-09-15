@@ -3,6 +3,7 @@ import { athleteTz } from "@/lib/athlete-tz";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExpandableChartCard } from "@/components/expandable-chart-card";
 import { getDb } from "@/lib/db";
+import type { Numeric } from "@/lib/json";
 import { VolumeChart } from "@/components/volume-chart";
 import { ExpandableStrengthChart } from "@/components/expandable-strength-chart";
 
@@ -17,7 +18,7 @@ import { ClickableTopExercises } from "@/components/clickable-top-exercises";
 import { ClickablePersonalRecords } from "@/components/clickable-personal-records";
 import { TimeRangeSelector } from "@/components/time-range-selector";
 import { rangeToDays } from "@/lib/time-ranges";
-import { getExerciseMuscles, ALL_MUSCLE_GROUPS, type MuscleGroup } from "@/lib/muscle-groups";
+import { getExerciseMuscles, ALL_MUSCLE_GROUPS } from "@/lib/muscle-groups";
 import {
   Dumbbell,
   Clock,
@@ -26,10 +27,87 @@ import {
   Calendar,
   Target,
   HeartPulse,
-  Heart,
-} from "lucide-react";
+  Heart } from "lucide-react";
+import { cutoffIso } from "@/lib/date-range";
 
 export const revalidate = 300;
+
+/** The shapes the queries below select. `Numeric` is a column the driver may return as a string. */
+interface TopExerciseRow {
+  exercise: string;
+  workout_count: Numeric;
+  best_weight: Numeric;
+  avg_weight: Numeric;
+  last_performed: string | Date;
+  recent_weights: number[];
+}
+
+interface ProgramSplitRow {
+  program: string;
+  sessions: Numeric;
+  avg_duration: Numeric;
+}
+
+interface ExercisePrRow {
+  exercise: string;
+  pr_weight: Numeric;
+  reps_at_pr: Numeric;
+}
+
+interface HrTrendRow {
+  date: string | Date;
+  avg_hr: Numeric;
+  max_hr: Numeric;
+  title: string;
+  duration_min: Numeric;
+}
+
+interface TimelineRow {
+  date: string | Date;
+  title: string;
+  duration_min: Numeric;
+  calories: Numeric;
+  avg_hr: Numeric;
+}
+
+interface MonthlyMuscleRow {
+  month: string;
+  muscle_group: string;
+  volume: Numeric;
+}
+
+interface ProgressionRow {
+  exercise: string;
+  workout_date: string;
+  max_weight: number;
+}
+
+interface WeeklyVolumeRow {
+  week: string | Date;
+  total_volume: Numeric;
+}
+
+interface CalendarRow {
+  day: string | Date;
+  program: string | null;
+  hevy_id: string;
+}
+
+interface WeeklyFrequencyRow {
+  week: string | Date;
+  title: string;
+  date: string | Date;
+  duration_min: Numeric;
+  exercise_titles: string[] | string | null;
+}
+
+/** One workout inside a clickable weekly-frequency bar. */
+interface WeekDetail {
+  title: string;
+  date: string;
+  exercises: string[];
+  duration_min: number;
+}
 
 async function getRecentWorkouts(cutoff: string, limit = 20) {
   const sql = getDb();
@@ -85,7 +163,7 @@ async function getWeeklyVolume(cutoff: string) {
     GROUP BY week
     ORDER BY week ASC
   `;
-  return rows;
+  return rows as WeeklyVolumeRow[];
 }
 
 async function getWorkoutSummaryStats(cutoff: string) {
@@ -179,7 +257,7 @@ async function getTopExercises(cutoff: string) {
     LEFT JOIN agg a ON a.exercise = b.exercise
     ORDER BY b.workout_count DESC
   `;
-  return rows;
+  return rows as TopExerciseRow[];
 }
 
 async function getProgramSplit(cutoff: string) {
@@ -196,7 +274,7 @@ async function getProgramSplit(cutoff: string) {
     ORDER BY sessions DESC
     LIMIT 6
   `;
-  return rows;
+  return rows as ProgramSplitRow[];
 }
 
 async function getExercisePRs() {
@@ -227,7 +305,7 @@ async function getExercisePRs() {
     ORDER BY m.pr_weight DESC
     LIMIT 20
   `;
-  return rows;
+  return rows as ExercisePrRow[];
 }
 
 
@@ -310,7 +388,7 @@ async function getWorkoutHrTrend(cutoff: string) {
       AND we.avg_hr IS NOT NULL
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as HrTrendRow[];
 }
 
 async function getConfigurableProgression(cutoff: string) {
@@ -332,7 +410,9 @@ async function getConfigurableProgression(cutoff: string) {
     LIMIT 15
   `;
 
-  const exerciseNames = exercises.map((e: any) => String(e.exercise));
+  const exerciseNames = (exercises as { exercise: string; count: Numeric }[]).map((e) =>
+    String(e.exercise),
+  );
   if (exerciseNames.length === 0) return { exercises: [], progression: [] };
 
   // Get progression for those exercises
@@ -354,8 +434,11 @@ async function getConfigurableProgression(cutoff: string) {
   `;
 
   return {
-    exercises: exercises.map((e: any) => ({ exercise: String(e.exercise), count: Number(e.count) })),
-    progression,
+    exercises: (exercises as { exercise: string; count: Numeric }[]).map((e) => ({
+      exercise: String(e.exercise),
+      count: Number(e.count),
+    })),
+    progression: progression as ProgressionRow[],
   };
 }
 
@@ -375,8 +458,11 @@ async function getWorkoutFrequencyByWeekDetailed(cutoff: string) {
     ORDER BY date ASC
   `;
   // Group by week
-  const weekMap = new Map<string, { week: string; workouts: number; avg_duration: number; details: any[] }>();
-  for (const r of rows) {
+  const weekMap = new Map<
+    string,
+    { week: string; workouts: number; avg_duration: number; details: WeekDetail[] }
+  >();
+  for (const r of rows as WeeklyFrequencyRow[]) {
     const weekStr = r.week instanceof Date ? r.week.toISOString().split("T")[0] : String(r.week).slice(0, 10);
     const dateStr = r.date instanceof Date ? r.date.toISOString().split("T")[0] : String(r.date).slice(0, 10);
     if (!weekMap.has(weekStr)) {
@@ -389,12 +475,13 @@ async function getWorkoutFrequencyByWeekDetailed(cutoff: string) {
       title: r.title,
       date: dateStr,
       exercises: exercises,
-      duration_min: Number(r.duration_min),
-    });
+      duration_min: Number(r.duration_min) });
   }
   // Compute avg duration
   for (const w of weekMap.values()) {
-    w.avg_duration = Math.round(w.details.reduce((s: number, d: any) => s + d.duration_min, 0) / w.details.length);
+    w.avg_duration = Math.round(
+      w.details.reduce((s: number, d) => s + d.duration_min, 0) / w.details.length,
+    );
   }
   return Array.from(weekMap.values()).sort((a, b) => a.week.localeCompare(b.week));
 }
@@ -414,7 +501,7 @@ async function getWorkoutTimeline() {
     WHERE h.endpoint_name = 'workout'
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as TimelineRow[];
 }
 
 async function getMonthlyMuscleVolume(cutoff: string) {
@@ -454,7 +541,7 @@ async function getMonthlyMuscleVolume(cutoff: string) {
     GROUP BY month, muscle_group
     ORDER BY month ASC, muscle_group
   `;
-  return rows;
+  return rows as MonthlyMuscleRow[];
 }
 
 async function getTrainingCalendar() {
@@ -469,7 +556,7 @@ async function getTrainingCalendar() {
     WHERE endpoint_name = 'workout'
     ORDER BY day ASC
   `;
-  return rows;
+  return rows as CalendarRow[];
 }
 
 function formatDate(dateStr: string): string {
@@ -479,14 +566,13 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
-    ...(sameYear ? {} : { year: "2-digit" }),
-  });
+    ...(sameYear ? {} : { year: "2-digit" }) });
 }
 
 export default async function WorkoutsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const params = await searchParams;
   const rangeDays = rangeToDays(params.range);
-  const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
+  const cutoff = cutoffIso(rangeDays);
   const [recent, weeklyVolume, configurableProgression, stats, topExercises, programSplit, exercisePRs, calendar, weeklyFreqDetailed, monthlyMuscle, calorieStats, totalWorkoutCount, bodyMapVolumes, hrTrend, workoutTimeline] =
     await Promise.all([
       getRecentWorkouts(cutoff, 50),
@@ -515,18 +601,18 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
   const avgPerWeek = totalWeeks > 0 ? (Number(stats.total_workouts) / totalWeeks).toFixed(1) : "—";
 
   // Compute timeline data for clickable summary stats
-  const normalizeDate = (d: any) => d instanceof Date ? d.toISOString().split("T")[0] : String(d).slice(0, 10);
-  const durationTimeline = (workoutTimeline as any[])
-    .filter((w: any) => w.duration_min > 0)
-    .map((w: any) => ({ date: normalizeDate(w.date), value: Number(w.duration_min), label: String(w.title) }));
-  const caloriesTimeline = (workoutTimeline as any[])
-    .filter((w: any) => w.calories != null)
-    .map((w: any) => ({ date: normalizeDate(w.date), value: Number(w.calories), label: String(w.title) }));
-  const cumulativeTimeline = (workoutTimeline as any[]).map((w: any, i: number) => ({
-    date: normalizeDate(w.date), value: i + 1, label: `#${i + 1}: ${String(w.title)}`,
-  }));
+  const normalizeDate = (d: string | Date) =>
+    d instanceof Date ? d.toISOString().split("T")[0] : String(d).slice(0, 10);
+  const durationTimeline = workoutTimeline
+    .filter((w) => Number(w.duration_min) > 0)
+    .map((w) => ({ date: normalizeDate(w.date), value: Number(w.duration_min), label: String(w.title) }));
+  const caloriesTimeline = workoutTimeline
+    .filter((w) => w.calories != null)
+    .map((w) => ({ date: normalizeDate(w.date), value: Number(w.calories), label: String(w.title) }));
+  const cumulativeTimeline = workoutTimeline.map((w, i: number) => ({
+    date: normalizeDate(w.date), value: i + 1, label: `#${i + 1}: ${String(w.title)}` }));
   const monthlyCountMap = new Map<string, number>();
-  for (const w of workoutTimeline as any[]) {
+  for (const w of workoutTimeline) {
     const month = normalizeDate(w.date).slice(0, 7);
     monthlyCountMap.set(month, (monthlyCountMap.get(month) || 0) + 1);
   }
@@ -556,8 +642,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
           icon: <Dumbbell className="h-4 w-4 text-primary" />,
           timelineData: cumulativeTimeline,
           timelineLabel: "Cumulative Workout Count",
-          timelineUnit: "workouts",
-        },
+          timelineUnit: "workouts" },
         {
           label: "Avg Duration",
           value: stats?.avg_duration_min ? `${Math.round(Number(stats.avg_duration_min))}m` : "—",
@@ -565,8 +650,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
           icon: <Clock className="h-4 w-4 text-blue-400" />,
           timelineData: durationTimeline,
           timelineLabel: "Duration Per Workout",
-          timelineUnit: "min",
-        },
+          timelineUnit: "min" },
         {
           label: "Training Span",
           value: `${totalWeeks} weeks`,
@@ -574,8 +658,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
           icon: <Calendar className="h-4 w-4 text-green-400" />,
           timelineData: monthlyCountTimeline,
           timelineLabel: "Workouts Per Month",
-          timelineUnit: "workouts",
-        },
+          timelineUnit: "workouts" },
         {
           label: "Avg Calories",
           value: calorieStats?.avg_calories ? `${Number(calorieStats.avg_calories)} kcal` : "—",
@@ -585,33 +668,36 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
           icon: <HeartPulse className="h-4 w-4 text-red-400" />,
           timelineData: caloriesTimeline,
           timelineLabel: "Calories Per Workout",
-          timelineUnit: "kcal",
-        },
+          timelineUnit: "kcal" },
       ]} />
 
       {/* Muscle Body Map + Charts Row */}
-      <MuscleBodyMapSection allMetrics={bodyMapVolumes as any} />
+      <MuscleBodyMapSection allMetrics={bodyMapVolumes} />
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <ExpandableChartCard title="Weekly Volume (kg)" icon={<Flame className="h-4 w-4 text-orange-400" />}>
           <VolumeChart data={(() => {
-            const vols = weeklyVolume as any[];
+            // The chart reads numbers; the driver may hand SUM back as a string.
+            const vols = weeklyVolume.map((v) => ({
+              week: normalizeDate(v.week),
+              total_volume: Number(v.total_volume),
+            }));
             if (vols.length <= 52) return vols;
             const recent = vols.slice(-52);
             const sorted = [...recent].sort((a, b) => Number(a.total_volume) - Number(b.total_volume));
             const median = Number(sorted[Math.floor(sorted.length / 2)]?.total_volume || 0);
             const cap = median * 3;
-            return recent.map(v => ({
+            return recent.map((v) => ({
               ...v,
-              total_volume: Math.min(Number(v.total_volume), cap),
+              total_volume: Math.min(v.total_volume, cap),
             }));
           })()} />
         </ExpandableChartCard>
 
         <ExpandableStrengthChart
-          data={(configurableProgression as any).progression || []}
-          availableExercises={(configurableProgression as any).exercises || []}
+          data={configurableProgression.progression || []}
+          availableExercises={configurableProgression.exercises || []}
         />
       </div>
 
@@ -624,12 +710,12 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <WorkoutCalendar data={calendar as any} />
+          <WorkoutCalendar data={calendar} />
         </CardContent>
       </Card>
 
-      {(weeklyFreqDetailed as any[]).length > 0 && (
-        <ClickableWeeklyFrequency data={weeklyFreqDetailed as any} />
+      {weeklyFreqDetailed.length > 0 && (
+        <ClickableWeeklyFrequency data={weeklyFreqDetailed} />
       )}
 
       {/* Top Exercises + Personal Records */}
@@ -644,7 +730,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
             </div>
           </CardHeader>
           <CardContent>
-            <ClickableTopExercises exercises={topExercises.map((e: any) => ({
+            <ClickableTopExercises exercises={topExercises.map((e) => ({
               exercise: String(e.exercise),
               workout_count: Number(e.workout_count),
               best_weight: Number(e.best_weight),
@@ -654,8 +740,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
                 : e.last_performed ? String(e.last_performed).slice(0, 10) : undefined,
               recent_weights: Array.isArray(e.recent_weights)
                 ? e.recent_weights.map(Number)
-                : [],
-            }))} />
+                : [] }))} />
           </CardContent>
         </Card>
 
@@ -667,11 +752,10 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ClickablePersonalRecords records={exercisePRs.map((pr: any) => ({
+            <ClickablePersonalRecords records={exercisePRs.map((pr) => ({
               exercise: String(pr.exercise),
               pr_weight: Number(pr.pr_weight),
-              reps_at_pr: pr.reps_at_pr ? Number(pr.reps_at_pr) : null,
-            }))} />
+              reps_at_pr: pr.reps_at_pr ? Number(pr.reps_at_pr) : null }))} />
           </CardContent>
         </Card>
       </div>
@@ -687,7 +771,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
           </CardHeader>
           <CardContent>
             <ClickableWorkoutList
-              workouts={(recent as any[]).map((w: any) => ({
+              workouts={recent.map((w) => ({
                 id: w.id,
                 title: w.title,
                 start_time: w.start_time,
@@ -696,8 +780,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
                 exercises: typeof w.exercises === "string" ? JSON.parse(w.exercises) : w.exercises,
                 avg_hr: w.avg_hr ? Number(w.avg_hr) : undefined,
                 max_hr: w.max_hr ? Number(w.max_hr) : undefined,
-                garmin_calories: w.garmin_calories ? Number(w.garmin_calories) : undefined,
-              }))}
+                garmin_calories: w.garmin_calories ? Number(w.garmin_calories) : undefined }))}
               totalCount={totalWorkoutCount}
             />
           </CardContent>
@@ -710,7 +793,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {programSplit.map((p: any) => (
+            {programSplit.map((p) => (
               <div key={p.program} className="flex items-center justify-between text-sm">
                 <span className="font-medium truncate mr-2">{p.program}</span>
                 <div className="flex items-center gap-2 shrink-0">
@@ -726,7 +809,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
       </div>
 
       {/* Monthly Volume by Muscle Group */}
-      {(monthlyMuscle as any[]).length > 0 && (
+      {monthlyMuscle.length > 0 && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -738,11 +821,10 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
             {(() => {
               const mgColors: Record<string, string> = {
                 Chest: "bg-red-500", Back: "bg-green-500", Shoulders: "bg-orange-500",
-                Arms: "bg-cyan-500", Legs: "bg-blue-500", Core: "bg-yellow-500",
-              };
+                Arms: "bg-cyan-500", Legs: "bg-blue-500", Core: "bg-yellow-500" };
               const monthMap = new Map<string, Map<string, number>>();
               const allGroups = new Set<string>();
-              for (const r of monthlyMuscle as any[]) {
+              for (const r of monthlyMuscle) {
                 if (!monthMap.has(r.month)) monthMap.set(r.month, new Map());
                 monthMap.get(r.month)!.set(r.muscle_group, Number(r.volume));
                 allGroups.add(r.muscle_group);
@@ -803,15 +885,14 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
       )}
 
       {/* Heart Rate (single card) */}
-      {(hrTrend as any[]).length > 0 && (
+      {hrTrend.length > 0 && (
         <ExpandableChartCard title="Avg Heart Rate per Workout" icon={<Heart className="h-4 w-4 text-red-400" />}>
-          <WorkoutHrTrendChart data={(hrTrend as any[]).map((r: any) => ({
+          <WorkoutHrTrendChart data={hrTrend.map((r) => ({
             date: normalizeDate(r.date),
             avg_hr: Number(r.avg_hr),
             max_hr: Number(r.max_hr),
             title: String(r.title),
-            duration_min: Number(r.duration_min),
-          }))} />
+            duration_min: Number(r.duration_min) }))} />
         </ExpandableChartCard>
       )}
     </div>

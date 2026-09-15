@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/sheet";
 import { AlertTriangle, Check, ChevronRight, Eye, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { GarminActivitySummary, GarminExerciseSet, GarminGear, GarminHrZone, GarminLap } from "@/lib/garmin-types";
+import { num, rec, str } from "@/lib/json";
 
 interface Activity {
   id: number;
@@ -85,11 +87,12 @@ function ActivityDetailSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [detail, setDetail] = useState<Record<string, any> | null>(null);
+  const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!activityId || !open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch for the newly opened selection; the remaining setState calls run after the response.
     setLoading(true);
     setDetail(null);
     fetch(`/api/activity/${activityId}`)
@@ -99,12 +102,12 @@ function ActivityDetailSheet({
       .finally(() => setLoading(false));
   }, [activityId, open]);
 
-  const summary = detail?.summary;
-  const splits = detail?.splits;
-  const hrZones = detail?.hr_zones;
-  const weather = detail?.weather;
-  const gear = detail?.gear;
-  const exerciseSets = detail?.exercise_sets;
+  const summary = (detail?.summary ?? {}) as GarminActivitySummary;
+  const splits = detail?.splits as { lapDTOs?: GarminLap[] } | undefined;
+  const hrZones = (Array.isArray(detail?.hr_zones) ? detail.hr_zones : []) as GarminHrZone[];
+  const weather = rec(detail?.weather);
+  const gear = (Array.isArray(detail?.gear) ? detail.gear : []) as GarminGear[];
+  const exerciseSets = detail?.exercise_sets as { exerciseSets?: GarminExerciseSet[] } | undefined;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -137,19 +140,19 @@ function ActivityDetailSheet({
             <div>
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Summary</h4>
               <DetailRow label="Start Time" value={summary.startTimeLocal ? formatTime(summary.startTimeLocal) : undefined} />
-              <DetailRow label="Duration" value={summary.duration ? formatDuration(summary.duration) : undefined} />
-              <DetailRow label="Distance" value={summary.distance ? formatDistance(summary.distance) : undefined} />
-              <DetailRow label="Calories" value={summary.calories ? `${Math.round(summary.calories)} kcal` : undefined} />
-              <DetailRow label="Avg Speed" value={summary.averageSpeed ? formatSpeed(summary.averageSpeed) : undefined} />
-              <DetailRow label="Max Speed" value={summary.maxSpeed ? formatSpeed(summary.maxSpeed) : undefined} />
-              {summary.averageSpeed > 0 && summary.distance > 1000 && (
-                <DetailRow label="Avg Pace" value={formatPace(summary.averageSpeed)} />
+              <DetailRow label="Duration" value={(summary.duration ?? 0) ? formatDuration((summary.duration ?? 0)) : undefined} />
+              <DetailRow label="Distance" value={(summary.distance ?? 0) ? formatDistance((summary.distance ?? 0)) : undefined} />
+              <DetailRow label="Calories" value={(summary.calories ?? 0) ? `${Math.round((summary.calories ?? 0))} kcal` : undefined} />
+              <DetailRow label="Avg Speed" value={(summary.averageSpeed ?? 0) ? formatSpeed((summary.averageSpeed ?? 0)) : undefined} />
+              <DetailRow label="Max Speed" value={(summary.maxSpeed ?? 0) ? formatSpeed((summary.maxSpeed ?? 0)) : undefined} />
+              {(summary.averageSpeed ?? 0) > 0 && (summary.distance ?? 0) > 1000 && (
+                <DetailRow label="Avg Pace" value={formatPace((summary.averageSpeed ?? 0))} />
               )}
-              <DetailRow label="Elevation Gain" value={summary.elevationGain ? `${Math.round(summary.elevationGain)} m` : undefined} />
-              <DetailRow label="Avg HR" value={summary.averageHR ? `${Math.round(summary.averageHR)} bpm` : undefined} />
-              <DetailRow label="Max HR" value={summary.maxHR ? `${Math.round(summary.maxHR)} bpm` : undefined} />
-              {summary.averageSwolf != null && (
-                <DetailRow label="Avg SWOLF" value={String(Math.round(summary.averageSwolf))} />
+              <DetailRow label="Elevation Gain" value={(summary.elevationGain ?? 0) ? `${Math.round((summary.elevationGain ?? 0))} m` : undefined} />
+              <DetailRow label="Avg HR" value={(summary.averageHR ?? 0) ? `${Math.round((summary.averageHR ?? 0))} bpm` : undefined} />
+              <DetailRow label="Max HR" value={(summary.maxHR ?? 0) ? `${Math.round((summary.maxHR ?? 0))} bpm` : undefined} />
+              {(summary.averageSwolf ?? null) != null && (
+                <DetailRow label="Avg SWOLF" value={String(Math.round(summary.averageSwolf ?? 0))} />
               )}
             </div>
 
@@ -157,7 +160,7 @@ function ActivityDetailSheet({
             {hrZones && Array.isArray(hrZones) && hrZones.length > 0 && (
               <div>
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">HR Zones</h4>
-                {hrZones.map((z: any, i: number) => (
+                {hrZones.map((z, i: number) => (
                   <div key={i} className="flex items-center gap-2 py-1">
                     <span className="text-xs text-muted-foreground w-14">
                       Z{z.zoneNumber ?? i + 1}
@@ -165,7 +168,7 @@ function ActivityDetailSheet({
                     <div className="flex-1 h-3 bg-accent rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary/70 rounded-full"
-                        style={{ width: `${Math.min(100, ((z.secsInZone || 0) / (summary.duration || 1)) * 100)}%` }}
+                        style={{ width: `${Math.min(100, ((z.secsInZone || 0) / ((summary.duration ?? 0) || 1)) * 100)}%` }}
                       />
                     </div>
                     <span className="text-xs font-mono w-12 text-right">
@@ -177,7 +180,7 @@ function ActivityDetailSheet({
             )}
 
             {/* Splits */}
-            {splits && Array.isArray(splits.lapDTOs) && splits.lapDTOs.length > 1 && (
+            {(splits?.lapDTOs?.length ?? 0) > 1 && splits?.lapDTOs && (
               <div>
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                   Splits ({splits.lapDTOs.length})
@@ -187,13 +190,13 @@ function ActivityDetailSheet({
                   <span className="text-muted-foreground font-medium">Distance</span>
                   <span className="text-muted-foreground font-medium">Time</span>
                   <span className="text-muted-foreground font-medium">Pace</span>
-                  {splits.lapDTOs.map((lap: any, i: number) => (
+                  {(splits.lapDTOs ?? []).map((lap, i: number) => (
                     <div key={i} className="contents">
                       <span className="font-mono text-muted-foreground">{i + 1}</span>
-                      <span className="font-mono">{formatDistance(lap.distance || 0)}</span>
-                      <span className="font-mono">{formatDuration(lap.duration || 0)}</span>
+                      <span className="font-mono">{formatDistance((lap.distance ?? 0) || 0)}</span>
+                      <span className="font-mono">{formatDuration((lap.duration ?? 0) || 0)}</span>
                       <span className="font-mono">
-                        {lap.averageSpeed ? formatPace(lap.averageSpeed) : "—"}
+                        {(lap.averageSpeed ?? 0) ? formatPace((lap.averageSpeed ?? 0)) : "—"}
                       </span>
                     </div>
                   ))}
@@ -207,7 +210,7 @@ function ActivityDetailSheet({
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                   Exercises ({exerciseSets.exerciseSets.length} sets)
                 </h4>
-                {exerciseSets.exerciseSets.slice(0, 20).map((set: any, i: number) => (
+                {(exerciseSets.exerciseSets ?? []).slice(0, 20).map((set, i: number) => (
                   <div key={i} className="flex justify-between text-xs py-1 border-b border-border/20 last:border-0">
                     <span className="text-muted-foreground truncate max-w-[200px]">
                       {set.exercises?.[0]?.category?.replace(/_/g, " ") || `Set ${i + 1}`}
@@ -226,11 +229,11 @@ function ActivityDetailSheet({
             {weather && (
               <div>
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Weather</h4>
-                <DetailRow label="Conditions" value={weather.weatherTypeDTO?.desc} />
-                <DetailRow label="Temperature" value={weather.temp != null ? `${Math.round((weather.temp - 32) * 5 / 9)}°C / ${Math.round(weather.temp)}°F` : undefined} />
-                <DetailRow label="Wind" value={weather.windSpeed != null ? `${(weather.windSpeed * 3.6).toFixed(0)} km/h` : undefined} />
-                {weather.windGust != null && weather.windGust > weather.windSpeed && (
-                  <DetailRow label="Gusts" value={`${(weather.windGust * 3.6).toFixed(0)} km/h`} />
+                <DetailRow label="Conditions" value={str(rec(weather.weatherTypeDTO)?.desc) ?? undefined} />
+                <DetailRow label="Temperature" value={num(weather.temp) != null ? `${Math.round(((num(weather.temp) ?? 0) - 32) * 5 / 9)}°C / ${Math.round(num(weather.temp) ?? 0)}°F` : undefined} />
+                <DetailRow label="Wind" value={num(weather.windSpeed) != null ? `${((num(weather.windSpeed) ?? 0) * 3.6).toFixed(0)} km/h` : undefined} />
+                {(num(weather.windGust) ?? 0) > (num(weather.windSpeed) ?? 0) && (
+                  <DetailRow label="Gusts" value={`${((num(weather.windGust) ?? 0) * 3.6).toFixed(0)} km/h`} />
                 )}
               </div>
             )}
@@ -239,7 +242,7 @@ function ActivityDetailSheet({
             {gear && Array.isArray(gear) && gear.length > 0 && (
               <div>
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Gear</h4>
-                {gear.map((g: any, i: number) => (
+                {gear.map((g, i: number) => (
                   <div key={i} className="text-sm py-1">
                     {g.displayName || g.customMakeModel || "Unknown gear"}
                   </div>
@@ -251,8 +254,8 @@ function ActivityDetailSheet({
             <div>
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Available Data</h4>
               <div className="flex flex-wrap gap-1">
-                {Object.keys(detail)
-                  .filter((k) => k !== "time_series" && detail[k] != null)
+                {Object.keys(detail ?? {})
+                  .filter((k) => k !== "time_series" && detail?.[k] != null)
                   .map((k) => (
                     <Badge key={k} variant="outline" className="text-[10px]">
                       {k.replace(/_/g, " ")}
@@ -347,7 +350,7 @@ function addSkippedPair(a: number, b: number) {
 export function DuplicateResolver() {
   const [pairs, setPairs] = useState<DupPair[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selections, setSelections] = useState<Record<FieldKey, "a" | "b">>({} as any);
+  const [selections, setSelections] = useState<Partial<Record<FieldKey, "a" | "b">>>({});
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(false);
   const [resolved, setResolved] = useState(0);
@@ -373,6 +376,7 @@ export function DuplicateResolver() {
     setLoading(false);
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; every setState it causes runs after the response.
   useEffect(() => { fetchDuplicates(); }, [fetchDuplicates]);
 
   const pair = pairs[currentIndex];
@@ -409,7 +413,7 @@ export function DuplicateResolver() {
     const pick = (field: FieldKey) => selections[field] || "a";
     const srcA = pair.a;
     const srcB = pair.b;
-    const mergedFields: any = {};
+    const mergedFields: Record<string, unknown> = {};
 
     const nameFrom = pick("name") === "a" ? srcA : srcB;
     mergedFields.activityName = nameFrom.name;
@@ -522,21 +526,21 @@ export function DuplicateResolver() {
 
         {/* Field rows */}
         <FieldRow label="Name" valueA={pair.a.name} valueB={pair.b.name}
-          selected={selections.name} onSelect={(s) => handleSelect("name", s)} />
+          selected={selections.name ?? "a"} onSelect={(s) => handleSelect("name", s)} />
         <FieldRow label="Type" valueA={pair.a.type?.replace(/_/g, " ")} valueB={pair.b.type?.replace(/_/g, " ")}
-          selected={selections.type} onSelect={(s) => handleSelect("type", s)} />
+          selected={selections.type ?? "a"} onSelect={(s) => handleSelect("type", s)} />
         <FieldRow label="Start Time" valueA={formatTime(pair.a.startTime)} valueB={formatTime(pair.b.startTime)}
-          selected={selections.startTime} onSelect={(s) => handleSelect("startTime", s)} />
+          selected={selections.startTime ?? "a"} onSelect={(s) => handleSelect("startTime", s)} />
         <FieldRow label="Duration" valueA={formatDuration(pair.a.duration)} valueB={formatDuration(pair.b.duration)}
-          selected={selections.duration} onSelect={(s) => handleSelect("duration", s)} />
+          selected={selections.duration ?? "a"} onSelect={(s) => handleSelect("duration", s)} />
         <FieldRow label="Distance" valueA={formatDistance(pair.a.distance)} valueB={formatDistance(pair.b.distance)}
-          selected={selections.distance} onSelect={(s) => handleSelect("distance", s)} />
+          selected={selections.distance ?? "a"} onSelect={(s) => handleSelect("distance", s)} />
         <FieldRow label="Calories" valueA={pair.a.calories ? `${pair.a.calories} kcal` : ""} valueB={pair.b.calories ? `${pair.b.calories} kcal` : ""}
-          selected={selections.calories} onSelect={(s) => handleSelect("calories", s)} />
+          selected={selections.calories ?? "a"} onSelect={(s) => handleSelect("calories", s)} />
         <FieldRow label="Heart Rate"
           valueA={pair.a.avgHr ? `${Math.round(pair.a.avgHr)} avg / ${Math.round(pair.a.maxHr || 0)} max` : ""}
           valueB={pair.b.avgHr ? `${Math.round(pair.b.avgHr)} avg / ${Math.round(pair.b.maxHr || 0)} max` : ""}
-          selected={selections.hr} onSelect={(s) => handleSelect("hr", s)} />
+          selected={selections.hr ?? "a"} onSelect={(s) => handleSelect("hr", s)} />
 
         {/* Actions */}
         <div className="flex gap-2 pt-3">

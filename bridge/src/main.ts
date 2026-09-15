@@ -12,7 +12,7 @@
  * is written the moment the forward is seen, BEFORE the finalize.
  */
 import { chromium } from "playwright";
-import { openDb, type Db } from "./db";
+import { ensureTable, openDb, type Db } from "./db";
 import { findMissed, lookbackStart, type GarminActivitySummary } from "./dedup";
 import { mainGarminClient, getActivitiesByDate, getActivity, downloadFit } from "./garmin";
 import { parseGarthDump, serializeGarthDump, isOauth2Expired, refreshOauth2, uploadFit } from "./facterino";
@@ -40,30 +40,13 @@ async function facterinoAccessToken(db: Db): Promise<string> {
 
 /** Recent Garmin activities not yet on Strava. */
 async function missed(db: Db, activities: GarminActivitySummary[]): Promise<GarminActivitySummary[]> {
-  // Bootstrap for a fresh database. A forker deploying this against an empty Postgres needs the
-  // ledger created on first run, so the statement stays.
-  //
-  // ⛔ BUT IT CANNOT BE FATAL, BECAUSE `IF NOT EXISTS` DOES NOT MEAN "SKIP THE PERMISSION CHECK".
-  // Postgres tests CREATE on the schema before it looks to see whether the table is already there,
-  // so a least-privilege application role is refused with 42501 even when the table exists and
-  // nothing needs creating. This estate's roles hold exactly the SELECT/INSERT they use and no
-  // DDL, which is the point of them, and that turned a no-op bootstrap line into a hard failure
-  // of every bridge run.
-  //
-  // Swallowing 42501 here hides nothing: the very next statement selects from this table, so a
-  // table that genuinely does not exist still fails immediately, with `relation does not exist`,
-  // which is the honest error for that condition. Any other error still throws.
-  try {
-    await db.query(
-      "CREATE TABLE IF NOT EXISTS strava_bridge_uploads (garmin_activity_id BIGINT PRIMARY KEY, strava_activity_id BIGINT, uploaded_at TIMESTAMPTZ DEFAULT NOW())",
-    );
-  } catch (err) {
-    if ((err as { code?: string })?.code !== "42501") throw err;
-    console.warn(
-      "[bridge] no CREATE privilege on the schema, so the ledger bootstrap was skipped. " +
-        "That is expected under a least-privilege role; the table must already exist.",
-    );
-  }
+  // Bootstrap for a fresh database, tolerating a role that may not create. The
+  // reasoning, and the reason it cannot be fatal, lives on ensureTable.
+  await ensureTable(
+    db,
+    "CREATE TABLE IF NOT EXISTS strava_bridge_uploads (garmin_activity_id BIGINT PRIMARY KEY, strava_activity_id BIGINT, uploaded_at TIMESTAMPTZ DEFAULT NOW())",
+    "ledger",
+  );
   const bridged = new Set<number>((await db.query("SELECT garmin_activity_id FROM strava_bridge_uploads")).rows.map((r: any) => Number(r.garmin_activity_id)));
   const extRows = await db.query("SELECT raw_json->>'external_id' AS e FROM strava_raw_data WHERE jsonb_typeof(raw_json)='object' AND raw_json->>'external_id' IS NOT NULL");
   const externalIdsJoined = extRows.rows.map((r: any) => r.e).filter(Boolean).join(" ");
@@ -75,6 +58,40 @@ async function recordUpload(db: Db, gid: number, sid: number): Promise<void> {
     "INSERT INTO strava_bridge_uploads VALUES ($1,$2,NOW()) ON CONFLICT (garmin_activity_id) DO UPDATE SET strava_activity_id=EXCLUDED.strava_activity_id, uploaded_at=NOW()",
     [gid, sid],
   );
+}
+
+/**
+ * Claim an activity in the ledger BEFORE its FIT is uploaded.
+ *
+ * The ledger is the only live guard against forwarding the same workout twice
+ * (soma#971), and it was written only after Strava confirmed the new activity.
+ * Between the upload returning and that write there is a window minutes wide,
+ * because the forward poll waits up to twelve: a crash inside it leaves the
+ * activity on Strava and absent from the ledger, and the next run forwards it
+ * again. Claiming first closes that window.
+ *
+ * `strava_activity_id` stays null until it is known, which costs no schema
+ * change and still excludes the activity from `findMissed`, since that only
+ * asks whether the id is in the ledger at all.
+ */
+async function claimUpload(db: Db, gid: number): Promise<void> {
+  await db.query(
+    "INSERT INTO strava_bridge_uploads (garmin_activity_id, uploaded_at) VALUES ($1, NOW()) ON CONFLICT (garmin_activity_id) DO NOTHING",
+    [gid],
+  );
+}
+
+/**
+ * Drop a claim for an activity that definitely did not reach Strava.
+ *
+ * Only for the cases where nothing was sent or nothing arrived: an upload that
+ * threw, or a forward that never appeared. A claim kept in either case would
+ * mean the workout is never retried, which is a worse outcome than the
+ * duplicate the claim exists to prevent. A claim is kept only when the upload
+ * returned, because then the bytes may already be on Garmin.
+ */
+async function releaseClaim(db: Db, gid: number): Promise<void> {
+  await db.query("DELETE FROM strava_bridge_uploads WHERE garmin_activity_id=$1 AND strava_activity_id IS NULL", [gid]);
 }
 
 async function main(): Promise<void> {
@@ -123,7 +140,16 @@ async function main(): Promise<void> {
       const { path: img, note: imgNote } = await imagePathFor(db, gid);
       const fit = await downloadFit(garmin, gid);
       const before = await ownActivityIds(page);
-      await uploadFit(token, fit, `bridge_${gid}.fit`); // facterino forwards to Strava
+      // Claim first: a crash after the upload would otherwise leave Strava with
+      // the activity and the ledger without it, and the next run would forward
+      // it again (soma#971).
+      await claimUpload(db, gid);
+      try {
+        await uploadFit(token, fit, `bridge_${gid}.fit`); // facterino forwards to Strava
+      } catch (e) {
+        await releaseClaim(db, gid); // nothing was sent, so it must stay retryable
+        throw e;
+      }
       let newId: string | null = null;
       for (let i = 0; i < FORWARD_TRIES; i++) {
         await new Promise((r) => setTimeout(r, FORWARD_POLL_MS));
@@ -131,8 +157,13 @@ async function main(): Promise<void> {
         try { diff = [...(await ownActivityIds(page))].filter((id) => !before.has(id)); } catch { continue; }
         if (diff.length) { newId = diff.sort((x, y) => Number(x) - Number(y)).at(-1)!; break; }
       }
-      if (!newId) { issues.push(`${name}: forward not seen in ${(FORWARD_TRIES * FORWARD_POLL_MS) / 60000}min`); continue; }
-      await recordUpload(db, gid, Number(newId)); // record BEFORE finalize → never a duplicate
+      if (!newId) {
+        // It never arrived, so it stays retryable, exactly as before the claim existed.
+        await releaseClaim(db, gid);
+        issues.push(`${name}: forward not seen in ${(FORWARD_TRIES * FORWARD_POLL_MS) / 60000}min`);
+        continue;
+      }
+      await recordUpload(db, gid, Number(newId)); // resolve the claim BEFORE finalize
       await setActivityDetails(page, Number(newId), { title: name, description: desc, imagePath: img, replacePhoto: true });
       pushed.push(`${name}->strava/${newId}${img ? "" : " NO_PHOTO"}`);
       if (!img) issues.push(`${name}: NO_PHOTO (${imgNote || "no image"}) — re-finalize with the refinalize-strava workflow`);

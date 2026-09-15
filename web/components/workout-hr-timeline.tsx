@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import type { ChartTooltipProps } from "@/lib/chart-types";
+import type { MouseHandlerDataParam } from "recharts/types/synchronisation/types";
 import {
   ComposedChart,
   Area,
@@ -14,12 +16,12 @@ import {
 
 // --- Types ---
 
-interface HrPoint {
+export interface HrPoint {
   elapsed_sec: number;
   hr: number;
 }
 
-interface ExerciseSet {
+export interface ExerciseSet {
   exercise: string | null;
   start_sec: number;
   duration_sec: number;
@@ -28,7 +30,7 @@ interface ExerciseSet {
   set_type: string;
 }
 
-interface HrZone {
+export interface HrZone {
   zone: number;
   seconds: number;
   low: number;
@@ -139,9 +141,17 @@ function groupExerciseBlocks(sets: ExerciseSet[], colorMap: Map<string, string>)
 
 // --- Custom Tooltip ---
 
-function UnifiedTooltip({ active, payload, zones, extendedBlocks }: any) {
-  if (!active || !payload?.[0]) return null;
-  const point = payload[0].payload;
+function UnifiedTooltip({
+  active,
+  payload,
+  zones,
+  extendedBlocks,
+}: ChartTooltipProps<HrPoint> & {
+  zones: HrZone[];
+  extendedBlocks: ExtendedBlock[];
+}) {
+  const point = payload?.[0]?.payload;
+  if (!active || !point) return null;
   const elapsedSec = point.elapsed_sec;
   const hr = point.hr;
   const zoneInfo = getZoneInfo(hr, zones);
@@ -306,11 +316,19 @@ export function WorkoutHrTimeline({ hrTimeline, exerciseSets, hrZones }: Workout
     return map;
   }, [exerciseBlocks, hrTimeline, exerciseSets]);
 
-  const handleMouseMove = useCallback((state: any) => {
-    if (state?.activePayload?.[0]) {
-      setHoveredTime(state.activePayload[0].payload.elapsed_sec);
-    }
-  }, []);
+  // recharts 3 dropped `activePayload` from this handler's argument, so the previous version of
+  // this callback silently stopped highlighting the hovered exercise block. The index it does
+  // pass addresses the same `hrTimeline` array the chart is plotting, and recharts 3 hands it
+  // over as a STRING (its TooltipIndex is `string | null`), so it has to be coerced.
+  const handleMouseMove = useCallback(
+    (state: MouseHandlerDataParam) => {
+      const idx = Number(state?.activeTooltipIndex);
+      if (!Number.isInteger(idx)) return;
+      const point = hrTimeline[idx];
+      if (point) setHoveredTime(point.elapsed_sec);
+    },
+    [hrTimeline],
+  );
 
   const handleMouseLeave = useCallback(() => {
     setHoveredTime(null);

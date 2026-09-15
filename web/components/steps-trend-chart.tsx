@@ -57,14 +57,14 @@ export function StepsTrendChart({ data, goal = 10000 }: { data: StepPoint[]; goa
             fontSize: "12px",
             color: "var(--card-foreground)",
           }}
-          labelFormatter={(d: any) =>
+          labelFormatter={(d) =>
             new Date(String(d)).toLocaleDateString("en-US", {
               weekday: "short",
               month: "short",
               day: "numeric",
             })
           }
-          formatter={(value: any) => [Number(value).toLocaleString(), "Steps"]}
+          formatter={(value) => [Number(value).toLocaleString(), "Steps"]}
         />
         <ReferenceLine y={goal} stroke="oklch(65% 0.18 220)" strokeDasharray="4 2" strokeOpacity={0.5}
           label={{ value: "10K goal", position: "insideTopRight", fontSize: 9, fill: "oklch(65% 0.18 220)" }} />

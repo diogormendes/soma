@@ -19,7 +19,7 @@ function formatPace(sec: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export function DeltaSimulator({ basePace, optimalPace, currentVdot, goalVdot, slider: controlledSlider, onSliderChange }: DeltaSimulatorProps) {
+export function DeltaSimulator({ basePace, optimalPace, currentVdot: _currentVdot, goalVdot: _goalVdot, slider: controlledSlider, onSliderChange }: DeltaSimulatorProps) {
   const [localSlider, setLocalSlider] = useState(1.0);
   const currentSlider = controlledSlider ?? localSlider;
   const handleChange = (v: number) => {

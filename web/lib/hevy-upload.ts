@@ -20,11 +20,13 @@ import { generateFit, uploadFit, renameActivity } from "hevy2garmin";
 import type { GarminClient } from "garmin-auth";
 import type { QueryFn } from "./db";
 import { populateGarminIds } from "./hevy-match";
+import type { HevyWorkout } from "./hevy-types";
 
 export interface UploadCandidate {
   hevyId: string;
   hevyTitle: string | null;
-  workout: any;         // raw Hevy workout
+  /** The raw Hevy workout this candidate was built from. */
+  workout: HevyWorkout;
   hrSamples: number[];
   hrSource: string;
   workoutDate: string | null;
@@ -116,7 +118,18 @@ export async function processWorkout(client: GarminClient, c: UploadCandidate): 
   try {
     // HEVY2GARMIN_TIMEZONE (IANA, e.g. Europe/Athens) stamps local_timestamp into
     // the FIT so Garmin forwards the correct local time to Strava. Empty = raw UTC.
-    const { fit } = generateFit(c.workout, c.hrSamples.length ? c.hrSamples : null, {
+    // hevy2garmin's generateFit requires an exercises array whose entries carry a title and a
+    // sets array; a stored workout can be missing any of the three, and passing that through
+    // used to reach the FIT writer untyped.
+    const workout = {
+      ...c.workout,
+      exercises: (c.workout.exercises ?? []).map((ex) => ({
+        ...ex,
+        title: ex.title ?? "",
+        sets: ex.sets ?? [],
+      })),
+    };
+    const { fit } = generateFit(workout, c.hrSamples.length ? c.hrSamples : null, {
       profile: { timezone: process.env.HEVY2GARMIN_TIMEZONE ?? "" },
       trainingLoad: trainingLoadForUpload(c.strengthLoad),
     });

@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
+import type { ChartName, ChartValue } from "@/lib/chart-types";
 
 interface RespirationEntry {
   date: string;
@@ -74,14 +75,14 @@ export function RespirationChart({ data }: { data: RespirationEntry[] }) {
             fontSize: "12px",
             color: "var(--card-foreground)",
           }}
-          formatter={(value: any, name: any) => {
+          formatter={(value: ChartValue, name: ChartName) => {
             const labels: Record<string, string> = {
               sleep: "Sleep",
               awake: "Awake",
               low: "Lowest",
               high: "Highest",
             };
-            return [`${value} br/min`, labels[name] || name];
+            return [`${value} br/min`, (name && labels[name]) || name];
           }}
         />
         <Area

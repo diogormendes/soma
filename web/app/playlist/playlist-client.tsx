@@ -4,7 +4,7 @@ import PlaylistOnboarding from "@/components/playlist-onboarding";
 import PlaylistBuilder from "@/components/playlist-builder";
 import LiveDjTab from "@/components/live-dj-tab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useState, useEffect } from "react";
+import { useState, useSyncExternalStore, useEffect } from "react";
 
 interface Props {
   spotifyConnected: boolean;
@@ -12,13 +12,16 @@ interface Props {
 
 export default function PlaylistClient({ spotifyConnected }: Props) {
   const [libraryAnalysed, setLibraryAnalysed] = useState(false);
-  const [activeTab, setActiveTab] = useState<"playlist" | "dj">("playlist");
-
-  // Restore persisted tab after mount to avoid hydration mismatch
-  useEffect(() => {
-    const stored = localStorage.getItem("playlist_active_tab");
-    if (stored === "dj") setActiveTab("dj");
-  }, []);
+  // The persisted tab is an external value: read through useSyncExternalStore so the server
+  // snapshot is "playlist" and the client's is the stored one, with no setState in an effect
+  // and no hydration mismatch (soma#958). A click wins over the stored value.
+  const storedTab = useSyncExternalStore(
+    () => () => {},
+    () => (localStorage.getItem("playlist_active_tab") === "dj" ? "dj" : "playlist"),
+    () => "playlist" as const,
+  );
+  const [pickedTab, setActiveTab] = useState<"playlist" | "dj" | null>(null);
+  const activeTab = pickedTab ?? storedTab;
 
   // Check library status on mount
   useEffect(() => {
@@ -31,9 +34,12 @@ export default function PlaylistClient({ spotifyConnected }: Props) {
       .catch(() => {});
   }, [spotifyConnected]);
 
+  // Persist only what the user picked. Writing on every render overwrote the stored tab during
+  // hydration (the server snapshot is "playlist"), so a restored "dj" was erased before the
+  // client snapshot could apply.
   useEffect(() => {
-    localStorage.setItem("playlist_active_tab", activeTab);
-  }, [activeTab]);
+    if (pickedTab) localStorage.setItem("playlist_active_tab", pickedTab);
+  }, [pickedTab]);
 
   const isReady = spotifyConnected && libraryAnalysed;
 

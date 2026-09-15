@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { MUSCLE_LABELS, MUSCLE_COLORS, type MuscleGroup } from "@/lib/muscle-groups";
@@ -17,9 +16,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import { Trophy, TrendingUp, Calendar, Dumbbell, Heart } from "lucide-react";
+  ResponsiveContainer } from "recharts";
+import { Trophy, TrendingUp, Dumbbell, Heart } from "lucide-react";
+import type { ChartTooltipProps } from "@/lib/chart-types";
 
 interface ExerciseData {
   name: string;
@@ -33,17 +32,20 @@ interface ExerciseData {
     maxVolume: { value: number; date: string; weight: number; reps: number };
     estimated1RM: { value: number; date: string; weight: number; reps: number };
   };
-  progression: {
-    date: string;
-    workoutId: string;
-    program: string;
-    maxWeight: number;
-    totalVolume: number;
-    maxReps: number;
-    estimated1RM: number;
-    avgHr: number | null;
-    sets: { weight: number; reps: number; type: string }[];
-  }[];
+  progression: ProgressionPoint[];
+}
+
+/** One session of this exercise, as the progression chart plots it. */
+interface ProgressionPoint {
+  date: string;
+  workoutId: string;
+  program: string;
+  maxWeight: number;
+  totalVolume: number;
+  maxReps: number;
+  estimated1RM: number;
+  avgHr: number | null;
+  sets: { weight: number; reps: number; type: string }[];
 }
 
 type ChartMetric = "maxWeight" | "totalVolume" | "estimated1RM" | "maxReps";
@@ -52,8 +54,7 @@ const METRIC_LABELS: Record<ChartMetric, string> = {
   maxWeight: "Max Weight",
   totalVolume: "Total Volume",
   estimated1RM: "Est. 1RM",
-  maxReps: "Max Reps",
-};
+  maxReps: "Max Reps" };
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
@@ -62,8 +63,7 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
-    ...(sameYear ? {} : { year: "2-digit" }),
-  });
+    ...(sameYear ? {} : { year: "2-digit" }) });
 }
 
 function RecordCard({ label, value, unit, context, icon }: {
@@ -88,9 +88,9 @@ function RecordCard({ label, value, unit, context, icon }: {
   );
 }
 
-function ChartTooltipContent({ active, payload }: any) {
-  if (!active || !payload?.[0]) return null;
-  const data = payload[0].payload;
+function ChartTooltipContent({ active, payload }: ChartTooltipProps<ProgressionPoint>) {
+  const data = payload?.[0]?.payload;
+  if (!active || !data) return null;
   return (
     <div className="bg-popover border border-border rounded-lg p-2 text-xs shadow-md">
       <div className="font-medium mb-1">{formatDate(data.date)}</div>
@@ -111,21 +111,21 @@ function ChartTooltipContent({ active, payload }: any) {
 
 export function ExerciseDetailModal({
   exerciseName,
-  onClose,
-}: {
+  onClose }: {
   exerciseName: string | null;
   onClose: () => void;
 }) {
-  const [data, setData] = useState<ExerciseData | null>(null);
+  const [fetched, setData] = useState<ExerciseData | null>(null);
+  // Nothing is shown for a closed modal, so the effect never has to clear it.
+  const data = exerciseName ? fetched : null;
   const [loading, setLoading] = useState(false);
   const [metric, setMetric] = useState<ChartMetric>("maxWeight");
   const [tab, setTab] = useState("records");
 
   useEffect(() => {
-    if (!exerciseName) {
-      setData(null);
-      return;
-    }
+    // Nothing selected: the modal shows nothing (derived below), so the effect just stops.
+    if (!exerciseName) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch for the newly opened selection; the remaining setState calls run after the response.
     setLoading(true);
     setTab("records");
     setMetric("maxWeight");
