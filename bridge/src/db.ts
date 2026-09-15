@@ -19,6 +19,41 @@ export interface Db {
   end(): Promise<void>;
 }
 
+/**
+ * Run a `CREATE TABLE IF NOT EXISTS` bootstrap under a role that may not create.
+ *
+ * The bootstrap itself is worth keeping: a forker deploying this against an
+ * empty Postgres needs the table on first run.
+ *
+ * ⛔ BUT IT CANNOT BE FATAL, BECAUSE `IF NOT EXISTS` DOES NOT MEAN "SKIP THE
+ * PERMISSION CHECK". Postgres tests CREATE on the schema before it looks to see
+ * whether the table is already there, so a least-privilege application role is
+ * refused with 42501 even when the table exists and nothing needs creating.
+ * This estate's roles hold exactly the SELECT/INSERT they use and no DDL, which
+ * is the point of them, and that turns a no-op bootstrap line into a hard
+ * failure of every run.
+ *
+ * Swallowing 42501 hides nothing: the caller's next statement reads or writes
+ * the same table, so a table that genuinely does not exist still fails at once
+ * with `relation does not exist`, which is the honest error for that condition.
+ * Anything else still throws.
+ *
+ * This lives here, once, because the lesson was learned for the ledger in
+ * main.ts and missed for the Strava session in strava-web.ts, and every live
+ * run died there for it (soma#972).
+ */
+export async function ensureTable(db: Db, ddl: string, what: string): Promise<void> {
+  try {
+    await db.query(ddl);
+  } catch (err) {
+    if ((err as { code?: string })?.code !== "42501") throw err;
+    console.warn(
+      `[bridge] no CREATE privilege on the schema, so the ${what} bootstrap was skipped. ` +
+        "That is expected under a least-privilege role; the table must already exist.",
+    );
+  }
+}
+
 /** The endpoint a gateway connection string points at, derived exactly as Neon's driver does. */
 function endpointFor(host: string): string {
   return `https://${host.replace(/^[^.]+\./, "api.")}/sql`;
