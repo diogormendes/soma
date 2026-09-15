@@ -1,6 +1,6 @@
 /** Fitness stream, DB half: fill fitness_trajectory from the Garmin raw tables. The formulas live in banister. */
 import type { QueryFn } from "./db";
-import { computeEfficiencyFactor, computeDecoupling, extractVo2max, aggregateLaps, splitIntoHalves } from "banister";
+import { computeEfficiencyFactor, computeDecoupling, extractVo2max, splitIntoHalves } from "banister";
 import { timeFromVdot, HM_M, type FitnessTrajectory } from "banister";
 const r = (x: number, n: number) => Number(x.toFixed(n)); // Python round(x, n) for n>=1
 export { computeEfficiencyFactor, computeDecoupling, extractVo2max, aggregateLaps, splitIntoHalves } from "banister";
@@ -80,8 +80,7 @@ export async function updateFitnessTrajectory(sql: QueryFn, targetDate: string):
     efficiency_factor: ef !== null ? r(ef, 10) : null,
     decoupling_pct: decouplingPct !== null ? r(decouplingPct, 2) : null,
     weight_kg: weightKg !== null ? r(weightKg, 1) : null,
-    race_prediction_seconds: racePredictionSeconds,
-  };
+    race_prediction_seconds: racePredictionSeconds };
 
   await sql`
     INSERT INTO fitness_trajectory

@@ -26,9 +26,9 @@ export async function GET() {
     `.catch(() => []);
 
     // Match activities to plan days
-    const matches = planDays.map((day: any) => {
-      const dayActivities = activities.filter((a: any) => a.date === day.day_date);
-      const runActivities = dayActivities.filter((a: any) => {
+    const matches = planDays.map((day) => {
+      const dayActivities = activities.filter((a) => a.date === day.day_date);
+      const runActivities = dayActivities.filter((a) => {
         const type = (a.data?.activityType?.typeKey || "").toLowerCase();
         return ["running", "trail_running", "treadmill_running"].includes(type);
       });
@@ -49,7 +49,7 @@ export async function GET() {
         let paceScore = 100;
         if (day.workout_steps && Array.isArray(day.workout_steps)) {
           const paceSteps = day.workout_steps.filter(
-            (s: any) => s.target_pace || s.target_pace_min || s.target_pace_low,
+            (s) => s.target_pace || s.target_pace_min || s.target_pace_low,
           );
           if (paceSteps.length > 0 && data.averageSpeed) {
             const actualPace = 1000 / data.averageSpeed; // sec/km

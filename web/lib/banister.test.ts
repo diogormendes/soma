@@ -2,7 +2,11 @@ import { describe, it, expect } from "vitest";
 import { detectAnchorRuns, banisterPredict, DEFAULT_PARAMS } from "./banister";
 import golden from "./banister.golden.json";
 
-const g = golden as any;
+// The fixture's shape, stated once: the tests read exactly these fields.
+const g = golden as {
+  detect_anchors: { date: string; vdot: number }[];
+  predict: { target: number; v: number }[];
+};
 
 describe("banister — Python parity (deterministic parts)", () => {
   it("detectAnchorRuns (HR + distance gate, VDOT, sorted by date)", () => {

@@ -6,7 +6,7 @@
  * its edit page. The facterino forward carries only the workout data.
  */
 import type { BrowserContext, Page } from "playwright";
-import type { Db } from "./db";
+import { ensureTable, type Db } from "./db";
 
 export const LOGIN_URL = "https://www.strava.com/login";
 const PHOTO_CDN = "dgtzuqphqg23d.cloudfront.net";
@@ -17,8 +17,11 @@ export function stravaCreds(): { email?: string; password?: string } {
 }
 
 async function ensureSessionTable(db: Db): Promise<void> {
-  await db.query(
+  // Tolerates the refused CREATE a least-privilege role gets; see ensureTable.
+  await ensureTable(
+    db,
     "CREATE TABLE IF NOT EXISTS strava_web_session (id INT PRIMARY KEY DEFAULT 1, cookies JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+    "Strava session",
   );
 }
 

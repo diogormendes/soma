@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 export function NavProgress() {
@@ -8,12 +8,12 @@ export function NavProgress() {
   const [loading, setLoading] = useState(false);
   const [prevPath, setPrevPath] = useState(pathname);
 
-  useEffect(() => {
-    if (pathname !== prevPath) {
-      setLoading(false);
-      setPrevPath(pathname);
-    }
-  }, [pathname, prevPath]);
+  // The navigation finished: state adjusted during render (React's derived-state pattern)
+  // instead of a setState inside an effect (soma#958).
+  if (pathname !== prevPath) {
+    setPrevPath(pathname);
+    setLoading(false);
+  }
 
   // Intercept all link clicks to show loading bar
   useEffect(() => {

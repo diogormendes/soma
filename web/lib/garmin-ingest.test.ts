@@ -22,7 +22,7 @@ describe("todayNyc", () => {
 });
 
 // Minimal mock QueryFn: routes by the SQL text of the first template chunk.
-function mockSql(hrRows: any[], partialRows: any[]): QueryFn {
+function mockSql(hrRows: unknown[], partialRows: unknown[]): QueryFn {
   return ((strings: TemplateStringsArray) => {
     const sql = strings.join(" ");
     if (sql.includes("heartRateValues")) return Promise.resolve(hrRows);

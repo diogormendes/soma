@@ -9,6 +9,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import type { ChartName, ChartValue } from "@/lib/chart-types";
 import {
   ResponsiveContainer,
   BarChart,
@@ -302,7 +303,7 @@ function SummaryStat({
 function MetricChart({
   config,
   data,
-  range,
+  range: _range,
 }: {
   config: MetricConfig;
   data: MetricResponse;
@@ -338,8 +339,7 @@ function MetricChart({
       : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const formatDateTooltip = (d: any) =>
+  const formatDateTooltip = (d: React.ReactNode) =>
     new Date(String(d)).toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",
@@ -390,9 +390,9 @@ function MetricChart({
               cursor={{ fill: "var(--muted)", opacity: 0.3 }}
               contentStyle={tooltipStyle}
               labelFormatter={formatDateTooltip}
-              formatter={(value: any, name: any) => {
+              formatter={(value: ChartValue, name: ChartName) => {
                 const lbl = name === "prev_value" ? `Prev ${label1}` : label1;
-                return [`${(config.format || ((v: number) => v.toLocaleString()))(value)}${unit}`, lbl];
+                return [`${(config.format || ((v: number) => v.toLocaleString()))(Number(value))}${unit}`, lbl];
               }}
             />
             <Legend
@@ -426,10 +426,10 @@ function MetricChart({
               cursor={{ fill: "var(--muted)", opacity: 0.3 }}
               contentStyle={tooltipStyle}
               labelFormatter={formatDateTooltip}
-              formatter={(value: any, name: any) => {
+              formatter={(value: ChartValue, name: ChartName) => {
                 const lbl =
                   name === "value" ? label1 : name === "value2" ? label2 : `Prev ${label1}`;
-                return [`${Math.round(value)}${unit}`, lbl];
+                return [`${Math.round(Number(value))}${unit}`, lbl];
               }}
             />
             <Legend
@@ -468,9 +468,9 @@ function MetricChart({
             <Tooltip
               contentStyle={tooltipStyle}
               labelFormatter={formatDateTooltip}
-              formatter={(value: any, name: any) => {
+              formatter={(value: ChartValue, name: ChartName) => {
                 const lbl = name === "prev_value" ? `Prev ${label1}` : label1;
-                return [`${(config.format || ((v: number) => String(Math.round(v))))(value)}${unit}`, lbl];
+                return [`${(config.format || ((v: number) => String(Math.round(v))))(Number(value))}${unit}`, lbl];
               }}
             />
             <Legend
@@ -510,14 +510,14 @@ function MetricChart({
             <Tooltip
               contentStyle={tooltipStyle}
               labelFormatter={formatDateTooltip}
-              formatter={(value: any, name: any) => {
+              formatter={(value: ChartValue, name: ChartName) => {
                 const lbl =
                   name === "value"
                     ? label1
                     : name === "value2"
                     ? label2
                     : `Prev ${label1}`;
-                return [`${(config.format || ((v: number) => String(Math.round(v))))(value)}${unit}`, lbl];
+                return [`${(config.format || ((v: number) => String(Math.round(v))))(Number(value))}${unit}`, lbl];
               }}
             />
             <Legend
@@ -578,14 +578,14 @@ function MetricChart({
             <Tooltip
               contentStyle={tooltipStyle}
               labelFormatter={formatDateTooltip}
-              formatter={(value: any, name: any) => {
+              formatter={(value: ChartValue, name: ChartName) => {
                 const lbl =
                   name === "value"
                     ? label1
                     : name === "value2"
                     ? label2
                     : `Prev ${label1}`;
-                return [`${Math.round(value).toLocaleString()}${unit}`, lbl];
+                return [`${Math.round(Number(value)).toLocaleString()}${unit}`, lbl];
               }}
             />
             <Legend

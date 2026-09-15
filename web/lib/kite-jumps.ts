@@ -65,25 +65,44 @@ export interface Jump {
   path?: Array<[number, number, number]>;
 }
 
+/**
+ * One `record` message as fitsdk decodes it. The SDK has no types of its own, and the fields
+ * present depend on the device, so every one is optional. `developerFields` is keyed by the
+ * definition order of the file's field descriptions, which is what `devIdx` maps names to.
+ */
+interface FitRecord {
+  timestamp?: Date;
+  positionLat?: number;
+  positionLong?: number;
+  enhancedSpeed?: number;
+  developerFields?: Record<number, unknown>;
+}
+
+/** One `field_description` message: the name a developer field was written under. */
+interface FitFieldDescription {
+  fieldName: string;
+}
+
 /** Decode a FIT file; return record messages + a developer-field name→index map. */
-function decodeRecords(bytes: Uint8Array): { records: any[]; devIdx: Record<string, number> } {
+function decodeRecords(bytes: Uint8Array): { records: FitRecord[]; devIdx: Record<string, number> } {
   const decoder = new Decoder(Stream.fromByteArray(bytes));
   const { messages } = decoder.read({ convertDateTimesToDates: true });
-  const fds = (messages.fieldDescriptionMesgs || []) as any[];
+  const fds = (messages.fieldDescriptionMesgs || []) as FitFieldDescription[];
   // fitsdk keys record developerFields by the field_description definition order.
   const devIdx: Record<string, number> = {};
   fds.forEach((f, i) => { devIdx[f.fieldName] = i; });
-  return { records: (messages.recordMesgs || []) as any[], devIdx };
+  return { records: (messages.recordMesgs || []) as FitRecord[], devIdx };
 }
 
 /** Per-record jump samples (heights > MIN). Port of _read_jump_samples. */
-function readJumpSamples(records: any[], devIdx: Record<string, number>): JumpSample[] {
+function readJumpSamples(records: FitRecord[], devIdx: Record<string, number>): JumpSample[] {
   const iH = devIdx.heights, iJ = devIdx.jump, iC = devIdx.jumpchart, iT = devIdx.timestamps;
   const samples: JumpSample[] = [];
   for (const rec of records) {
     const dev = rec.developerFields || {};
     const h = dev[iH];
     if (typeof h === "number" && h && h > MIN_JUMP_M) {
+      if (!rec.timestamp) continue;
       samples.push({
         time: rec.timestamp,
         height_m: Number(h),
@@ -151,7 +170,7 @@ export function groupJumps(samples: JumpSample[]): Jump[] {
 }
 
 /** (unix_ts, lat, lng) for every GPS-fixed record. Port of _read_track. */
-function readTrack(records: any[]): Array<[number, number, number]> {
+function readTrack(records: FitRecord[]): Array<[number, number, number]> {
   const track: Array<[number, number, number]> = [];
   for (const rec of records) {
     const lat = semicirclesToDeg(rec.positionLat);
@@ -194,7 +213,11 @@ export function parseSurfrDescription(description: string | null | undefined): S
   return out;
 }
 
-export interface KitePayload { jumps: Jump[]; summary: Record<string, any>; }
+/** The session summary: counts and maxima the caller renders, plus whatever Surfr contributed. */
+export interface KitePayload {
+  jumps: Jump[];
+  summary: Record<string, unknown>;
+}
 
 /** Rank + Surfr-enrich jumps and compute the session summary. Port of assemble_jumps. */
 export function assembleJumps(jumps: Jump[], surfrDescription: string | null = null): KitePayload {

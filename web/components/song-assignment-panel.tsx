@@ -63,8 +63,8 @@ interface SectionProps {
 }
 
 function SegmentSection({
-  seg, flatIdx, label, assignment, excludedIds, allPlacedIds, selectedGenres,
-  isFocused, showExcluded, onFocus, onPumpUp, onWidenBpm, onAddPlaylists, onReorder, onExclude, onPlace, onReplace, onPreview, onToggleExcluded, onBankChanged
+  seg, flatIdx: _flatIdx, label, assignment, excludedIds, allPlacedIds, selectedGenres,
+  isFocused: _isFocused, showExcluded, onFocus, onPumpUp, onWidenBpm, onAddPlaylists, onReorder, onExclude, onPlace, onReplace, onPreview, onToggleExcluded, onBankChanged
 }: SectionProps) {
   const songs = assignment?.songs ?? [];
   const excluded = songs.filter(s => excludedIds.has(s.track_id));

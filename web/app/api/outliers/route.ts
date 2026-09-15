@@ -1,5 +1,11 @@
 import { getDb } from "@/lib/db";
 import { NextResponse } from "next/server";
+import type {
+  SetEntry,
+  Outlier,
+  ChartPoint,
+  ExerciseResult,
+} from "@/lib/outlier-types";
 
 export const dynamic = "force-dynamic";
 
@@ -37,39 +43,6 @@ interface RawSetRow {
   set_type: string;
   weight_kg: number;
   reps: number;
-}
-
-interface SetEntry {
-  date: string;
-  weight: number;
-  reps: number;
-  workoutId: string;
-  workoutTitle: string;
-  exerciseIndex: number;
-  setIndex: number;
-}
-
-interface Outlier extends SetEntry {
-  localMedianWt: number | null;
-  flag: "weight_high" | "weight_low" | "reps_high";
-  reason: string;
-  suggestedValue: number;
-  globalMedianReps: number;
-}
-
-interface ChartPoint extends SetEntry {
-  localMedianWt: number | null;
-  isOutlier: boolean;
-}
-
-interface ExerciseResult {
-  name: string;
-  templateId: string | null;
-  outlierCount: number;
-  totalSets: number;
-  globalMedianReps: number;
-  outliers: Outlier[];
-  chartData: ChartPoint[];
 }
 
 /* ---------- main handler ---------- */

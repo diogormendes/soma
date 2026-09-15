@@ -24,9 +24,23 @@ export interface GarminActivitySummary {
 }
 
 /**
- * Recent Garmin activities not yet on Strava. Pure port of `_missed`'s filter:
- * exclude anything already in the bridge ledger, and anything whose id appears in
- * the concatenated Strava external_ids (a substring test, faithful to the Python).
+ * Recent Garmin activities not yet on Strava.
+ *
+ * Two filters, and they are not equal partners any more (soma#971).
+ *
+ * `bridgedIds` is the live guard: every activity the bridge has claimed or
+ * forwarded. It is claimed before the upload and resolved after Strava confirms
+ * the new activity, so a crash in between cannot lose it.
+ *
+ * `externalIdsJoined` is history only. It reads `strava_raw_data`, which was
+ * filled by the Strava API ingest that was retired to avoid a paid
+ * subscription. Nothing writes that table now and nothing will; its newest row
+ * is from 2026-06-30. It is kept because it costs one query and still excludes
+ * everything forwarded before that date, which matters if the ledger is ever
+ * rebuilt, but it cannot see anything recent. Do not read it as a second
+ * opinion about the present.
+ *
+ * The substring test is faithful to the Python it was ported from.
  */
 export function findMissed(
   activities: GarminActivitySummary[],

@@ -375,6 +375,7 @@ export default function DjHistoryChart({ hrHistory, playHistory }: Props) {
                   >
                     {/* Album art thumbnail */}
                     {entry.image_url && w > 50 && (
+                      // eslint-disable-next-line @next/next/no-img-element -- album art from Spotify's CDN, sized by the chart's own geometry; next/image would need a remote pattern per CDN host and cannot take these pixel sizes
                       <img
                         src={entry.image_url}
                         alt=""
@@ -557,6 +558,7 @@ function SongTooltip({
     >
       {/* Album art header */}
       {entry.image_url && (
+        // eslint-disable-next-line @next/next/no-img-element -- album art from Spotify's CDN in a hover card; see the note on the strip thumbnail above
         <img
           src={entry.image_url}
           alt=""

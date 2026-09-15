@@ -18,7 +18,7 @@ interface BootstrapData {
 
 // Hevy template ID prefix → slot mapping based on primaryMuscleGroup
 // Template IDs are stable Hevy identifiers. We map by known muscle groups.
-const MUSCLE_GROUP_TO_SLOT: Record<string, string[]> = {
+const _MUSCLE_GROUP_TO_SLOT: Record<string, string[]> = {
   lower: ["quadriceps", "glutes", "calves", "adductors", "abductors"],
   push: ["chest", "shoulders", "triceps"],
   pull: ["upper_back", "lats", "biceps", "forearms"],

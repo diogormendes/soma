@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { rec } from "@/lib/json";
 
 export async function GET(
   _req: Request,
@@ -18,14 +19,14 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const data: Record<string, any> = {};
+  const data: Record<string, unknown> = {};
   for (const row of rows) {
     data[row.endpoint_name] = row.raw_json;
   }
 
   // Extract time-series from details endpoint
   const detailsRow = data["details"];
-  let timeSeries: Array<{
+  const timeSeries: Array<{
     elapsed_sec: number;
     hr: number | null;
     speed: number | null;
@@ -39,15 +40,16 @@ export async function GET(
     dist_m: number | null;
   }> = [];
 
+  const detailRec = rec(detailsRow);
   if (
-    detailsRow?.metricDescriptors &&
-    detailsRow?.activityDetailMetrics
+    detailRec?.metricDescriptors &&
+    detailRec?.activityDetailMetrics
   ) {
-    const descriptors = detailsRow.metricDescriptors as Array<{
+    const descriptors = detailRec.metricDescriptors as Array<{
       key: string;
       metricsIndex: number;
     }>;
-    const metrics = detailsRow.activityDetailMetrics as Array<{
+    const metrics = detailRec.activityDetailMetrics as Array<{
       metrics: number[];
     }>;
 

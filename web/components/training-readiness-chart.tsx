@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { isLongRange, buildChartTicks, formatChartTick } from "@/lib/chart-utils";
+import type { ChartName, ChartValue } from "@/lib/chart-types";
 
 interface ReadinessDataPoint {
   date: string;
@@ -68,10 +69,11 @@ export function TrainingReadinessChart({ data }: { data: ReadinessDataPoint[] })
               day: "numeric",
             })
           }
-          formatter={(value: any, _name: any, item: any) => [
-            `${value} (${item.payload.level?.toLowerCase() || ""})`,
-            "Score",
-          ]}
+          formatter={(
+            value: ChartValue,
+            _name: ChartName,
+            item: { payload?: ReadinessDataPoint },
+          ) => [`${value} (${item.payload?.level?.toLowerCase() || ""})`, "Score"]}
         />
         <ReferenceLine
           y={70}

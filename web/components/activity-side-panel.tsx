@@ -29,11 +29,12 @@ interface ActivityMatch {
 interface ActivitySidePanelProps {
   match: ActivityMatch | null;
   onClose: () => void;
+  // Every plan-day column is nullable in the table, and the reads below already guard on them.
   planDay?: {
-    run_type: string;
-    run_title: string;
-    target_distance_km: number;
-    workout_steps: any[];
+    run_type: string | null;
+    run_title: string | null;
+    target_distance_km: number | null;
+    workout_steps: unknown;
   };
 }
 
@@ -251,14 +252,14 @@ export function ActivitySidePanel({
                             Distance
                           </td>
                           <td className="px-3 py-1.5 text-right tabular-nums">
-                            {planDay.target_distance_km.toFixed(1)} km
+                            {(planDay.target_distance_km ?? 0).toFixed(1)} km
                           </td>
                           <td className="px-3 py-1.5 text-right tabular-nums">
                             {match.activity.distance_km} km
                           </td>
                         </tr>
                         {(() => {
-                          const s = planDay.workout_steps?.[0];
+                          const s = Array.isArray(planDay.workout_steps) ? planDay.workout_steps[0] : undefined;
                           const targetPace = s?.target_pace ?? s?.target_pace_min ?? s?.target_pace_low;
                           return targetPace && match.activity.avg_pace_sec_km ? (
                             <tr className="border-b border-border/30">

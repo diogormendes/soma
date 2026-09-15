@@ -40,7 +40,7 @@ interface RecentActivity {
   duration_min: number;
   calories: number | null;
   // One of these will be set depending on source
-  activity_id?: string;
+  activity_id?: string | null;
   workout_id?: string;
 }
 

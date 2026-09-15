@@ -96,7 +96,7 @@ export default function PlaylistRunSelector({ onSelect }: Props) {
           {totalPlans === 0 ? (
             <div className="text-xs text-muted-foreground pt-4 text-center space-y-1">
               <p>No saved plans yet.</p>
-              <p className="text-muted-foreground/60">Build a plan in the editor and click "Save Plan", or sync Garmin structured workouts.</p>
+              <p className="text-muted-foreground/60">Build a plan in the editor and click &quot;Save Plan&quot;, or sync Garmin structured workouts.</p>
             </div>
           ) : (
             <>

@@ -3,10 +3,18 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import type { MealItem } from "@/lib/meal-types";
 
 interface Meal {
   meal_slot: string;
-  items: any[];
+  items: MealItem[] | null;
+}
+
+/** The ingredient rows this component looks names and raw-ness up in. */
+interface PrepIngredient {
+  id: string;
+  name?: string | null;
+  is_raw?: boolean | null;
 }
 
 interface PrepItem {
@@ -25,11 +33,19 @@ const SLOT_LABELS: Record<string, string> = {
   during_workout: "workout",
 };
 
-export function PrepSummary({ meals, ingredients, desktop }: { meals: Meal[]; ingredients?: any[]; desktop?: boolean }) {
+export function PrepSummary({
+  meals,
+  ingredients,
+  desktop,
+}: {
+  meals: Meal[];
+  ingredients?: PrepIngredient[];
+  desktop?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   const ingLookup = useMemo(() => {
-    const m = new Map<string, any>();
+    const m = new Map<string, PrepIngredient>();
     for (const ing of (ingredients || [])) m.set(ing.id, ing);
     return m;
   }, [ingredients]);
@@ -72,7 +88,7 @@ export function PrepSummary({ meals, ingredients, desktop }: { meals: Meal[]; in
         meals: g.meals,
       }))
       .sort((a, b) => b.totalGrams - a.totalGrams);
-  }, [meals]);
+  }, [meals, ingLookup]);
 
   if (prepItems.length === 0) return null;
 

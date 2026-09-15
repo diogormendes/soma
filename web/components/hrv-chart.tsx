@@ -78,7 +78,7 @@ export function HRVChart({ data }: { data: HRVDataPoint[] }) {
               day: "numeric",
             })
           }
-          formatter={(value: any, name: any) => {
+          formatter={(value, name) => {
             const label = name === "nightly" ? "Last Night" : "Weekly Avg";
             return [`${value} ms`, label];
           }}

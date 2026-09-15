@@ -1,23 +1,23 @@
 "use client";
 
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { MACRO_COLORS } from "soma-style/colors";
-import { AlertTriangle, Lock, Moon, Footprints, Dumbbell, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Lock, Moon, Footprints, Dumbbell, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { MealCard } from "@/components/meal-card";
 import { DrinkLogger } from "@/components/drink-logger";
 import { ActivitySelector } from "@/components/activity-selector";
 import { PrepSummary } from "@/components/prep-summary";
 import type { SlotBudgets } from "@/lib/nutrition-types";
+import type { MealItem } from "@/lib/meal-types";
 
 // ── Types ─────────────────────────────────────────────────────
 
-interface NutritionPlan {
+interface _NutritionPlan {
   date: string;
-  plan: Record<string, any> | null;
+  plan: Record<string, unknown> | null;
   target_calories: number | null;
   target_protein: number | null;
   target_carbs: number | null;
@@ -30,7 +30,7 @@ interface NutritionPlan {
   adjustment_reason: string | null;
   sleep_quality_score: number | null;
   training_day_type: string | null;
-  planned_workouts: any | null;
+  planned_workouts: unknown;
   step_goal: number | null;
   is_refeed: boolean;
   is_diet_break: boolean;
@@ -46,7 +46,7 @@ interface Meal {
   preset_name: string | null;
   preset_tags: string[] | null;
   portion_multiplier: number;
-  items: any;
+  items: MealItem[];
   calories: number;
   protein: number;
   carbs: number;
@@ -71,14 +71,14 @@ interface Drink {
   logged_at: string;
 }
 
-interface Preset {
+interface _Preset {
   id: string;
   name: string;
-  items: any;
+  items: MealItem[];
   tags: string[] | null;
 }
 
-interface TrainingDay {
+interface _TrainingDay {
   run_type: string | null;
   run_title: string | null;
   target_distance_km: number | null;
@@ -88,14 +88,14 @@ interface TrainingDay {
   plan_name: string | null;
 }
 
-interface HealthSummary {
+interface _HealthSummary {
   total_steps: number | null;
   bmr_kilocalories: number | null;
   active_kilocalories: number | null;
   sleep_time_seconds: number | null;
 }
 
-interface SleepDetail {
+interface _SleepDetail {
   total_sleep_seconds: number | null;
   deep_sleep_seconds: number | null;
   sleep_score: number | null;
@@ -159,8 +159,7 @@ function MacroBar({
   floor,
   ceiling,
   markers,
-  unit = "g",
-}: {
+  unit = "g" }: {
   label: string;
   current: number;
   target: number;
@@ -318,8 +317,7 @@ export function NutritionDashboard({
   ingredients,
   training,
   health,
-  sleep,
-}: NutritionDashboardProps) {
+  sleep }: NutritionDashboardProps) {
   const [plan, setPlan] = useState(initialPlan);
   const [meals, setMeals] = useState<Meal[]>(initialMeals);
   const [drinks, setDrinks] = useState<Drink[]>(initialDrinks);
@@ -329,7 +327,7 @@ export function NutritionDashboard({
   // workoutEnabled removed — activity toggles now flow through API via ActivitySelector
   const [runEnabled, setRunEnabled] = useState<boolean>(initialPlan?.run_enabled ?? true);
   const [selectedWorkouts, setSelectedWorkouts] = useState<string[]>(initialPlan?.selected_workouts ?? []);
-  const [gymCalories, setGymCalories] = useState<number>(0);
+  const [_gymCalories, setGymCalories] = useState<number>(0);
   const [skippedSlots, setSkippedSlots] = useState<string[]>(initialPlan?.skipped_slots ?? []);
   const [slotBudgets, setSlotBudgets] = useState<SlotBudgets | null>(null);
   const [budgetExpanded, setBudgetExpanded] = useState(false);
@@ -390,8 +388,7 @@ export function NutritionDashboard({
       const res = await fetch("/api/nutrition/rebalance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, changedSlot, lockedSlots: Array.from(lockedSlots) }),
-      });
+        body: JSON.stringify({ date, changedSlot, lockedSlots: Array.from(lockedSlotsRef.current) }) });
       if (!res.ok) return;
       const data = await res.json();
       if (data.changes && data.changes.length > 0) {
@@ -415,6 +412,10 @@ export function NutritionDashboard({
     refreshData();
   }, [refreshData]);
 
+  // The rebalance callback reads the locked slots through a ref written after render, so its
+  // identity stays stable while the value it sends is always the current one (soma#958).
+  const lockedSlotsRef = useRef<Set<string>>(new Set());
+
   // Locked slots (won't be rebalanced) — persisted in localStorage per date
   const [lockedSlots, setLockedSlots] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -423,6 +424,10 @@ export function NutritionDashboard({
       return stored ? new Set(JSON.parse(stored)) : new Set();
     } catch { return new Set(); }
   });
+  useEffect(() => {
+    lockedSlotsRef.current = lockedSlots;
+  }, [lockedSlots]);
+
   const handleLockToggle = useCallback((slot: string) => {
     setLockedSlots(prev => {
       const next = new Set(prev);
@@ -479,7 +484,7 @@ export function NutritionDashboard({
   const targetFiber = breakdown?.adjustedTargets?.fiber ?? (Number(plan?.target_fiber) || 0);
   const remainingCal = targetCal - consumedCal;
 
-  const adjustmentReason =
+  const _adjustmentReason =
     plan?.adjustment_reason ??
     (plan?.plan ? (plan.plan as Record<string, any>).adjustment_reason : null);
 
@@ -510,8 +515,7 @@ export function NutritionDashboard({
       const res = await fetch("/api/nutrition/close-day", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date }),
-      });
+        body: JSON.stringify({ date }) });
       if (res.ok) {
         await refreshData();
       }
@@ -539,8 +543,7 @@ export function NutritionDashboard({
         await fetch("/api/nutrition/skip-slot", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date, slot }),
-        });
+          body: JSON.stringify({ date, slot }) });
       }
     } finally {
       setClosing(false);
@@ -572,8 +575,7 @@ export function NutritionDashboard({
               {new Date(date + "T12:00:00").toLocaleDateString("en-US", {
                 weekday: "long",
                 month: "short",
-                day: "numeric",
-              })}
+                day: "numeric" })}
             </h1>
             {isClosed && (
               <Badge variant="secondary" className="gap-1">
@@ -587,8 +589,7 @@ export function NutritionDashboard({
                   await fetch("/api/nutrition/reopen-day", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ date }),
-                  });
+                    body: JSON.stringify({ date }) });
                   await refreshData();
                 }}
                 className="text-[10px] text-muted-foreground hover:text-foreground underline ml-1"
@@ -997,51 +998,43 @@ export function NutritionDashboard({
                   "1.6": "Hypertrophy minimum (Schoenfeld 2018 meta)",
                   "1.8": "Common cutting target",
                   "2.0": "Conservative high — diminishing returns past this",
-                  "2.2": "Aggressive cut sweet spot — best muscle preservation in deficit",
-                };
+                  "2.2": "Aggressive cut sweet spot — best muscle preservation in deficit" };
                 const fatDescs: Record<string, string> = {
                   "0.6": "Hormone-risk floor — going below for long deficits suppresses test/T3",
                   "0.8": "Sufficient for hormones, leaves carbs for training (cutting consensus)",
-                  "1.0": "Maintenance/bulk target — no extra hormonal benefit in deficit",
-                };
+                  "1.0": "Maintenance/bulk target — no extra hormonal benefit in deficit" };
                 const proteinMarkers: MacroMarker[] = w > 0
                   ? [1.6, 1.8, 2.0, 2.2].map((g) => ({
                       value: w * g,
                       label: g.toFixed(1),
                       optimal: g === 2.2,
-                      description: proteinDescs[g.toFixed(1)],
-                    }))
+                      description: proteinDescs[g.toFixed(1)] }))
                   : [{ value: targetProtein, label: "target", optimal: true }];
                 const fatMarkers: MacroMarker[] = w > 0
                   ? [0.6, 0.8, 1.0].map((g) => ({
                       value: w * g,
                       label: g.toFixed(1),
                       optimal: g === 0.8,
-                      description: fatDescs[g.toFixed(1)],
-                    }))
+                      description: fatDescs[g.toFixed(1)] }))
                   : [{ value: targetFat, label: "target", optimal: true }];
                 const carbMarkers: MacroMarker[] = [
                   {
                     value: 100, label: "min",
-                    description: "Health floor — keto-ish below this",
-                  },
+                    description: "Health floor — keto-ish below this" },
                   {
                     value: targetCarbs, label: "target",
                     optimal: true,
-                    description: "Today's matrix-computed carb target",
-                  },
+                    description: "Today's matrix-computed carb target" },
                 ].sort((a, b) => a.value - b.value);
                 const fiberMarkers: MacroMarker[] = [
                   {
                     value: targetFiber || 30, label: "target",
                     optimal: true,
-                    description: "Daily fiber target — gut health + satiety",
-                  },
+                    description: "Daily fiber target — gut health + satiety" },
                   {
                     value: 60, label: "ceil",
                     kind: "hardCeiling",
-                    description: "GI distress threshold — past this risks bloating/cramps",
-                  },
+                    description: "GI distress threshold — past this risks bloating/cramps" },
                 ];
                 return (
                   <div className="grid gap-2 pt-1">
@@ -1166,8 +1159,7 @@ export function NutritionDashboard({
                   const res = await fetch("/api/nutrition/copy-day", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ from_date: yesterday, to_date: date }),
-                  });
+                    body: JSON.stringify({ from_date: yesterday, to_date: date }) });
                   if (res.ok) {
                     await refreshData();
                   }
@@ -1194,8 +1186,7 @@ export function NutritionDashboard({
             fiber: meals.reduce((s, m) => s + Number(m.fiber || 0), 0),
             calories:
               meals.reduce((s, m) => s + Number(m.calories || 0), 0) +
-              drinks.reduce((s, d) => s + Number(d.calories || 0), 0),
-          };
+              drinks.reduce((s, d) => s + Number(d.calories || 0), 0) };
           const userWeightKg = (breakdown as any)?.weightKg ?? null;
           const todayTotalBurn = (breakdown as any)?.totalBurn ?? null;
           return (

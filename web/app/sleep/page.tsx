@@ -17,6 +17,7 @@ import { RespirationChart } from "@/components/respiration-chart";
 import { TimeRangeSelector } from "@/components/time-range-selector";
 import { rangeToDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
+import type { Numeric } from "@/lib/json";
 import { freshness, staleHeadline, todayKey, RECOVERY_MAX_AGE_DAYS } from "banister";
 import {
   Moon,
@@ -30,8 +31,89 @@ import {
   Activity,
   Gauge,
 } from "lucide-react";
+import { cutoffIso } from "@/lib/date-range";
 
 export const revalidate = 300;
+
+/** The shapes the queries below select. `Numeric` is a column the driver may return as a string. */
+interface SleepTrendRow {
+  date: string;
+  deep: Numeric;
+  light: Numeric;
+  rem: Numeric;
+  awake: Numeric;
+}
+
+interface SleepScoreRow {
+  date: string;
+  score: Numeric;
+}
+
+interface RhrRow {
+  date: string;
+  rhr: Numeric;
+}
+
+interface HrvRow {
+  date: string;
+  weekly_avg: Numeric;
+  last_night_avg: Numeric;
+  status: string | null;
+}
+
+interface ReadinessRow {
+  date: string;
+  score: Numeric;
+  level: string | null;
+  sleep_score: Numeric;
+  hrv_pct: Numeric;
+  hrv_feedback: string | null;
+  stress_pct: Numeric;
+  acwr_pct: Numeric;
+  recovery_pct: Numeric;
+  sleep_history_pct: Numeric;
+}
+
+interface StressRow {
+  date: string;
+  avg_stress: Numeric;
+  max_stress: Numeric;
+}
+
+interface BodyBatteryRow {
+  date: string;
+  charged: Numeric;
+  drained: Numeric;
+}
+
+interface RespirationRow {
+  date: string;
+  awake_resp: Numeric;
+  sleep_resp: Numeric;
+  low_resp: Numeric;
+  high_resp: Numeric;
+}
+
+interface Spo2Row {
+  date: string;
+  avg_spo2: Numeric;
+  low_spo2: Numeric;
+  sleep_spo2: Numeric;
+}
+
+interface WeekdayWeekendRow {
+  day_type: string;
+  avg_hours: Numeric;
+  avg_score: Numeric;
+  avg_deep_pct: Numeric;
+  nights: Numeric;
+}
+
+interface SleepScheduleRow {
+  date: string;
+  start_ts: Numeric;
+  end_ts: Numeric;
+}
 
 async function getSleepStats(cutoff: string) {
   const sql = getDb();
@@ -69,7 +151,7 @@ async function getSleepTrend(cutoff: string) {
       AND date >= ${cutoff}
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as SleepTrendRow[];
 }
 
 async function getSleepScores(cutoff: string) {
@@ -85,7 +167,7 @@ async function getSleepScores(cutoff: string) {
       AND date >= ${cutoff}
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as SleepScoreRow[];
 }
 
 async function getRHRTrend(cutoff: string) {
@@ -101,7 +183,7 @@ async function getRHRTrend(cutoff: string) {
       AND date >= ${cutoff}
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as RhrRow[];
 }
 
 async function getLastNightSleep() {
@@ -143,7 +225,7 @@ async function getHRVTrend(cutoff: string) {
       AND date >= ${cutoff}
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as HrvRow[];
 }
 
 async function getTrainingReadiness(cutoff: string) {
@@ -166,7 +248,7 @@ async function getTrainingReadiness(cutoff: string) {
       AND date >= ${cutoff}
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as ReadinessRow[];
 }
 
 async function getStressTrend(cutoff: string) {
@@ -183,7 +265,7 @@ async function getStressTrend(cutoff: string) {
       AND date >= ${cutoff}
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as StressRow[];
 }
 
 async function getBodyBatteryTrend(cutoff: string) {
@@ -200,7 +282,7 @@ async function getBodyBatteryTrend(cutoff: string) {
       AND date >= ${cutoff}
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as BodyBatteryRow[];
 }
 
 async function getRespirationTrend(cutoff: string) {
@@ -218,7 +300,7 @@ async function getRespirationTrend(cutoff: string) {
       AND date >= ${cutoff}
     ORDER BY date ASC
   `;
-  return rows;
+  return rows as RespirationRow[];
 }
 
 async function getSpO2Trend(cutoff: string) {
@@ -250,7 +332,7 @@ async function getSpO2Trend(cutoff: string) {
       )
     ORDER BY 1 ASC
   `;
-  return rows;
+  return rows as Spo2Row[];
 }
 
 async function getSleepSchedule(cutoff: string) {
@@ -267,7 +349,7 @@ async function getSleepSchedule(cutoff: string) {
       AND date >= ${cutoff}
     ORDER BY date ASC
   `;
-  return rows.map((r: any) => {
+  return (rows as SleepScheduleRow[]).map((r) => {
     const startMs = Number(r.start_ts);
     const endMs = Number(r.end_ts);
     const startDate = new Date(startMs);
@@ -300,8 +382,8 @@ async function getWeekdayWeekendSleep(cutoff: string) {
       AND date >= ${cutoff}
     GROUP BY day_type
   `;
-  const result: Record<string, any> = {};
-  for (const r of rows) result[r.day_type] = r;
+  const result: Record<string, WeekdayWeekendRow> = {};
+  for (const r of rows as WeekdayWeekendRow[]) result[r.day_type] = r;
   return result;
 }
 
@@ -381,7 +463,7 @@ function qualityBadge(quality: string | null) {
 export default async function SleepPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const params = await searchParams;
   const rangeDays = rangeToDays(params.range);
-  const cutoff = new Date(Date.now() - rangeDays * 86400000).toISOString().split("T")[0];
+  const cutoff = cutoffIso(rangeDays);
 
   const [stats, sleepTrend, scores, rhrTrend, lastNight, bodyBattery, hrvTrend, trainingReadiness, stressTrend, sleepSchedule, respiration, spo2Trend, weekdayWeekend, sleepRegularity] =
     await Promise.all([
@@ -521,30 +603,40 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
       {/* Charts Row 1: Sleep Stages + Score */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <ExpandableChartCard title="Sleep Stages">
-          <SleepStagesChart data={sleepTrend as any} />
+          <SleepStagesChart
+            data={sleepTrend.map((d) => ({
+              date: d.date,
+              deep: Number(d.deep ?? 0),
+              light: Number(d.light ?? 0),
+              rem: Number(d.rem ?? 0),
+              awake: Number(d.awake ?? 0),
+            }))}
+          />
         </ExpandableChartCard>
 
         <ExpandableChartCard title="Sleep Score Trend">
-          <SleepScoreChart data={scores as any} />
+          <SleepScoreChart
+            data={scores.map((d) => ({ date: d.date, score: Number(d.score ?? 0) }))}
+          />
         </ExpandableChartCard>
       </div>
 
       {/* Sleep Schedule */}
-      {(sleepSchedule as any[]).length > 0 && (
+      {sleepSchedule.length > 0 && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <Sunrise className="h-4 w-4 text-yellow-400" />
               Sleep Schedule
               {(() => {
-                const recent = (sleepSchedule as any[]).slice(-7);
+                const recent = sleepSchedule.slice(-7);
                 // Normalize bedtime: hours before 18 are "next day" (add 24)
-                const avgBedNorm = recent.reduce((s: number, d: any) => {
+                const avgBedNorm = recent.reduce((s: number, d) => {
                   const h = d.bedtimeHour;
                   return s + (h < 18 ? h + 24 : h);
                 }, 0) / recent.length;
                 const avgBed = avgBedNorm >= 24 ? avgBedNorm - 24 : avgBedNorm;
-                const avgWake = recent.reduce((s: number, d: any) => s + d.wakeHour, 0) / recent.length;
+                const avgWake = recent.reduce((s: number, d) => s + d.wakeHour, 0) / recent.length;
                 const fmtH = (h: number) => {
                   const hr = Math.floor(h);
                   const min = Math.round((h - hr) * 60);
@@ -561,7 +653,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <SleepScheduleChart data={sleepSchedule as any[]} />
+            <SleepScheduleChart data={sleepSchedule} />
             <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <span className="w-3 h-1 rounded" style={{ background: "hsl(250, 60%, 55%)", display: "inline-block" }} /> Bedtime
@@ -685,7 +777,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               {(() => {
-                const latest = trainingReadiness[trainingReadiness.length - 1] as any;
+                const latest = trainingReadiness[trainingReadiness.length - 1];
                 if (!latest) return null;
                 const levelColors: Record<string, string> = {
                   PRIME: "text-green-400",
@@ -698,7 +790,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
                     <div>
                       <div className="text-xs text-muted-foreground">Score</div>
                       <div className="text-2xl font-bold">{latest.score}</div>
-                      <div className={`text-xs capitalize ${levelColors[latest.level] || ""}`}>
+                      <div className={`text-xs capitalize ${(latest.level && levelColors[latest.level]) || ""}`}>
                         {latest.level?.toLowerCase()}
                       </div>
                     </div>
@@ -721,7 +813,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
             </div>
             {/* Component Breakdown Bars */}
             {(() => {
-              const latest = trainingReadiness[trainingReadiness.length - 1] as any;
+              const latest = trainingReadiness[trainingReadiness.length - 1];
               if (!latest) return null;
               const factors = [
                 { label: "HRV", value: latest.hrv_pct, color: "bg-green-500" },
@@ -730,7 +822,9 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
                 { label: "Recovery", value: latest.recovery_pct, color: "bg-purple-500" },
                 { label: "Sleep History", value: latest.sleep_history_pct, color: "bg-indigo-500" },
                 { label: "Sleep Score", value: latest.sleep_score, color: "bg-cyan-500" },
-              ].filter((f) => f.value != null);
+              ]
+                .filter((f) => f.value != null)
+                .map((f) => ({ ...f, value: Number(f.value) }));
 
               return (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 mb-4">
@@ -752,7 +846,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
               );
             })()}
             <TrainingReadinessChart
-              data={(trainingReadiness as any[]).map((tr: any) => ({
+              data={trainingReadiness.map((tr) => ({
                 date: tr.date,
                 score: Number(tr.score),
                 level: tr.level || "",
@@ -824,11 +918,11 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
                 );
               })()}
               <HRVChart
-                data={(hrvTrend as any[]).map((h: any) => ({
+                data={hrvTrend.map((h) => ({
                   date: h.date,
                   weekly_avg: Number(h.weekly_avg),
                   last_night_avg: Number(h.last_night_avg),
-                  status: h.status,
+                  status: h.status ?? "",
                 }))}
               />
               <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
@@ -840,7 +934,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
         )}
 
         <ExpandableChartCard title="Resting Heart Rate" icon={<HeartPulse className="h-4 w-4 text-red-400" />}>
-          <RHRChart data={rhrTrend as any} />
+          <RHRChart data={rhrTrend.map((d) => ({ date: d.date, rhr: Number(d.rhr ?? 0) }))} />
         </ExpandableChartCard>
       </div>
 
@@ -857,8 +951,8 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
             <CardContent>
               <div className="grid grid-cols-3 gap-4 mb-4">
                 {(() => {
-                  const latest = stressTrend[stressTrend.length - 1] as any;
-                  const recentAvg = stressTrend.slice(-7).reduce((s: number, d: any) => s + Number(d.avg_stress), 0) / Math.min(stressTrend.length, 7);
+                  const latest = stressTrend[stressTrend.length - 1];
+                  const recentAvg = stressTrend.slice(-7).reduce((s: number, d) => s + Number(d.avg_stress), 0) / Math.min(stressTrend.length, 7);
                   return (
                     <>
                       <div>
@@ -878,7 +972,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
                 })()}
               </div>
               <StressChart
-                data={(stressTrend as any[]).map((s: any) => ({
+                data={stressTrend.map((s) => ({
                   date: s.date,
                   avg_stress: Number(s.avg_stress),
                   max_stress: Number(s.max_stress),
@@ -891,7 +985,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
         <ExpandableChartCard title="Body Battery" icon={<BatteryCharging className="h-4 w-4 text-green-400" />}>
           {bodyBattery.length > 0 ? (
             <BodyBatteryChart
-              data={(bodyBattery as any[]).map((bb: any) => ({
+              data={bodyBattery.map((bb) => ({
                 date: bb.date,
                 charged: Number(bb.charged),
                 drained: Number(bb.drained),
@@ -907,7 +1001,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
 
       {/* Respiratory: SpO2 + Respiration */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {(spo2Trend as any[]).length > 0 && (
+        {spo2Trend.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -917,13 +1011,21 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
             </CardHeader>
             <CardContent>
               {(() => {
-                const data = (spo2Trend as any[]).filter((d: any) => d.avg_spo2 > 0);
+                // The chart reads numbers; the rows carry whatever the driver returned.
+                const data = spo2Trend
+                  .map((d) => ({
+                    date: d.date,
+                    avg_spo2: d.avg_spo2 === null ? null : Number(d.avg_spo2),
+                    low_spo2: d.low_spo2 === null ? null : Number(d.low_spo2),
+                    sleep_spo2: d.sleep_spo2 === null ? null : Number(d.sleep_spo2),
+                  }))
+                  .filter((d) => (d.avg_spo2 ?? 0) > 0);
                 if (data.length === 0) return <p className="text-sm text-muted-foreground">No SpO2 data</p>;
                 const latest = data[data.length - 1];
                 const fresh = freshness(latest?.date ?? null, todayKey());
                 const recent7 = data.slice(-7);
-                const avg7 = recent7.reduce((s: number, d: any) => s + Number(d.avg_spo2), 0) / recent7.length;
-                const lowVals = data.filter((d: any) => d.low_spo2 && Number(d.low_spo2) > 0).map((d: any) => Number(d.low_spo2));
+                const avg7 = recent7.reduce((s: number, d) => s + Number(d.avg_spo2), 0) / recent7.length;
+                const lowVals = data.filter((d) => d.low_spo2 && Number(d.low_spo2) > 0).map((d) => Number(d.low_spo2));
                 const minSpo2 = lowVals.length > 0 ? Math.min(...lowVals) : null;
                 return (
                   <>
@@ -961,7 +1063,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
           </Card>
         )}
 
-        {(respiration as any[]).length > 0 && (
+        {respiration.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -971,10 +1073,10 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
             </CardHeader>
             <CardContent>
               {(() => {
-                const data = (respiration as any[]);
+                const data = respiration;
                 const latest = data[data.length - 1];
                 const recent7 = data.slice(-7);
-                const avgSleep = recent7.reduce((s: number, d: any) => s + Number(d.sleep_resp || 0), 0) / recent7.length;
+                const avgSleep = recent7.reduce((s: number, d) => s + Number(d.sleep_resp || 0), 0) / recent7.length;
                 return (
                   <div className="grid grid-cols-3 gap-4 mb-4">
                     <div>
@@ -995,7 +1097,15 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
                   </div>
                 );
               })()}
-              <RespirationChart data={respiration as any[]} />
+              <RespirationChart
+                data={respiration.map((d) => ({
+                  date: d.date,
+                  awake_resp: Number(d.awake_resp ?? 0),
+                  sleep_resp: Number(d.sleep_resp ?? 0),
+                  low_resp: Number(d.low_resp ?? 0),
+                  high_resp: Number(d.high_resp ?? 0),
+                }))}
+              />
             </CardContent>
           </Card>
         )}
