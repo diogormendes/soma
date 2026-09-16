@@ -20,6 +20,33 @@ export interface Db {
 }
 
 /**
+ * Read a JSONB column, whichever shape the driver handed back.
+ *
+ * ⛔ OVER THE GATEWAY A JSONB COLUMN ARRIVES AS A STRING. The `pg` driver parses
+ * JSONB into a value; the gateway hands back the JSON its API serialised, so the
+ * same column is an object locally and a string in Actions. Every JSONB reader
+ * here has to coerce, and three of them already did it inline while the fourth
+ * did not, which is how `loadSession` threw `cookies.map is not a function` on
+ * the first run that ever reached it (soma#978).
+ *
+ * Local runs cannot catch this, because a local Postgres connection never
+ * produces the string. That is the whole reason it lives in one place now.
+ *
+ * Returns `fallback` for null, undefined, or anything that will not parse. A
+ * caller that needs a particular shape still has to check for it: valid JSON is
+ * not the same thing as a usable row.
+ */
+export function jsonValue<T>(raw: unknown, fallback: T): T {
+  if (raw == null) return fallback;
+  if (typeof raw !== "string") return raw as T;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
  * Run a `CREATE TABLE IF NOT EXISTS` bootstrap under a role that may not create.
  *
  * The bootstrap itself is worth keeping: a forker deploying this against an

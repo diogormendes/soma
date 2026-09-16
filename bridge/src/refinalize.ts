@@ -9,7 +9,7 @@
  * Run: node dist/refinalize.js <garmin_id> [<garmin_id> ...]   (DRY unless STRAVA creds)
  */
 import { chromium } from "playwright";
-import { openDb, type Db } from "./db";
+import { openDb, type Db, jsonValue } from "./db";
 import { stravaCreds, loadSession, saveSession, sessionValid, login, setActivityDetails } from "./strava-web";
 import { kiteActivityName, generateKiteStravaDescription } from "./kite-description";
 import { imagePathFor } from "./share-image";
@@ -21,13 +21,11 @@ async function stravaIdFor(db: Db, gid: number): Promise<number | null> {
 }
 async function summaryFor(db: Db, gid: number): Promise<any> {
   const r = await db.query("SELECT raw_json FROM garmin_activity_raw WHERE activity_id=$1 AND endpoint_name='summary'", [gid]);
-  const j = r.rows[0]?.raw_json;
-  return j == null ? {} : (typeof j === "string" ? JSON.parse(j) : j);
+  return jsonValue<Record<string, unknown>>(r.rows[0]?.raw_json, {});
 }
 async function kitePayloadFor(db: Db, gid: number): Promise<any | null> {
   const r = await db.query("SELECT raw_json FROM garmin_activity_raw WHERE activity_id=$1 AND endpoint_name='kite_jumps'", [gid]);
-  const j = r.rows[0]?.raw_json;
-  return j == null ? null : (typeof j === "string" ? JSON.parse(j) : j);
+  return jsonValue<Record<string, unknown> | null>(r.rows[0]?.raw_json, null);
 }
 async function main(): Promise<void> {
   const ids = process.argv.slice(2).map((s) => parseInt(s, 10)).filter((n) => !isNaN(n));

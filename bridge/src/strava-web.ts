@@ -6,7 +6,7 @@
  * its edit page. The facterino forward carries only the workout data.
  */
 import type { BrowserContext, Page } from "playwright";
-import { ensureTable, type Db } from "./db";
+import { ensureTable, jsonValue, type Db } from "./db";
 
 export const LOGIN_URL = "https://www.strava.com/login";
 const PHOTO_CDN = "dgtzuqphqg23d.cloudfront.net";
@@ -29,9 +29,14 @@ async function ensureSessionTable(db: Db): Promise<void> {
 export async function loadSession(db: Db): Promise<any[] | null> {
   await ensureSessionTable(db);
   const r = await db.query("SELECT cookies FROM strava_web_session WHERE id = 1");
-  const cookies = r.rows[0]?.cookies;
-  if (!cookies) return null;
-  return cookies.map((c: any) => { const { expires, ...rest } = c; return rest; });
+  // Over the gateway this column is a string; see jsonValue. Anything that is
+  // not a list of cookies means there is no usable session, and a fresh login
+  // is the right answer, so it must not throw here and kill the run.
+  const cookies = jsonValue<unknown>(r.rows[0]?.cookies, null);
+  if (!Array.isArray(cookies) || !cookies.length) return null;
+  return cookies
+    .filter((c): c is Record<string, unknown> => !!c && typeof c === "object")
+    .map((c) => { const { expires, ...rest } = c as { expires?: unknown }; return rest; });
 }
 
 /** Persist the strava cookies for session reuse (Strava rate-limits repeated logins). */
