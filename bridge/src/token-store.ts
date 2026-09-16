@@ -1,4 +1,4 @@
-import { openDb } from "./db";
+import { openDb, jsonValue } from "./db";
 
 /**
  * A garmin-auth TokenStore that reads the credential row through whatever `openDb` speaks.
@@ -29,8 +29,7 @@ export class GatewayTokenStore {
         [PLATFORM],
       );
       if (!rows.length || !rows[0].credentials) return null;
-      const raw = rows[0].credentials;
-      const creds = typeof raw === "string" ? JSON.parse(raw) : raw;
+      const creds = jsonValue<Record<string, unknown> | null>(rows[0].credentials, null);
       // garmin-auth 0.3+ writes the payload nested under `garmin_tokens` on both stacks.
       const payload = creds?.garmin_tokens;
       if (!payload || typeof payload !== "object") return null;
