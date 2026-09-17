@@ -170,6 +170,19 @@ export async function uploadEnrichedToGarmin(
       outcomes.push(outcome);
       if (outcome.status === "uploaded") {
         await logActivitySync(sql, { sourceId: c.hevyId, destination: "garmin", destinationId: outcome.activityId ? String(outcome.activityId) : null, status: "sent" });
+        // The upload told us the activity id, so record it now.
+        //
+        // Until soma#982 it was only written into the ledger, and the enrichment row waited for
+        // `populateGarminIds` to find the activity in `garmin_activity_raw` — which the NEXT
+        // pipeline run ingests, so the pairing arrived an hour late and nothing in this pass
+        // could act on the new activity. `populateGarminIds` still runs below and still repairs
+        // a missing pairing; this just stops it being the only way one is ever made.
+        if (outcome.activityId) {
+          await sql`
+            UPDATE workout_enrichment
+            SET garmin_activity_id = ${outcome.activityId}, status = 'uploaded', updated_at = NOW()
+            WHERE hevy_id = ${c.hevyId}`;
+        }
       }
     }
   }

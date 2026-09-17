@@ -1,108 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import type { HevyExercise, HevyWorkout } from "@/lib/hevy-types";
-
-// --- Helpers ---
-
-type HrPoint = { elapsed_sec: number; hr: number };
-
-/** Interpolate HR at a given elapsed-second from the timeline. */
-function interpolateHr(timeline: HrPoint[], targetSec: number): number | null {
-  if (timeline.length === 0) return null;
-  if (targetSec <= timeline[0].elapsed_sec) return timeline[0].hr;
-  if (targetSec >= timeline[timeline.length - 1].elapsed_sec)
-    return timeline[timeline.length - 1].hr;
-  // Find bracketing samples
-  let before = timeline[0];
-  let after = timeline[timeline.length - 1];
-  for (const p of timeline) {
-    if (p.elapsed_sec <= targetSec) before = p;
-    if (p.elapsed_sec >= targetSec && p.elapsed_sec < after.elapsed_sec) after = p;
-  }
-  if (before.elapsed_sec === after.elapsed_sec) return before.hr;
-  const t = (targetSec - before.elapsed_sec) / (after.elapsed_sec - before.elapsed_sec);
-  return before.hr + (after.hr - before.hr) * t;
-}
-
-const EST_SET_SEC = 40;
-const EST_REST_SEC = 25;
-const EST_EX_REST_SEC = 60;
-
-/** One synthesised set of the exercise-timing overlay. */
-interface SynthSet {
-  exercise: string;
-  start_sec: number;
-  duration_sec: number;
-  reps: number;
-  weight: number;
-  set_type: string;
-  avg_hr?: number | null;
-}
-
-/** Synthesize exercise timing overlay from Hevy data and compute per-set avg HR via interpolation. */
-function synthesizeExerciseSets(
-  timeline: HrPoint[],
-  workout: HevyWorkout,
-): SynthSet[] {
-  const totalDuration = timeline[timeline.length - 1].elapsed_sec;
-  const allSets: Array<{ exercise: string; reps: number; weight: number; type: string }> = [];
-  for (const ex of workout.exercises ?? []) {
-    for (const s of ex.sets ?? []) {
-      allSets.push({
-        exercise: ex.title || "Unknown",
-        reps: s.reps || 0,
-        weight: s.weight_kg || 0,
-        type: s.type === "warmup" ? "warmup" : "normal",
-      });
-    }
-  }
-  if (allSets.length === 0) return [];
-
-  const rawTotal = allSets.length * EST_SET_SEC +
-    (allSets.length - 1) * EST_REST_SEC +
-    ((workout.exercises?.length ?? 0) - 1) * (EST_EX_REST_SEC - EST_REST_SEC);
-  const scale = rawTotal > 0 ? totalDuration / rawTotal : 1;
-
-  const synthSets: SynthSet[] = [];
-  let cursor = 0;
-  let prevExercise = "";
-  for (const s of allSets) {
-    if (prevExercise && s.exercise !== prevExercise) {
-      cursor += EST_EX_REST_SEC * scale;
-    } else if (prevExercise) {
-      cursor += EST_REST_SEC * scale;
-    }
-    const setDur = EST_SET_SEC * scale;
-    synthSets.push({
-      exercise: s.exercise,
-      start_sec: Math.round(cursor),
-      duration_sec: Math.round(setDur),
-      reps: s.reps,
-      weight: s.weight,
-      set_type: s.type === "warmup" ? "WARMUP" : "ACTIVE",
-    });
-    cursor += setDur;
-    prevExercise = s.exercise;
-  }
-
-  // Compute per-set avg HR via interpolation at set midpoint
-  let setIdx = 0;
-  for (const ex of workout.exercises ?? []) {
-    for (const s of ex.sets ?? []) {
-      if (setIdx < synthSets.length) {
-        const synth = synthSets[setIdx];
-        const midpoint = synth.start_sec + synth.duration_sec / 2;
-        const hr = interpolateHr(timeline, midpoint);
-        if (hr !== null) {
-          s.avg_hr = Math.round(hr);
-        }
-      }
-      setIdx++;
-    }
-  }
-
-  return synthSets;
-}
+import type { HevyExercise } from "@/lib/hevy-types";
+import { synthesizeExerciseSets, timelineFromSamples, type HrPoint } from "@/lib/set-timing";
 
 // --- Route Handler ---
 
@@ -218,13 +117,8 @@ export async function GET(
     };
 
     // Build HR timeline from enrichment hr_samples (our DB, not Garmin API)
-    if (enrichmentHrSamples && enrichmentHrSamples.length > 0 && enrichmentDuration) {
-      const interval = enrichmentDuration / enrichmentHrSamples.length;
-      garmin.hr_timeline = enrichmentHrSamples.map((hr: number, i: number) => ({
-        elapsed_sec: Math.round(i * interval),
-        hr,
-      }));
-    }
+    const tl = timelineFromSamples(enrichmentHrSamples, enrichmentDuration);
+    if (tl.length) garmin.hr_timeline = tl;
 
     // Synthesize exercise overlay from Hevy data + compute per-set HR via interpolation
     const timeline = (garmin.hr_timeline ?? []) as HrPoint[];
@@ -240,16 +134,12 @@ export async function GET(
       calories: enrichedHr.calories,
       hr_zones: null,
     };
-    if (enrichmentHrSamples && enrichmentHrSamples.length > 0 && enrichmentDuration) {
-      const interval = enrichmentDuration / enrichmentHrSamples.length;
-      garmin.hr_timeline = enrichmentHrSamples.map((hr: number, i: number) => ({
-        elapsed_sec: Math.round(i * interval),
-        hr,
-      }));
-
+    const tl2 = timelineFromSamples(enrichmentHrSamples, enrichmentDuration);
+    if (tl2.length) {
+      garmin.hr_timeline = tl2;
       // Synthesize exercise overlay + per-set HR via interpolation
       if (workout.exercises.length > 0) {
-        garmin.exercise_sets = synthesizeExerciseSets((garmin.hr_timeline ?? []) as HrPoint[], workout);
+        garmin.exercise_sets = synthesizeExerciseSets(tl2, workout);
       }
     }
   }

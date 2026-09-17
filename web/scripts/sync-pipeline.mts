@@ -18,6 +18,7 @@ import { pushPlanToGarmin } from "../lib/garmin-workout-builder";
 import { getLivePlan } from "../lib/live-plan";
 import { enrichGarminRunActivities } from "../lib/garmin-run-enrich";
 import { uploadEnrichedToGarmin } from "../lib/hevy-upload";
+import { enrichGarminGymActivities } from "../lib/garmin-gym-enrich";
 import { notifyPendingWorkouts } from "../lib/notify";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -110,6 +111,9 @@ if (garminClient) {
   // Garmin 409) plus the bridge's own ledger guarantee no activity is uploaded or
   // forwarded twice. Runs before notify so "Synced" reflects an actual upload.
   await step("hevy-upload", () => uploadEnrichedToGarmin(sql, garminClient!, { dryRun: false }));
+  // After the upload, so a workout uploaded in this pass is described in this pass too
+  // (soma#982). Idempotent through the garmin_enrichment ledger, so a re-run is a no-op.
+  await step("gym-enrich", () => enrichGarminGymActivities(sql, garminClient!, webBaseUrl));
 }
 
 // 5. Telegram + push notifications for workouts now on Garmin.

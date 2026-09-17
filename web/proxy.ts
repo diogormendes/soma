@@ -77,14 +77,17 @@ export default auth((req) => {
     return withDevCors(NextResponse.next(), isApi);
   }
 
-  // Always allow auth routes, login page, and image API (used by sync pipeline)
+  // Always allow auth routes, login page, and the share-card + description APIs, which the sync
+  // pipeline and the Strava bridge read without a session. The description route joined them in
+  // soma#983: the re-finalize runs on a GitHub runner with no cookie, and a redirect to /login
+  // would have it silently push the stored (empty) text instead.
   if (
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/webhooks/") ||
     pathname.startsWith("/api/cron/") ||
     pathname === "/login" ||
     pathname === "/api/sync/refresh-tokens" ||
-    pathname.match(/^\/api\/(workout|activity)\/[^/]+\/image$/)
+    pathname.match(/^\/api\/(workout|activity)\/[^/]+\/(image|description)$/)
   ) {
     return NextResponse.next();
   }
