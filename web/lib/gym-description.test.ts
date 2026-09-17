@@ -9,8 +9,19 @@ import {
 import { synthesizeExerciseSets, timelineFromSamples } from "./set-timing";
 import type { QueryFn } from "./db";
 import type { HevyWorkout } from "./hevy-types";
+import golden from "./gym-description.golden.json";
+
+/**
+ * The fixture that used to cover these two in `bridge/tests/description.golden.json`, moved here
+ * with the functions. Its `hr_slices` cases went with `sliceHrByExercise`, whose proportional
+ * split `set-timing.ts` replaced.
+ */
+const g = golden as { weights: { kg: number; out: string }[]; durations: { s: number; out: string }[] };
 
 describe("formatWeight — Python parity (_format_weight)", () => {
+  it("matches Python on every golden case", () => {
+    for (const c of g.weights) expect(formatWeight(c.kg)).toBe(c.out);
+  });
   it("0 is bodyweight", () => expect(formatWeight(0)).toBe("BW"));
   it("a whole number drops the decimal", () => expect(formatWeight(66)).toBe("66kg"));
   it("a whole number after rounding drops it too", () => expect(formatWeight(66.04)).toBe("66kg"));
@@ -19,6 +30,9 @@ describe("formatWeight — Python parity (_format_weight)", () => {
 });
 
 describe("formatDuration — Python parity (_format_duration)", () => {
+  it("matches Python on every golden case", () => {
+    for (const c of g.durations) expect(formatDuration(c.s)).toBe(c.out);
+  });
   it("under an hour is minutes", () => expect(formatDuration(1920)).toBe("32m"));
   it("an hour or more splits", () => expect(formatDuration(4020)).toBe("1h 7m"));
   it("truncates rather than rounds", () => expect(formatDuration(119)).toBe("1m"));
