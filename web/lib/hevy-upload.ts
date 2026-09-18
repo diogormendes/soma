@@ -20,6 +20,7 @@ import { generateFit, uploadFit, renameActivity } from "hevy2garmin";
 import type { GarminClient } from "garmin-auth";
 import type { QueryFn } from "./db";
 import { populateGarminIds } from "./hevy-match";
+import { getAthleteProfile, type AthleteProfile } from "./athlete-profile";
 import type { HevyWorkout } from "./hevy-types";
 
 export interface UploadCandidate {
@@ -114,7 +115,11 @@ export function trainingLoadForUpload(
 export interface UploadOutcome { hevyId: string; status: "uploaded" | "error"; activityId?: number | null; error?: string; }
 
 /** Generate a FIT for one workout and upload it to Garmin, then rename. Side-effectful. */
-export async function processWorkout(client: GarminClient, c: UploadCandidate): Promise<UploadOutcome> {
+export async function processWorkout(
+  client: GarminClient,
+  c: UploadCandidate,
+  athlete?: AthleteProfile,
+): Promise<UploadOutcome> {
   try {
     // HEVY2GARMIN_TIMEZONE (IANA, e.g. Europe/Athens) stamps local_timestamp into
     // the FIT so Garmin forwards the correct local time to Strava. Empty = raw UTC.
@@ -130,7 +135,14 @@ export async function processWorkout(client: GarminClient, c: UploadCandidate): 
       })),
     };
     const { fit } = generateFit(workout, c.hrSamples.length ? c.hrSamples : null, {
-      profile: { timezone: process.env.HEVY2GARMIN_TIMEZONE ?? "" },
+      profile: {
+        timezone: process.env.HEVY2GARMIN_TIMEZONE ?? "",
+        // Only the three calorie fields, and only as a set. Omitted when the caller has no
+        // profile, which leaves generateFit on its own defaults exactly as before (soma#986).
+        ...(athlete
+          ? { weightKg: athlete.weightKg, birthYear: athlete.birthYear, vo2max: athlete.vo2max }
+          : {}),
+      },
       trainingLoad: trainingLoadForUpload(c.strengthLoad),
     });
     const start = c.workout?.start_time;
@@ -160,13 +172,14 @@ export async function uploadEnrichedToGarmin(
   opts: { dryRun?: boolean } = {},
 ): Promise<UploadRunResult> {
   const dryRun = opts.dryRun ?? true;
+  const athlete = await getAthleteProfile(sql);
   await populateGarminIds(sql); // layer 1: adopt already-present activities
   const candidates = await getWorkoutsToUpload(sql);
 
   const outcomes: UploadOutcome[] = [];
   if (!dryRun) {
     for (const c of candidates) {
-      const outcome = await processWorkout(client, c);
+      const outcome = await processWorkout(client, c, athlete);
       outcomes.push(outcome);
       if (outcome.status === "uploaded") {
         await logActivitySync(sql, { sourceId: c.hevyId, destination: "garmin", destinationId: outcome.activityId ? String(outcome.activityId) : null, status: "sent" });

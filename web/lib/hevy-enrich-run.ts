@@ -4,6 +4,7 @@
  * existing Garmin activities. NO Garmin upload. Stage 2 (#184).
  */
 import { calcCalories, DEFAULT_PROFILE } from "hevy2garmin";
+import { getAthleteProfile } from "./athlete-profile";
 import type { QueryFn } from "./db";
 import { getDailyHrForWindow, resolveHrDecision, MIN_EXERCISE_HR, FALLBACK_HR_WINDOW } from "./hevy-enrich";
 import { populateGarminIds, toUtcDate } from "./hevy-match";
@@ -85,6 +86,11 @@ export async function enrichNewWorkouts(sql: QueryFn, now: Date = new Date()): P
   const existing = new Map<string, ExistingEnrichment>();
   for (const r of exRows) existing.set(r.hevy_id, { hrSource: r.hr_source, garminActivityId: r.garmin_activity_id });
 
+  // Garmin's record of him, or the default when it is not stored yet. Read ONCE per pass rather
+  // than per workout, and all-or-nothing by construction; see athlete-profile.ts for why a
+  // per-field fallback would make the estimate worse than leaving it alone (soma#986).
+  const athlete = await getAthleteProfile(sql);
+
   const staleCutoff = new Date(now.getTime() - 7 * 86_400_000).toISOString().slice(0, 10);
   const { newWorkouts, staleWorkouts } = selectToEnrich(workouts, existing, staleCutoff);
   const toEnrich = [...newWorkouts, ...staleWorkouts];
@@ -124,7 +130,12 @@ export async function enrichNewWorkouts(sql: QueryFn, now: Date = new Date()): P
       const startDt = toUtcDate(start), endDt = toUtcDate(end);
       if (!startDt || !endDt) continue;
       const durationS = (endDt.getTime() - startDt.getTime()) / 1000;
-      const calories = calcCalories(hr, durationS, startDt.getUTCFullYear(), DEFAULT_PROFILE);
+      const calories = calcCalories(hr, durationS, startDt.getUTCFullYear(), {
+        ...DEFAULT_PROFILE,
+        weightKg: athlete.weightKg,
+        birthYear: athlete.birthYear,
+        vo2max: athlete.vo2max,
+      });
 
       const exercises = hw.exercises ?? [];
       const totalSets = exercises.reduce((s, ex) => s + (ex.sets?.length ?? 0), 0);
