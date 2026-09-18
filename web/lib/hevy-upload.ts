@@ -200,7 +200,7 @@ export async function processWorkout(
   }
 }
 
-export interface UploadRunResult { candidates: number; uploaded: number; matchedAfter: number; outcomes: UploadOutcome[]; }
+export interface UploadRunResult { candidates: number; uploaded: number; matchedAfter: number; claimsCleared: number; outcomes: UploadOutcome[]; }
 
 /**
  * Orchestrate the dedup'd upload: match existing activities first, select the
@@ -244,6 +244,6 @@ export async function uploadEnrichedToGarmin(
     }
   }
 
-  const matchedAfter = await populateGarminIds(sql); // layer 3: adopt 409/async uploads
-  return { candidates: candidates.length, uploaded: outcomes.filter((o) => o.status === "uploaded").length, matchedAfter, outcomes };
+  const after = await populateGarminIds(sql); // layer 3: adopt 409/async uploads
+  return { candidates: candidates.length, uploaded: outcomes.filter((o) => o.status === "uploaded").length, matchedAfter: after.matched, claimsCleared: after.cleared, outcomes };
 }

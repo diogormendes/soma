@@ -75,12 +75,12 @@ async function upsertEnrichment(sql: QueryFn, hevyId: string, f: Record<string, 
 const pyRound = (x: number) => { const fl = Math.floor(x), d = x - fl; return d < 0.5 ? fl : d > 0.5 ? fl + 1 : fl % 2 === 0 ? fl : fl + 1; };
 const mean = (xs: number[]) => xs.reduce((s, v) => s + v, 0) / xs.length;
 
-export interface EnrichResult { newCount: number; staleCount: number; enriched: number; matched: number; }
+export interface EnrichResult { newCount: number; staleCount: number; enriched: number; matched: number; claimsCleared: number; }
 
 /** Full enrichment pass: resolve HR + calories per workout, upsert, then match to Garmin. */
 export async function enrichNewWorkouts(sql: QueryFn, now: Date = new Date()): Promise<EnrichResult> {
   const workouts = await getAllHevyWorkouts(sql);
-  if (!workouts.length) return { newCount: 0, staleCount: 0, enriched: 0, matched: 0 };
+  if (!workouts.length) return { newCount: 0, staleCount: 0, enriched: 0, matched: 0, claimsCleared: 0 };
 
   const exRows = await sql`SELECT hevy_id, hr_source, garmin_activity_id FROM workout_enrichment`;
   const existing = new Map<string, ExistingEnrichment>();
@@ -94,7 +94,7 @@ export async function enrichNewWorkouts(sql: QueryFn, now: Date = new Date()): P
   const staleCutoff = new Date(now.getTime() - 7 * 86_400_000).toISOString().slice(0, 10);
   const { newWorkouts, staleWorkouts } = selectToEnrich(workouts, existing, staleCutoff);
   const toEnrich = [...newWorkouts, ...staleWorkouts];
-  if (!toEnrich.length) return { newCount: 0, staleCount: 0, enriched: 0, matched: 0 };
+  if (!toEnrich.length) return { newCount: 0, staleCount: 0, enriched: 0, matched: 0, claimsCleared: 0 };
 
   // Recent real-HR averages, for the fallback path.
   const avgRows = await sql`
@@ -155,6 +155,6 @@ export async function enrichNewWorkouts(sql: QueryFn, now: Date = new Date()): P
     }
   }
 
-  const matched = enriched > 0 ? await populateGarminIds(sql) : 0;
-  return { newCount: newWorkouts.length, staleCount: staleWorkouts.length, enriched, matched };
+  const match = enriched > 0 ? await populateGarminIds(sql) : { matched: 0, cleared: 0 };
+  return { newCount: newWorkouts.length, staleCount: staleWorkouts.length, enriched, matched: match.matched, claimsCleared: match.cleared };
 }
