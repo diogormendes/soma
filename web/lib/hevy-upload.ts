@@ -99,17 +99,61 @@ export async function getWorkoutsToUpload(sql: QueryFn): Promise<UploadCandidate
   }));
 }
 
-/** The load written into the FIT session (hevy2garmin#523). banister's computeStrengthLoad already
- *  produces a session load for every gym session (training_load.details.raw_load); Garmin shows it
- *  as Training Load. Off unless HEVY2GARMIN_WRITE_TRAINING_LOAD=1, because it feeds Garmin's
- *  acute load and training status. */
+/**
+ * The factor that puts soma's gym load on Garmin's scale (soma#991).
+ *
+ * The two numbers are both called training load and are not the same quantity.
+ * banister's computeStrengthLoad produces sRPE, session RPE times minutes, on an
+ * arbitrary scale: for these sessions it runs 382 / 477 / 665 at the quartiles
+ * with a maximum of 1954 (n=340). Garmin's activityTrainingLoad is an oxygen-debt
+ * number: for the runs it computes one for it runs 59 / 99 / 153 with a maximum
+ * of 416 (n=108). Writing the sRPE number unchanged would put an ordinary gym
+ * session above every run ever recorded, and Garmin's acute load and training
+ * status are fed by it.
+ *
+ * No conversion can be fitted, because Garmin computes no load at all for strength
+ * work: of the 86 strength summaries on the account, every one has an empty
+ * activityTrainingLoad, so there is no pair of values to regress. What is left is
+ * to align the distributions, and 0.21 is the ratio of the two medians (99.1 /
+ * 476.9). It maps the gym quartiles to 80 / 100 / 140 and the hardest session to
+ * 410, which sits beside the hardest run at 416.
+ *
+ * It is one constant on purpose. HEVY2GARMIN_TRAINING_LOAD_SCALE overrides it, and
+ * 0 turns the write off entirely.
+ */
+export const GARMIN_LOAD_SCALE = 0.21;
+
+/** The scale in force, falling back to the default rather than writing nonsense. */
+export function trainingLoadScale(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.HEVY2GARMIN_TRAINING_LOAD_SCALE;
+  if (raw === undefined || raw.trim() === "") return GARMIN_LOAD_SCALE;
+  const v = Number(raw);
+  return Number.isFinite(v) && v >= 0 ? v : GARMIN_LOAD_SCALE;
+}
+
+/**
+ * The load written into the FIT session as training_load_peak (hevy2garmin#523),
+ * scaled per the constant above. Rounded, because Garmin shows a whole number.
+ *
+ * A session that rounds to 0 is not written: the field is optional and an explicit
+ * zero reads as a measurement, not as an absence.
+ *
+ * Safe against the PMC only because soma#990 landed first. The activity this
+ * creates comes back through backfillLoadFromHistory on the next sync, and if
+ * Garmin does echo the load back, computeActivityLoad would read it and write a
+ * second training_load row for a session that already has one. The exclusion added
+ * in soma#990 is what stops that.
+ */
 export function trainingLoadForUpload(
   load: { load_value: number } | null | undefined,
   env: Record<string, string | undefined> = process.env,
 ): number | undefined {
-  if (env.HEVY2GARMIN_WRITE_TRAINING_LOAD !== "1") return undefined;
+  const scale = trainingLoadScale(env);
+  if (scale <= 0) return undefined;
   const v = Number(load?.load_value);
-  return v > 0 ? v : undefined;
+  if (!(v > 0)) return undefined;
+  const scaled = Math.round(v * scale);
+  return scaled > 0 ? scaled : undefined;
 }
 
 export interface UploadOutcome { hevyId: string; status: "uploaded" | "error"; activityId?: number | null; error?: string; }
