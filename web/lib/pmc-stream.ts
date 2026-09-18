@@ -44,15 +44,21 @@ export async function backfillLoadFromHistory(sql: QueryFn): Promise<number> {
       -- soma uploads its own gym sessions to Garmin, so each one comes back through this query
       -- and got a SECOND training_load row on top of the 'hevy' one computeHevyLoads already
       -- wrote for the same session. Both rows reach computeAndStorePmc below, which sums every
-      -- row per day, so every gym day was counted twice: 13.5% of all load over 90 days and
-      -- 19.3% of gym-day load, feeding CTL, ATL, TSB, the trajectory chart and the Banister fit.
+      -- row per day, so every gym day was counted twice: 78 rows since 2022-01-23, 13.5% of all
+      -- load over 90 days and 19.3% of gym-day load, feeding CTL, ATL, TSB, the trajectory chart
+      -- and the Banister fit.
       --
-      -- The link is the predicate, not the activity type: 81 of the 89 strength rows were twins
-      -- of a Hevy workout and the other 8 are 2020 sessions from before Hevy, which are real
-      -- standalone activities and keep their row.
+      -- Both halves of the predicate matter. A Hevy workout has to claim the activity, which is
+      -- what tells a twin from the 8 strength sessions of 2020 that predate Hevy and are real
+      -- standalone activities. And the activity has to be a strength one (soma#996), so that a
+      -- mis-claim can only ever suppress the type soma uploads: the matcher does mis-claim, three
+      -- activities are held by two Hevy workouts each, and if one ever landed on a run then
+      -- excluding it would lose real load, because a hevy row belongs to a gym session and a
+      -- garmin_running row belongs to a run. Two sessions, not one counted twice.
       AND NOT EXISTS (
         SELECT 1 FROM workout_enrichment we
         WHERE we.garmin_activity_id = g.activity_id
+          AND (g.raw_json->'activityType'->>'typeKey') = 'strength_training'
       )`;
   // Build all candidate rows in JS, then batch-insert (a per-row loop is one
   // Neon round-trip per activity — hundreds of them). ON CONFLICT DO NOTHING +
