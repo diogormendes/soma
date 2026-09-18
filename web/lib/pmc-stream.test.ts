@@ -33,6 +33,16 @@ describe("backfillLoadFromHistory — the Garmin twin of a Hevy workout is not a
     expect(q).toMatch(/NOT EXISTS[\s\S]*workout_enrichment[\s\S]*garmin_activity_id = g\.activity_id/);
   });
 
+  it("only ever suppresses a strength activity (soma#996)", async () => {
+    const { sql, selects } = fakeSql([]);
+    await backfillLoadFromHistory(sql);
+    const q = selects[0].replace(/\s+/g, " ");
+    // The matcher does mis-claim: three activities are held by two Hevy workouts each.
+    // A claim that landed on a run must not delete that run's load, so the exclusion
+    // names the type soma uploads rather than trusting the claim alone.
+    expect(q).toMatch(/workout_enrichment[\s\S]*'strength_training'/);
+  });
+
   it("still loads an activity nothing claims", async () => {
     const { sql, inserts } = fakeSql([
       { activity_id: 4242, raw_json: { startTimeLocal: "2020-02-05 18:00:00", duration: 3600, averageHR: 120, maxHR: 150, activityType: { typeKey: "strength_training" } } },
