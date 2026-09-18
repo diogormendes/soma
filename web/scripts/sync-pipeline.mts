@@ -14,6 +14,7 @@ import { getHevyApiKey, syncAllWorkouts } from "../lib/hevy-ingest";
 import { enrichNewWorkouts } from "../lib/hevy-enrich-run";
 import { computeHevyLoads } from "../lib/training-load";
 import { backfillLoadFromHistory, computeAndStorePmc } from "../lib/pmc-stream";
+import { fitFromDb } from "../lib/banister";
 import { pushPlanToGarmin } from "../lib/garmin-workout-builder";
 import { getLivePlan } from "../lib/live-plan";
 import { enrichGarminRunActivities } from "../lib/garmin-run-enrich";
@@ -87,6 +88,20 @@ await step("hevy", async () => {
   const pmc = await computeAndStorePmc(sql);
   return { pull, enrich, loadsComputed, garminLoads, pmcDays: pmc.length };
 });
+
+// 2b. Refit the Banister parameters (soma#993). fitFromDb had no caller anywhere after the
+// Python pipeline was deleted on 2026-07-16, so banister_params stayed frozen at that day's
+// fit while four read paths went on using it: the training page, the graph, the trajectory and
+// the forward simulation. That fit was made against the load soma#990 has since corrected.
+//
+// It runs after the step above because it reads training_load, and after garmin-ingest because
+// it takes its anchor runs from garmin_activity_raw. It appends a row per run, which is what
+// the Python runner did, and costs about 26 seconds of differential evolution.
+//
+// ⛔ The fitted tau still does NOT reach the PMC. With four anchors and five parameters the fit
+// is under-determined, so feeding a personal tau into the daily curve would make it drift for
+// reasons that are not training. computeAndStorePmc keeps the classic 42/7 constants.
+await step("banister-fit", () => fitFromDb(sql));
 
 // 3+4. Garmin client for the external-write steps (plan push + run enrichment).
 let garminClient: Awaited<ReturnType<GarminAuth["client"]>> | null = null;
