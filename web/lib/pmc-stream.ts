@@ -39,6 +39,20 @@ export async function backfillLoadFromHistory(sql: QueryFn): Promise<number> {
       AND NOT EXISTS (
         SELECT 1 FROM training_load tl
         WHERE tl.activity_id::text = g.activity_id::text
+      )
+      -- ⛔ AND NOT THE GARMIN TWIN OF A WORKOUT ALREADY LOADED FROM HEVY (soma#990).
+      -- soma uploads its own gym sessions to Garmin, so each one comes back through this query
+      -- and got a SECOND training_load row on top of the 'hevy' one computeHevyLoads already
+      -- wrote for the same session. Both rows reach computeAndStorePmc below, which sums every
+      -- row per day, so every gym day was counted twice: 13.5% of all load over 90 days and
+      -- 19.3% of gym-day load, feeding CTL, ATL, TSB, the trajectory chart and the Banister fit.
+      --
+      -- The link is the predicate, not the activity type: 81 of the 89 strength rows were twins
+      -- of a Hevy workout and the other 8 are 2020 sessions from before Hevy, which are real
+      -- standalone activities and keep their row.
+      AND NOT EXISTS (
+        SELECT 1 FROM workout_enrichment we
+        WHERE we.garmin_activity_id = g.activity_id
       )`;
   // Build all candidate rows in JS, then batch-insert (a per-row loop is one
   // Neon round-trip per activity — hundreds of them). ON CONFLICT DO NOTHING +
