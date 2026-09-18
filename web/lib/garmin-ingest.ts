@@ -27,6 +27,9 @@ const MIN_COMPLETE_HR_POINTS = 650;
 // /userprofile/profile, but the DI/native-app token 404s there — socialProfile
 // is the DI-compatible path (same one garmin-auth's own refresh() uses).
 const PROFILE_URL = "/userprofile-service/socialProfile";
+// The athlete's weight (GRAMS), exact birthDate and vo2MaxRunning. Not in the package's
+// endpoint catalogue, so it is fetched here rather than through DAILY_ENDPOINTS.
+const USER_SETTINGS_URL = "/userprofile-service/userprofile/user-settings";
 
 /** Today's date (YYYY-MM-DD) in the athlete's timezone (soma#872). */
 export function todayNyc(now: Date = new Date()): string {
@@ -210,6 +213,17 @@ export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promis
   const profile = (await client.connectapi(PROFILE_URL)) as { displayName?: string };
   const display = profile?.displayName;
   if (!display) throw new Error("Garmin profile has no displayName");
+
+  // Garmin's own record of the athlete: weight, birth date and VO2max in one call. Stored so
+  // `getAthleteProfile` can read it without a Garmin client, because the enrichment step runs
+  // before the pipeline has built one (soma#986). Non-fatal: a missing row means the calorie
+  // estimate uses the default profile, which is what it did before.
+  try {
+    const settings = await client.connectapi(USER_SETTINGS_URL);
+    if (hasData(settings)) await upsertRaw(sql, todayNyc(), "user_settings", settings);
+  } catch (e) {
+    console.warn(`  user_settings failed: ${(e as Error).message}`);
+  }
 
   const dates = await getStaleDates(sql);
   let recordsSaved = 0;
