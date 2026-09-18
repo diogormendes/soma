@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { loadDailyLoadsFromDb } from "./banister";
+import type { QueryFn } from "./db";
 import { detectAnchorRuns, banisterPredict, DEFAULT_PARAMS } from "./banister";
 import golden from "./banister.golden.json";
 
@@ -37,5 +39,25 @@ describe("banister — Python parity (deterministic parts)", () => {
     expect(DEFAULT_PARAMS.p0).toBe(45.0);
     expect(DEFAULT_PARAMS.tau1).toBe(42);
     expect(DEFAULT_PARAMS.tau2).toBe(7);
+  });
+});
+
+describe("loadDailyLoadsFromDb — the stream the fit reads (soma#993)", () => {
+  const fake = (rows: Record<string, unknown>[]) =>
+    (async () => rows) as unknown as QueryFn;
+
+  it("scales each source the way the PMC does and gap-fills rest days with 0", async () => {
+    const [loads, minDate] = await loadDailyLoadsFromDb(fake([
+      { activity_date: "2026-09-14", source: "hevy", load_value: 200 },
+      { activity_date: "2026-09-14", source: "garmin_running", load_value: 100 },
+      // 09-15 has nothing, so it must appear as a zero rather than be skipped
+      { activity_date: "2026-09-16", source: "garmin_walking", load_value: 50 },
+    ]));
+    expect(minDate).toBe("2026-09-14");
+    expect(loads).toEqual([[0, 300], [1, 0], [2, 10]]); // hevy 1.0, running 1.0, walking 0.2
+  });
+
+  it("returns an empty stream rather than throwing when training_load is empty", async () => {
+    expect(await loadDailyLoadsFromDb(fake([]))).toEqual([[], ""]);
   });
 });
