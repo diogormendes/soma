@@ -6,13 +6,43 @@ services:
     init: true
     ports:
       - "${SOMA_PORT:-3456}:3456"
-    env_file:
-      - .env
     environment:
       NODE_ENV: production
       PORT: 3456
       HOSTNAME: 0.0.0.0
-      SOMA_COMMIT_SHA: "${SOMA_COMMIT_SHA:-unknown}"
+
+      # Obrigatórios: substitua os valores abaixo.
+      DATABASE_URL: "postgresql://USUARIO:SENHA@HOST:5432/BANCO?sslmode=require"
+      AUTH_SECRET: "TROQUE-POR-UMA-CHAVE-ALEATORIA-LONGA"
+      AUTH_TRUST_HOST: "true"
+      NEXT_PUBLIC_BASE_URL: "http://IP_DO_NAS:3456"
+      SOMA_WEB_URL: "http://IP_DO_NAS:3456"
+      GITHUB_OWNER_USERNAME: "diogormendes"
+      GITHUB_CLIENT_ID: "TROQUE_PELO_CLIENT_ID_DO_GITHUB"
+      GITHUB_CLIENT_SECRET: "TROQUE_PELO_CLIENT_SECRET_DO_GITHUB"
+
+      # Sincronização e configurações do fork.
+      GITHUB_PAT: ""
+      GITHUB_REPO_OWNER: "diogormendes"
+      GITHUB_REPO_NAME: "soma"
+      GITHUB_REPO: "diogormendes/soma"
+      SOMA_API_TOKEN: ""
+      CRON_SECRET: ""
+
+      # Integrações opcionais.
+      HEVY_API_KEY: ""
+      HEVY_WEBHOOK_SECRET: ""
+      GARMIN_EMAIL: ""
+      GARMIN_PASSWORD: ""
+      STRAVA_CLIENT_ID: ""
+      STRAVA_CLIENT_SECRET: ""
+      SPOTIFY_CLIENT_ID: ""
+      SPOTIFY_CLIENT_SECRET: ""
+      SPOTIFY_REDIRECT_URI: "http://IP_DO_NAS:3456/api/playlist/callback"
+      TELEGRAM_BOT_TOKEN: ""
+      TELEGRAM_CHAT_ID: ""
+      DEMO_MODE: "false"
+      NEXT_PUBLIC_IS_DEMO: "false"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3456/login').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s
