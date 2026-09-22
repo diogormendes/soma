@@ -7,9 +7,9 @@ mais simples é continuar usando o Neon/PostgreSQL que já contém os seus dados
 
 ## 1. Preparar o ambiente
 
-No NAS, instale Docker Engine e Docker Compose v2. Depois copie os arquivos
-`docker-compose.yml` e `.env.nas.example` para uma pasta permanente, renomeie o
-segundo para `.env` e preencha:
+No NAS, instale Docker Engine e Docker Compose v2. Depois copie apenas o arquivo
+`docker-compose.yml` para uma pasta permanente e edite diretamente a seção
+`environment` com:
 
 - `DATABASE_URL` apontando para o PostgreSQL/Neon;
 - `AUTH_SECRET`, gerado com `openssl rand -base64 32`;
@@ -41,8 +41,8 @@ docker compose pull
 docker compose up -d
 ```
 
-O `.env` contém credenciais e não deve ser enviado ao GitHub nem incluído em
-backups públicos.
+Os valores reais devem ficar somente na cópia local do NAS. Não faça commit do
+Compose preenchido no fork público, pois ele contém credenciais.
 
 ## 3. Publicar no Docker Hub via GitHub Actions
 
