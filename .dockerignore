@@ -1,0 +1,15 @@
+.git
+.github
+.next
+node_modules
+web/node_modules
+universal
+bridge
+screenshots
+*.log
+.env
+.env.*
+!.env.example
+Dockerfile
+.dockerignore
+README.md
