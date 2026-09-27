@@ -13,11 +13,30 @@ REPO=drkostas/soma
 SYNC_MAX_AGE_H="${SYNC_MAX_AGE_H:-6}"      # sync.yml: observed ~3 h between successes
 BRIDGE_MAX_AGE_H="${BRIDGE_MAX_AGE_H:-18}" # strava-bridge-ts.yml runs 11/15/19 UTC → the overnight gap is 16 h; 12 h false-alarmed every morning
 SYNC_LOCAL_LOG="${SYNC_LOCAL_LOG:-$HOME/Library/Logs/soma/sync-local.log}"
+GH_TRIES="${GH_TRIES:-3}"
+GH_RETRY_SLEEP="${GH_RETRY_SLEEP:-20}"
+
+# One failed gh call used to become two alarms with no cause attached (#1117). On 2026-09-27 at
+# 11:00 gh failed for a moment that nothing else on the machine noticed, and every call here threw
+# its error away with 2>/dev/null, so the message could only guess "auth? network?". Retry, and
+# keep the first line of what gh said. The error goes to a file because gh_retry runs inside $(...).
+GH_ERR_FILE="$(mktemp)"
+trap 'rm -f "$GH_ERR_FILE"' EXIT
+gh_retry() {
+  local i
+  for ((i = 1; i <= GH_TRIES; i++)); do
+    if "$GH" "$@" 2>"$GH_ERR_FILE"; then return 0; fi
+    case "$(gh_err)" in *"was not found"*) return 1 ;; esac   # an answer, not a blip
+    [ "$i" -lt "$GH_TRIES" ] && sleep "$GH_RETRY_SLEEP"
+  done
+  return 1
+}
+gh_err() { head -1 "$GH_ERR_FILE" 2>/dev/null | cut -c1-160; }
 
 check() { # name workflow max_age_h
   local name="$1" wf="$2" max="$3" json
-  json="$($GH run list --repo "$REPO" --workflow "$wf" --limit 8 --json status,conclusion,createdAt 2>/dev/null)" \
-    || { echo "UNKNOWN $name: gh run list failed (auth? network?)"; return 2; }
+  json="$(gh_retry run list --repo "$REPO" --workflow "$wf" --limit 8 --json status,conclusion,createdAt)" \
+    || { echo "UNKNOWN $name: gh run list failed $GH_TRIES times: $(gh_err)"; return 2; }
   # JSON goes in as an ARGUMENT. Two stdin redirects once made python execute the JSON
   # (a valid literal) as its script and exit 0 with no output — a green check over a hole.
   python3 - "$name" "$max" "$json" <<'PY'
@@ -78,10 +97,26 @@ PY
 # two schedulers against one database would duplicate every step. Checking Actions here anyway
 # reported "last success 23.5 h ago" and grew by an hour every hour, with no state the pipeline
 # could reach that would clear it. Mirror the workflow's own condition rather than restate it.
-PIPELINE_RUNS_LOCALLY="$($GH variable get PIPELINE_RUNS_LOCALLY --repo "$REPO" 2>/dev/null || true)"
+#
+# A variable that is not set is an answer (a fork, so read Actions). A lookup that FAILED is not:
+# it used to fall through to Actions too, which on this instance reports a pipeline that does not
+# run there (#1117). Only gh's own "was not found" counts as unset.
+LOOKUP_FAILED=""
+if PIPELINE_RUNS_LOCALLY="$(gh_retry variable get PIPELINE_RUNS_LOCALLY --repo "$REPO")"; then
+  :
+else
+  PIPELINE_RUNS_LOCALLY=""
+  case "$(gh_err)" in
+    *"was not found"*) ;;
+    *) LOOKUP_FAILED="$(gh_err)"; [ -n "$LOOKUP_FAILED" ] || LOOKUP_FAILED="gh exited non-zero with no message" ;;
+  esac
+fi
 
 rc=0
-if [ "$PIPELINE_RUNS_LOCALLY" = "true" ]; then
+if [ -n "$LOOKUP_FAILED" ]; then
+  echo "UNKNOWN sync-pipeline: could not read PIPELINE_RUNS_LOCALLY after $GH_TRIES tries, so it is not known where the pipeline runs: $LOOKUP_FAILED"
+  rc=2
+elif [ "$PIPELINE_RUNS_LOCALLY" = "true" ]; then
   check_local_sync "sync-pipeline" "$SYNC_MAX_AGE_H"; r=$?; [ $r -gt $rc ] && rc=$r
 else
   check "sync-pipeline" "sync.yml" "$SYNC_MAX_AGE_H"; r=$?; [ $r -gt $rc ] && rc=$r
