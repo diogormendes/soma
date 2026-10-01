@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const rows = await sql`
     SELECT date, weight_grams / 1000.0 as weight_kg, bmi, body_fat_pct
     FROM weight_log
-    WHERE date >= ${today}::date - ${days}::int
+    WHERE coalesce(upper(source_type), '') <> 'USER_SETTING' AND date >= ${today}::date - ${days}::int
     ORDER BY date ASC
   `;
 

@@ -11,7 +11,7 @@ export async function getWeightTrend(sql: QueryFn, today: string, windowDays = W
     const rows = (await sql`
       SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg
       FROM weight_log
-      WHERE weight_grams IS NOT NULL
+      WHERE coalesce(upper(source_type), '') <> 'USER_SETTING' AND weight_grams IS NOT NULL
         AND date >= ${today}::date - ${`${windowDays} days`}::interval
         AND date <= ${today}::date
       ORDER BY date

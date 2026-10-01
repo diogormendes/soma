@@ -143,7 +143,7 @@ export async function computeAdaptiveContext(sql: QueryFn, today: string = today
   const weightRows = (await sql`
     SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg
     FROM weight_log
-    WHERE weight_grams IS NOT NULL
+    WHERE coalesce(upper(source_type), '') <> 'USER_SETTING' AND weight_grams IS NOT NULL
       AND date >= ${today}::date - ${`${LOOKBACK_DAYS} days`}::interval
     ORDER BY date
   `) as unknown as { date: string; weight_kg: number }[];

@@ -22,7 +22,7 @@ export async function updateBodyComp(
   const rows = await sql`
     SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg
     FROM weight_log
-    WHERE date BETWEEN ${startDate} AND ${targetDate}
+    WHERE coalesce(upper(source_type), '') <> 'USER_SETTING' AND date BETWEEN ${startDate} AND ${targetDate}
       AND weight_grams IS NOT NULL AND weight_grams > 0
     ORDER BY date`;
   if (!rows.length) return null;

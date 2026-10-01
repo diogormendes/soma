@@ -536,7 +536,7 @@ async function planForDay(req: NextRequest) {
     (
       await sql`
         SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg
-        FROM weight_log WHERE weight_grams IS NOT NULL AND date <= ${date}::date ORDER BY date
+        FROM weight_log WHERE coalesce(upper(source_type), '') <> 'USER_SETTING' AND weight_grams IS NOT NULL AND date <= ${date}::date ORDER BY date
       `
     ).map((w: Record<string, unknown>) => ({ date: String(w.date), weightKg: Number(w.weight_kg) })),
     "plan-span",
