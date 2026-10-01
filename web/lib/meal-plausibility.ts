@@ -14,6 +14,7 @@
  * about people.
  */
 import type { QueryFn } from "./db";
+import { todayAthlete } from "./athlete-tz";
 import type { ResolvedItem, WeighMethod } from "./meal-quantity";
 
 /** What his log says about one slot. */
@@ -167,11 +168,11 @@ export function enforcePlausibility(input: PlausibilityInput): PlausibilityResul
 }
 
 /** His own distribution, from his own log. 180 days, which is long enough to be stable. */
-export async function getHistoryStats(sql: QueryFn): Promise<HistoryStats> {
+export async function getHistoryStats(sql: QueryFn, today: string = todayAthlete()): Promise<HistoryStats> {
   const rows = (await sql`
     WITH m AS (
       SELECT meal_slot, calories FROM meal_log
-      WHERE date >= CURRENT_DATE - INTERVAL '180 days' AND calories > 0
+      WHERE date >= ${today}::date - INTERVAL '180 days' AND calories > 0
     )
     SELECT meal_slot, count(*)::int AS n, avg(calories) AS mean,
            coalesce(stddev_samp(calories), 0) AS sd, max(calories) AS max
@@ -180,7 +181,7 @@ export async function getHistoryStats(sql: QueryFn): Promise<HistoryStats> {
   const dayRows = (await sql`
     WITH d AS (
       SELECT date, sum(calories) AS kcal FROM meal_log
-      WHERE date >= CURRENT_DATE - INTERVAL '180 days' GROUP BY date HAVING sum(calories) > 0
+      WHERE date >= ${today}::date - INTERVAL '180 days' GROUP BY date HAVING sum(calories) > 0
     )
     SELECT count(*)::int AS n, avg(kcal) AS mean, coalesce(stddev_samp(kcal), 0) AS sd, max(kcal) AS max
     FROM d`) as Array<{ n: number; mean: number; sd: number; max: number }>;

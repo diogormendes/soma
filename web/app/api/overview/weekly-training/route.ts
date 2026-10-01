@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 /**
@@ -8,13 +9,15 @@ import { getDb } from "@/lib/db";
  * Mirrors the server-side aggregation the web overview page computes inline.
  */
 export async function GET() {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const sql = getDb();
 
   const weekRows = await sql`
     WITH week_data AS (
       SELECT
         CASE
-          WHEN (raw_json->>'startTimeLocal')::timestamp >= DATE_TRUNC('week', CURRENT_DATE)
+          WHEN (raw_json->>'startTimeLocal')::timestamp >= DATE_TRUNC('week', ${today}::date)
           THEN 'this_week'
           ELSE 'last_week'
         END as period,
@@ -23,7 +26,7 @@ export async function GET() {
         (raw_json->>'calories')::float as cal
       FROM garmin_activity_raw
       WHERE endpoint_name = 'summary'
-        AND (raw_json->>'startTimeLocal')::timestamp >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days'
+        AND (raw_json->>'startTimeLocal')::timestamp >= DATE_TRUNC('week', ${today}::date) - INTERVAL '7 days'
     )
     SELECT
       period,

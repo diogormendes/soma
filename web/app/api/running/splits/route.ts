@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { rangeToDays } from "@/lib/time-ranges";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 /**
@@ -9,6 +10,8 @@ import { rangeToDays } from "@/lib/time-ranges";
  * getSplitAnalysis + getBestSplits in app/running/page.tsx.
  */
 export async function GET(request: Request) {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const { searchParams } = new URL(request.url);
   // Match web exactly: map the app's 10 range tokens via web's rangeToDays.
   const days = rangeToDays(searchParams.get("range") || undefined);
@@ -20,7 +23,7 @@ export async function GET(request: Request) {
       SELECT activity_id FROM garmin_activity_raw
       WHERE endpoint_name = 'summary'
         AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-        AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${today}::date - ${days}::int
     ),
     split_data AS (
       SELECT (lap->>'lapIndex')::int as lap_index,
@@ -48,7 +51,7 @@ export async function GET(request: Request) {
       SELECT activity_id FROM garmin_activity_raw
       WHERE endpoint_name = 'summary'
         AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-        AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${today}::date - ${days}::int
     ),
     split_data AS (
       SELECT s.activity_id, (lap->>'lapIndex')::int as lap_index,

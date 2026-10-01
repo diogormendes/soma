@@ -21,7 +21,7 @@ export type { BanisterParams };
 export { banisterPredict, DEFAULT_PARAMS };
 
 /** Today (YYYY-MM-DD) in the athlete's timezone (soma#872). */
-function todayNyc(now: Date = new Date()): string {
+function athleteToday(now: Date = new Date()): string {
   return dateInAthleteTz(now);
 }
 
@@ -108,7 +108,7 @@ export async function fitFromDb(sql: QueryFn, estimatedHrmax = 190): Promise<Ban
   let anchors = await loadAnchorsFromDb(sql, estimatedHrmax);
   const [dailyLoads, minDate] = await loadDailyLoadsFromDb(sql);
 
-  const cutoff = new Date(Date.parse(todayNyc() + "T00:00:00Z") - 730 * 86_400_000).toISOString().slice(0, 10);
+  const cutoff = new Date(Date.parse(athleteToday() + "T00:00:00Z") - 730 * 86_400_000).toISOString().slice(0, 10);
   const recent = anchors.filter((a) => a.date.slice(0, 10) >= cutoff);
   if (recent.length >= 2) anchors = recent;
 
@@ -118,7 +118,7 @@ export async function fitFromDb(sql: QueryFn, estimatedHrmax = 190): Promise<Ban
   }
 
   const params = fitBanister(dailyLoads, anchorInputs);
-  const todayIdx = minDate ? daysBetween(minDate, todayNyc()) : 0;
+  const todayIdx = minDate ? daysBetween(minDate, athleteToday()) : 0;
   const currentVdot = dailyLoads.length ? banisterPredict(params, dailyLoads, todayIdx) : params.p0;
 
   await sql`

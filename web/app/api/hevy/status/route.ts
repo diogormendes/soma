@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 /**
@@ -8,6 +9,8 @@ import { getDb } from "@/lib/db";
  * cron). Consumed by the hevy2garmin universal app.
  */
 export async function GET() {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const sql = getDb();
 
   const recent = await sql`
@@ -21,7 +24,7 @@ export async function GET() {
   const counts = await sql`
     SELECT count(*)::int AS total,
            count(garmin_activity_id)::int AS synced,
-           count(*) FILTER (WHERE workout_date >= (now()::date - 7))::int AS week
+           count(*) FILTER (WHERE workout_date >= (${today}::date - 7))::int AS week
     FROM workout_enrichment
   `;
 

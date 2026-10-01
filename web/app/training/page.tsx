@@ -132,6 +132,8 @@ async function getFitnessLatest() {
 }
 
 async function getReferenceData() {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const sql = getDb();
   const [readinessHistory, fitnessHistory, weightHistory] = await Promise.all([
     safeQuery(
@@ -139,7 +141,7 @@ async function getReferenceData() {
              h.training_readiness_score AS garmin_readiness_score
          FROM daily_readiness r
          LEFT JOIN daily_health_summary h ON r.date = h.date
-         WHERE r.date >= CURRENT_DATE - interval '14 days'
+         WHERE r.date >= ${today}::date - interval '14 days'
          ORDER BY r.date`,
       [],
     ),
@@ -147,7 +149,7 @@ async function getReferenceData() {
       () => sql`SELECT date::text as date, efficiency_factor, decoupling_pct,
              race_prediction_seconds, vdot_adjusted
          FROM fitness_trajectory
-         WHERE date >= CURRENT_DATE - interval '30 days'
+         WHERE date >= ${today}::date - interval '30 days'
          ORDER BY date`,
       [],
     ),
@@ -155,7 +157,7 @@ async function getReferenceData() {
       () => sql`SELECT date::text as date, weight_kg
          FROM fitness_trajectory
          WHERE weight_kg IS NOT NULL
-         AND date >= CURRENT_DATE - interval '14 days'
+         AND date >= ${today}::date - interval '14 days'
          ORDER BY date`,
       [],
     ),

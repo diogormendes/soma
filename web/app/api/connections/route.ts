@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 export async function GET() {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const sql = getDb();
 
   try {
@@ -72,7 +75,7 @@ export async function GET() {
       LEFT JOIN strava_bridge_uploads sbu
         ON sbu.garmin_activity_id = g.activity_id
       WHERE g.endpoint_name = 'summary'
-        AND (g.raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - 90
+        AND (g.raw_json->>'startTimeLocal')::timestamp >= ${today}::date - 90
       ORDER BY (g.raw_json->>'startTimeLocal')::text DESC
       LIMIT 60
     `.catch(() => sql`
@@ -85,7 +88,7 @@ export async function GET() {
       LEFT JOIN activity_sync_log sl
         ON sl.source_id = g.activity_id::text AND sl.destination = 'strava' AND sl.status IN ('sent', 'external')
       WHERE g.endpoint_name = 'summary'
-        AND (g.raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - 90
+        AND (g.raw_json->>'startTimeLocal')::timestamp >= ${today}::date - 90
       ORDER BY (g.raw_json->>'startTimeLocal')::text DESC
       LIMIT 60
     `)) as StravaRow[];

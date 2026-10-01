@@ -23,7 +23,7 @@ export async function loadRunStatus(sql: QueryFn, today: string = todayKey()): P
       SELECT activity_date::text AS date, SUM(load_value)::float AS load
       FROM training_load
       WHERE source = 'garmin_running'
-        AND activity_date >= CURRENT_DATE - 35
+        AND activity_date >= ${today}::date - 35
       GROUP BY activity_date
       ORDER BY activity_date
     `) as { date: string; load: number }[];

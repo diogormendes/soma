@@ -9,6 +9,7 @@
  * whisper's `initial_prompt` for the real one.
  */
 import type { QueryFn } from "./db";
+import { todayAthlete } from "./athlete-tz";
 
 /** How many words to send. Both consumers degrade with a very long list, and the tail is noise. */
 export const MAX_WORDS = 120;
@@ -55,12 +56,12 @@ export function buildVocabulary(names: readonly string[], seeds: readonly string
 }
 
 /** His own food words, the ones he logs most first. */
-export async function getVocabulary(sql: QueryFn): Promise<string[]> {
+export async function getVocabulary(sql: QueryFn, today: string = todayAthlete()): Promise<string[]> {
   const rows = (await sql`
     WITH used AS (
       SELECT i->>'ingredient_id' AS id, count(*)::int AS n
       FROM meal_log m, jsonb_array_elements(m.items) i
-      WHERE m.date >= CURRENT_DATE - INTERVAL '180 days'
+      WHERE m.date >= ${today}::date - INTERVAL '180 days'
       GROUP BY 1
     )
     SELECT ing.name, COALESCE(used.n, 0) AS n

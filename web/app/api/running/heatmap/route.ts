@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getRouteSamples, thinSamples } from "@/lib/activity-routes";
+import { todayForRequest } from "@/lib/request-tz";
 
 export const runtime = "nodejs";
 export const revalidate = 300;
 
 export async function GET() {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const sql = getDb();
 
   // Only ids cross the wire here; the GPS samples come from activity_routes (soma#814), derived
@@ -18,7 +21,7 @@ export async function GET() {
     WHERE s.endpoint_name = 'summary'
       AND s.raw_json->'activityType'->>'typeKey' IN ('running', 'trail_running')
       AND d.raw_json ? 'metricDescriptors'
-      AND (s.raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - INTERVAL '12 months'
+      AND (s.raw_json->>'startTimeLocal')::timestamp >= ${today}::date - INTERVAL '12 months'
     ORDER BY (s.raw_json->>'startTimeLocal')::text DESC
     LIMIT 40
   `;

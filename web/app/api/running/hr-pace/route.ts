@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { rangeToDays } from "@/lib/time-ranges";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 /**
@@ -9,6 +10,8 @@ import { rangeToDays } from "@/lib/time-ranges";
  * getHRPaceData in app/running/page.tsx.
  */
 export async function GET(request: Request) {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const { searchParams } = new URL(request.url);
   // Match web exactly: map the app's 10 range tokens via web's rangeToDays.
   const days = rangeToDays(searchParams.get("range") || undefined);
@@ -27,7 +30,7 @@ export async function GET(request: Request) {
       AND (raw_json->>'distance')::float > 1000
       AND (raw_json->>'averageHR')::float > 60
       AND (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0) / 60.0 BETWEEN 3.0 AND 10.0
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${today}::date - ${days}::int
     ORDER BY (raw_json->>'startTimeLocal')::text ASC
   `) as { date: string; name: string | null; pace: number | null; hr: number | null; distance: number | null }[];
 
