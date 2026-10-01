@@ -46,10 +46,6 @@ function hasChatToken(req: { headers: Headers }): boolean {
 export default auth((req) => {
   const { pathname } = req.nextUrl;
   const isApi = pathname.startsWith("/api/");
-  // TEMPORARY (soma#1125): proves on the live server that the phone app sends its zone. The app's
-  // own console output never reaches logcat in a release build, so this is the only place to read it.
-  // Remove once one app request has been seen with the header.
-  if (isApi) console.info(`[tz-probe] ${req.method} ${pathname} x-soma-tz=${req.headers.get("x-soma-tz") ?? "none"}`);
 
   // The chat routes answer their own preflight with an origin allowlist (#670): the
   // browser calls the Mac over the tailnet from https://soma.gkos.dev.
