@@ -36,6 +36,28 @@ export function athleteToday(now: Date = new Date()): string {
   return dateInAthleteTz(now);
 }
 
+/**
+ * Days Garmin holds a weigh-in for that soma has no weight row for.
+ *
+ * ⛔ `getStaleDates` re-fetches a day only while its heart rate is incomplete or its health summary looks
+ * partial. A weigh-in typed into Garmin the next evening lands on a day that is already complete by those
+ * measures, so it was never collected. One range call over the look-back window says which days Garmin
+ * holds a weigh-in for, and any of those missing here is fetched again.
+ */
+export function lateWeighInDates(range: unknown, storedDates: Iterable<string>): string[] {
+  const days = (range as { dailyWeightSummaries?: unknown } | null)?.dailyWeightSummaries;
+  if (!Array.isArray(days)) return [];
+  const stored = new Set(storedDates);
+  const late = new Set<string>();
+  for (const d of days as Array<{ summaryDate?: string; allWeightMetrics?: Array<{ calendarDate?: string }> }>) {
+    const samples = Array.isArray(d?.allWeightMetrics) ? d.allWeightMetrics : [];
+    if (!samples.length) continue;
+    const date = d.summaryDate ?? samples[0]?.calendarDate;
+    if (typeof date === "string" && date.length >= 10 && !stored.has(date.slice(0, 10))) late.add(date.slice(0, 10));
+  }
+  return [...late].sort().reverse();
+}
+
 /** Serialize a GarminRequest into a connectapi path with an inline query string. */
 export function toPath(req: GarminRequest): string {
   if (!req.params) return req.url;
@@ -226,6 +248,22 @@ export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promis
   }
 
   const dates = await getStaleDates(sql);
+  // Days whose weigh-in reached Garmin after the day was already complete. Non-fatal: if the range call
+  // fails, the run goes on with the usual days, as it did before this existed.
+  try {
+    const to = athleteToday();
+    const from = new Date(Date.parse(`${to}T00:00:00Z`) - 14 * 86_400_000).toISOString().slice(0, 10);
+    const range = await client.connectapi(`/weight-service/weight/range/${from}/${to}?includeAll=true`);
+    const stored = (await sql`
+      SELECT DISTINCT date::text AS date FROM weight_log WHERE date >= ${from}::date AND date <= ${to}::date
+    `) as unknown as { date: string }[];
+    const late = lateWeighInDates(range, stored.map((r) => r.date));
+    for (const d of late) if (!dates.includes(d)) dates.push(d);
+    dates.sort().reverse();
+    if (late.length) console.log(`  late weigh-ins to collect: ${late.join(", ")}`);
+  } catch (e) {
+    console.warn(`  late weigh-in check failed: ${(e as Error).message}`);
+  }
   let recordsSaved = 0;
   let activitiesFound = 0;
   let daysParsed = 0;

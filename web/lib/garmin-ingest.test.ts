@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toPath, athleteToday, getStaleDates } from "./garmin-ingest";
+import { toPath, athleteToday, getStaleDates, lateWeighInDates } from "./garmin-ingest";
 import { buildRequest, DAILY_ENDPOINTS } from "garmin-auth/endpoints";
 import type { QueryFn } from "./db";
 
@@ -89,5 +89,41 @@ describe("getStaleDates measures its windows from HIS date, not the database's",
       expect(q.values).toContain("2026-10-02");
       expect(q.values).not.toContain("2026-10-01");
     }
+  });
+});
+
+/**
+ * ⛔ A WEIGH-IN THAT REACHES GARMIN LATE WAS NEVER COLLECTED. `getStaleDates` re-fetches a day only while
+ * its heart rate is incomplete or its health summary looks partial, so a weigh-in typed into Garmin the
+ * next evening, after the day was already complete, was never picked up. One range call says which days
+ * Garmin holds a weigh-in; any of those soma has no row for gets fetched again.
+ */
+describe("lateWeighInDates", () => {
+  const range = (dates: string[]) => ({
+    dailyWeightSummaries: dates.map((d) => ({ summaryDate: d, allWeightMetrics: [{ calendarDate: d, weight: 74500 }] })),
+  });
+
+  it("names a day Garmin has a weigh-in for and soma does not", () => {
+    expect(lateWeighInDates(range(["2026-09-28", "2026-09-24"]), ["2026-09-24"])).toEqual(["2026-09-28"]);
+  });
+
+  it("names nothing when soma already holds every day", () => {
+    expect(lateWeighInDates(range(["2026-09-28", "2026-09-24"]), ["2026-09-24", "2026-09-28"])).toEqual([]);
+  });
+
+  it("ignores a day whose summary has no samples in it", () => {
+    const r = { dailyWeightSummaries: [{ summaryDate: "2026-09-28", allWeightMetrics: [] }] };
+    expect(lateWeighInDates(r, [])).toEqual([]);
+  });
+
+  it("copes with an empty or unexpected answer instead of throwing", () => {
+    expect(lateWeighInDates({}, [])).toEqual([]);
+    expect(lateWeighInDates(null, [])).toEqual([]);
+    expect(lateWeighInDates({ dailyWeightSummaries: "nope" }, [])).toEqual([]);
+  });
+
+  it("takes the sample's own date when the summary has none", () => {
+    const r = { dailyWeightSummaries: [{ allWeightMetrics: [{ calendarDate: "2026-09-21" }] }] };
+    expect(lateWeighInDates(r, [])).toEqual(["2026-09-21"]);
   });
 });
