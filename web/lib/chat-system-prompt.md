@@ -47,23 +47,26 @@ to the chat.
 
 ---
 
-## Database access (Neon Postgres)
+## Database access (Postgres on this Mac)
 
-- **Connection string** lives at `web/.env.local` (key: `DATABASE_URL`). Do not
-  log or echo it.
-- **Always run DB scripts from `web/` so `@neondatabase/serverless` resolves
-  from `node_modules`.** If DNS to Neon fails, set a static fetch endpoint:
+- **Connection string** lives at `web/.env.local` (key: `DATABASE_URL`). It
+  names the Postgres on this machine (`127.0.0.1`). Do not log or echo it.
+  The old Neon project is deleted, so never write a Neon host or endpoint
+  into a script.
+- **Open the database through `web/lib/db.ts`** (`getDb()`), which picks the
+  driver from the connection string. Do not import a database driver
+  yourself.
 
-  ```js
-  import { neon } from '@neondatabase/serverless';
-  const sql = neon(process.env.DATABASE_URL, {
-    fetchEndpoint: () => 'https://api.c-4.us-east-1.aws.neon.tech/sql',
-  });
+  ```ts
+  import { getDb } from './lib/db';
+  const sql = getDb();
+  const rows = await sql`SELECT date, target_calories FROM nutrition_day ORDER BY date DESC LIMIT 3`;
   ```
 
-- Write throwaway scripts in `/tmp/<name>.mjs`, copy to `web/<name>.mjs`, run
-  with `node web/<name>.mjs`, then delete the copy. Don't leave scratch files
-  in `web/`.
+- Write throwaway scripts in `/tmp/<name>.mts`, copy to `web/<name>.mts`, run
+  with `npx tsx web/<name>.mts` from `web/` with the env loaded
+  (`set -a; . ./.env.local; set +a`), then delete the copy. Don't leave
+  scratch files in `web/`.
 
 ### Key tables (only the ones you'll touch from chat)
 
