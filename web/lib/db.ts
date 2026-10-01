@@ -1,5 +1,25 @@
 import { neon } from "@neondatabase/serverless";
-import { Pool } from "pg";
+import { Pool, types as pgTypes } from "pg";
+
+/**
+ * ⛔ A DATE IS A CALENDAR DAY, SO IT STAYS TEXT.
+ *
+ * Both drivers parse a DATE column into a JS Date at the SERVER's midnight, and JSON sends a Date as UTC.
+ * 28 September in Athens therefore left the server as "2026-09-27T21:00:00.000Z". The app's charts label
+ * a point by its first ten characters, so they were a day early, and so was every
+ * `d instanceof Date ? d.toISOString().split("T")[0] : …` guard written to cope with it, because that
+ * ISO string is the previous day. Handing DATE back as the text Postgres sent ("2026-09-28") removes the
+ * moment altogether. Timestamps keep their default parsing: they ARE moments.
+ */
+export const DATE_OID = 1082;
+const dateAsText = (value: string): string => value;
+pgTypes.setTypeParser(DATE_OID, dateAsText);
+
+/** The same rule for the Neon HTTP driver, which the demo and the gateway hosts use. */
+export const neonTypes = {
+  getTypeParser: (oid: number, format?: "text" | "binary") =>
+    oid === DATE_OID ? dateAsText : pgTypes.getTypeParser(oid, format as "text"),
+};
 
 /** A tagged-template function that always resolves to an array of row objects. */
 export type QueryFn = (
@@ -109,7 +129,7 @@ function isBuildPhase(): boolean {
  */
 export function makeDb(url: string): QueryFn {
   if (!url) throw new Error("makeDb needs a connection string");
-  return driverFor(url) === "http" ? (neon(url) as QueryFn) : localDb(url);
+  return driverFor(url) === "http" ? (neon(url, { types: neonTypes }) as QueryFn) : localDb(url);
 }
 
 export function getDb(): QueryFn {
@@ -128,7 +148,7 @@ export function getDb(): QueryFn {
     // exactly how a missing key on the portfolio went unnoticed through three builds.
     throw new Error("DATABASE_URL is not set");
   }
-  return driverFor(url) === "http" ? (neon(url) as QueryFn) : localDb(url);
+  return driverFor(url) === "http" ? (neon(url, { types: neonTypes }) as QueryFn) : localDb(url);
 }
 
 /** Retry once on a transport hiccup: a Neon cold start, or the gateway between a request
