@@ -114,7 +114,8 @@ function BackfillTab({ progress }: { progress: BackfillProgress[] }) {
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Oldest date</span>
                   <span className="font-mono text-xs">
-                    {new Date(p.oldest_date_done).toLocaleDateString()}
+                    {/* a calendar day, so read it as local midnight; a bare "YYYY-MM-DD" parses as UTC and shows the day before west of Greenwich */}
+                    {new Date(`${String(p.oldest_date_done).slice(0, 10)}T00:00:00`).toLocaleDateString()}
                   </span>
                 </div>
               )}
