@@ -2,9 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getDb } from "@/lib/db";
 import { readTz } from "@/lib/athlete-tz";
 import { acceptWeight, type IncomingWeight } from "@/lib/weight-reading";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 export async function GET(request: Request) {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const { searchParams } = new URL(request.url);
   const days = parseInt(searchParams.get("days") || "30", 10);
 
@@ -13,7 +16,7 @@ export async function GET(request: Request) {
   const rows = await sql`
     SELECT date, weight_grams / 1000.0 as weight_kg, bmi, body_fat_pct
     FROM weight_log
-    WHERE date >= CURRENT_DATE - ${days}::int
+    WHERE date >= ${today}::date - ${days}::int
     ORDER BY date ASC
   `;
 

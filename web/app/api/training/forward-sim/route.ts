@@ -19,6 +19,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   const sql = getDb();
+  // His calendar date on the device making this request, never the database's New York clock.
   const today = await todayForRequest();
 
   const [
@@ -64,7 +65,7 @@ export async function GET() {
     // Garmin 7-day/28-day load for comparison (last 90 days)
     sql`SELECT date::text as date, daily_load, ctl, atl
         FROM pmc_daily
-        WHERE date >= CURRENT_DATE - interval '90 days'
+        WHERE date >= ${today}::date - interval '90 days'
         ORDER BY date`
       .catch(() => []),
     // Garmin training readiness for comparison
@@ -73,21 +74,21 @@ export async function GET() {
                r.composite_score AS our_score
         FROM daily_health_summary h
         LEFT JOIN daily_readiness r ON h.date = r.date
-        WHERE h.date >= CURRENT_DATE - interval '90 days'
+        WHERE h.date >= ${today}::date - interval '90 days'
           AND h.training_readiness_score IS NOT NULL
         ORDER BY h.date`
       .catch(() => []),
     // Garmin VO2max + weight for comparison (weight needed for inline VDOT adjustment)
     sql`SELECT date::text as date, vo2max, vdot_adjusted, weight_kg
         FROM fitness_trajectory
-        WHERE date >= CURRENT_DATE - interval '90 days'
+        WHERE date >= ${today}::date - interval '90 days'
           AND vo2max IS NOT NULL
         ORDER BY date`
       .catch(() => []),
     // Race predictions for comparison (Daniels from VDOT + Garmin race prediction)
     sql`SELECT date::text as date, race_prediction_seconds, vdot_adjusted, vo2max, weight_kg
         FROM fitness_trajectory
-        WHERE date >= CURRENT_DATE - interval '90 days'
+        WHERE date >= ${today}::date - interval '90 days'
           AND vo2max IS NOT NULL
         ORDER BY date`
       .catch(() => []),

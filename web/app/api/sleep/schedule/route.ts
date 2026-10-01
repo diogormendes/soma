@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { parseRangeDays } from "@/lib/time-ranges";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
@@ -16,6 +17,8 @@ const stddev = (a: number[]) => {
  * getSleepSchedule + getSleepRegularity in app/sleep/page.tsx.
  */
 export async function GET(request: Request) {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const { searchParams } = new URL(request.url);
   const range = searchParams.get("range") || "30d";
   const days = parseRangeDays(range, 30); // app keys (6m…) and legacy Nd keys (#743)
@@ -29,7 +32,7 @@ export async function GET(request: Request) {
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
       AND raw_json->'dailySleepDTO'->>'sleepStartTimestampLocal' IS NOT NULL
-      AND date >= CURRENT_DATE - ${days}::int
+      AND date >= ${today}::date - ${days}::int
     ORDER BY date ASC
   `) as { date: string; start_ts: string | number; end_ts: string | number }[];
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -14,6 +15,8 @@ interface DayData {
 }
 
 export async function GET() {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const sql = getDb();
 
   try {
@@ -27,7 +30,7 @@ export async function GET() {
         COALESCE(SUM((raw_json->>'calories')::float), 0) as calories
       FROM garmin_activity_raw
       WHERE endpoint_name = 'summary'
-        AND (raw_json->>'startTimeLocal')::timestamp >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days'
+        AND (raw_json->>'startTimeLocal')::timestamp >= DATE_TRUNC('week', ${today}::date) - INTERVAL '7 days'
       GROUP BY activity_date
       ORDER BY activity_date ASC
     `;

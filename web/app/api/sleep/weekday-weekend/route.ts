@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 /**
@@ -7,6 +8,8 @@ import { getDb } from "@/lib/db";
  * computes this server-side). Mirrors getWeekdayWeekendSleep in app/sleep/page.tsx.
  */
 export async function GET(request: Request) {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const { searchParams } = new URL(request.url);
   const range = searchParams.get("range") || "90d";
   const days = range === "30d" ? 30 : range === "1y" ? 365 : 90;
@@ -23,7 +26,7 @@ export async function GET(request: Request) {
     FROM garmin_raw_data
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
-      AND date >= CURRENT_DATE - ${days}::int
+      AND date >= ${today}::date - ${days}::int
     GROUP BY day_type
   `) as { day_type: string; avg_hours: number | null; avg_score: number | null; avg_deep_pct: number | null; nights: number | string }[];
 

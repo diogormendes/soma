@@ -5,6 +5,7 @@
  * the Python pipeline. Stage 4 (#186).
  */
 import type { QueryFn } from "./db";
+import { todayAthlete } from "./athlete-tz";
 import { sendImage, getTelegramConfig } from "./notify-telegram";
 import { sendPush } from "./notify-push";
 
@@ -23,7 +24,7 @@ export interface NotifyResult { telegram: number; push: number; }
  * workout card image, sends it (💪 caption), sends a push, and logs to the ledger.
  * Port of _backfill_telegram_notifications, plus web-push.
  */
-export async function notifyPendingWorkouts(sql: QueryFn): Promise<NotifyResult> {
+export async function notifyPendingWorkouts(sql: QueryFn, today: string = todayAthlete()): Promise<NotifyResult> {
   const { token } = await getTelegramConfig(sql);
   const rows = await sql`
     SELECT we.hevy_id, we.hevy_title, we.workout_date::text AS workout_date, h.raw_json
@@ -34,7 +35,7 @@ export async function notifyPendingWorkouts(sql: QueryFn): Promise<NotifyResult>
         SELECT source_id FROM activity_sync_log
         WHERE source_platform = 'hevy' AND destination = 'telegram' AND status = 'sent'
       )
-      AND we.workout_date >= CURRENT_DATE - INTERVAL '3 days'
+      AND we.workout_date >= ${today}::date - INTERVAL '3 days'
     ORDER BY we.workout_date DESC
     LIMIT 5`;
 

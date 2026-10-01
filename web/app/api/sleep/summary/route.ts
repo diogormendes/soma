@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { parseRangeDays } from "@/lib/time-ranges";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 /**
@@ -9,6 +10,8 @@ import { parseRangeDays } from "@/lib/time-ranges";
  * the sleep_data queries in app/sleep/page.tsx: stages, score, sleep HR, SpO2.
  */
 export async function GET(request: Request) {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const { searchParams } = new URL(request.url);
   const range = searchParams.get("range") || "30d";
   const days = parseRangeDays(range, 30); // app keys (6m…) and legacy Nd keys (#743)
@@ -27,7 +30,7 @@ export async function GET(request: Request) {
     FROM garmin_raw_data
     WHERE endpoint_name = 'sleep_data'
       AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
-      AND date >= CURRENT_DATE - ${days}::int
+      AND date >= ${today}::date - ${days}::int
     ORDER BY date ASC
   `) as {
     date: string; total: number | null; deep: number | null; light: number | null;

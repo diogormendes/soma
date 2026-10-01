@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toPath, todayNyc, getStaleDates } from "./garmin-ingest";
+import { toPath, athleteToday, getStaleDates } from "./garmin-ingest";
 import { buildRequest, DAILY_ENDPOINTS } from "garmin-auth/endpoints";
 import type { QueryFn } from "./db";
 
@@ -13,11 +13,11 @@ describe("toPath — connectapi query serialization", () => {
   });
 });
 
-describe("todayNyc", () => {
+describe("athleteToday, his date in his zone (was misnamed todayNyc)", () => {
   it("returns YYYY-MM-DD in the athlete's timezone, Athens by default (soma#872)", () => {
     // 2026-07-12 21:30 UTC is already 2026-07-13 in Athens (EEST, +3); New York would still say the 12th.
-    expect(todayNyc(new Date("2026-07-12T21:30:00Z"))).toBe("2026-07-13");
-    expect(todayNyc(new Date("2026-07-13T12:00:00Z"))).toBe("2026-07-13");
+    expect(athleteToday(new Date("2026-07-12T21:30:00Z"))).toBe("2026-07-13");
+    expect(athleteToday(new Date("2026-07-13T12:00:00Z"))).toBe("2026-07-13");
   });
 });
 
@@ -62,5 +62,32 @@ describe("getStaleDates", () => {
     const dates = await getStaleDates(mockSql([{ date: "2026-07-11", pts: 700 }], []), 14, now);
     const sorted = [...dates].sort().reverse();
     expect(dates).toEqual(sorted);
+  });
+});
+
+/**
+ * ⛔ TWO CLOCKS IN ONE FUNCTION (soma#1123). `getStaleDates` took "today" from his zone in TypeScript
+ * and measured its windows from `CURRENT_DATE`, which is New York's. Just after his midnight they
+ * disagree by a day. The windows must be measured from the same date the function calls today.
+ */
+describe("getStaleDates measures its windows from HIS date, not the database's", () => {
+  // 00:30 on 2 October in Athens is still 1 October in New York.
+  const justAfterHisMidnight = new Date("2026-10-01T21:30:00Z");
+
+  it("hands his date to every query that has a window", async () => {
+    const seen: Array<{ text: string; values: unknown[] }> = [];
+    const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+      seen.push({ text: strings.join("?"), values });
+      return Promise.resolve([]);
+    }) as unknown as QueryFn;
+    const dates = await getStaleDates(sql, 14, justAfterHisMidnight);
+    expect(dates).toContain("2026-10-02");
+    const windowed = seen.filter((q) => q.text.includes("::date"));
+    expect(windowed.length).toBeGreaterThanOrEqual(2);
+    for (const q of windowed) {
+      expect(q.text).not.toMatch(/CURRENT_DATE/i);
+      expect(q.values).toContain("2026-10-02");
+      expect(q.values).not.toContain("2026-10-01");
+    }
   });
 });

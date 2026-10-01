@@ -9,6 +9,7 @@
  * consecutive recent deficit days that aren't diet breaks / refeeds.
  */
 import { computeAdaptiveTdee, recommendDietBreak, type DietBreakLevel } from "macro-engine-core";
+import { todayAthlete } from "./athlete-tz";
 import { keepPlausible } from "./weigh-ins";
 import type { QueryFn } from "@/lib/db";
 import { meetsCoverageFloor, daysBetween, STREAK_MAX_GAP_DAYS } from "@/lib/coverage";
@@ -115,7 +116,7 @@ export function buildDayPoints(
   return points;
 }
 
-export async function computeAdaptiveContext(sql: QueryFn): Promise<AdaptiveContext | null> {
+export async function computeAdaptiveContext(sql: QueryFn, today: string = todayAthlete()): Promise<AdaptiveContext | null> {
   // Coverage = (distinct slots with logged kcal ∪ explicitly skipped slots) / 4.
   // Computed in SQL so every consumer of these rows sees the same number.
   // Only the four canonical slots count; a slot both logged and skipped
@@ -134,7 +135,7 @@ export async function computeAdaptiveContext(sql: QueryFn): Promise<AdaptiveCont
              WHERE u.s IN ('breakfast', 'lunch', 'dinner', 'pre_sleep')
            ) AS coverage
     FROM nutrition_day n
-    WHERE n.date >= CURRENT_DATE - ${`${LOOKBACK_DAYS} days`}::interval
+    WHERE n.date >= ${today}::date - ${`${LOOKBACK_DAYS} days`}::interval
     ORDER BY n.date
   `) as unknown as DayRow[];
   if (!rows.length) return null;
@@ -143,7 +144,7 @@ export async function computeAdaptiveContext(sql: QueryFn): Promise<AdaptiveCont
     SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg
     FROM weight_log
     WHERE weight_grams IS NOT NULL
-      AND date >= CURRENT_DATE - ${`${LOOKBACK_DAYS} days`}::interval
+      AND date >= ${today}::date - ${`${LOOKBACK_DAYS} days`}::interval
     ORDER BY date
   `) as unknown as { date: string; weight_kg: number }[];
   // A mistyped weigh-in moves the TDEE, because the TDEE is computed FROM the weight change, so a

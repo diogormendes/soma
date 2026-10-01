@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 /**
@@ -8,6 +9,8 @@ import { getDb } from "@/lib/db";
  * app/running/page.tsx.
  */
 export async function GET() {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   // Match web exactly: getFitnessScores uses a fixed 12-month window and ignores
   // the range selector, so the app must too (else its scores diverge from web).
   const days = 365;
@@ -20,7 +23,7 @@ export async function GET() {
       (raw_json->>'classification')::int as classification
     FROM garmin_raw_data
     WHERE endpoint_name = 'endurance_score'
-      AND date >= CURRENT_DATE - ${days}::int
+      AND date >= ${today}::date - ${days}::int
     ORDER BY date ASC
   `) as { date: string; score: number | null; classification: number | null }[];
 
@@ -31,7 +34,7 @@ export async function GET() {
       (raw_json->>'enduranceScore')::int as endurance
     FROM garmin_raw_data
     WHERE endpoint_name = 'hill_score'
-      AND date >= CURRENT_DATE - ${days}::int
+      AND date >= ${today}::date - ${days}::int
     ORDER BY date ASC
   `) as { date: string; score: number | null; strength: number | null; endurance: number | null }[];
 

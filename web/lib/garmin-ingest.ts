@@ -32,7 +32,7 @@ const PROFILE_URL = "/userprofile-service/socialProfile";
 const USER_SETTINGS_URL = "/userprofile-service/userprofile/user-settings";
 
 /** Today's date (YYYY-MM-DD) in the athlete's timezone (soma#872). */
-export function todayNyc(now: Date = new Date()): string {
+export function athleteToday(now: Date = new Date()): string {
   return dateInAthleteTz(now);
 }
 
@@ -73,7 +73,7 @@ async function upsertActivityRaw(sql: QueryFn, activityId: number, endpoint: str
  * Today is always included. Port of pipeline._get_stale_dates.
  */
 export async function getStaleDates(sql: QueryFn, maxLookback = 14, now: Date = new Date()): Promise<string[]> {
-  const today = todayNyc(now);
+  const today = athleteToday(now);
   const stale = new Set<string>([today]);
   const dayMs = 86_400_000;
   const todayMs = Date.parse(today + "T00:00:00Z");
@@ -85,8 +85,8 @@ export async function getStaleDates(sql: QueryFn, maxLookback = 14, now: Date = 
                 THEN jsonb_array_length(raw_json->'heartRateValues') ELSE 0 END AS pts
     FROM garmin_raw_data
     WHERE endpoint_name = 'heart_rates'
-      AND date >= CURRENT_DATE - ${maxLookback}::int
-      AND date < CURRENT_DATE
+      AND date >= ${today}::date - ${maxLookback}::int
+      AND date < ${today}::date
     ORDER BY date DESC`;
   let foundComplete = false;
   for (const row of hrRows) {
@@ -104,7 +104,7 @@ export async function getStaleDates(sql: QueryFn, maxLookback = 14, now: Date = 
   // Check 2: health summaries with suspiciously low values (partial sync).
   const partial = await sql`
     SELECT date::text AS date FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - 7 AND date < CURRENT_DATE
+    WHERE date >= ${today}::date - 7 AND date < ${today}::date
       AND (bmr_kilocalories < 1500 OR total_steps < 1000)`;
   for (const row of partial) stale.add(row.date);
 
@@ -220,7 +220,7 @@ export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promis
   // estimate uses the default profile, which is what it did before.
   try {
     const settings = await client.connectapi(USER_SETTINGS_URL);
-    if (hasData(settings)) await upsertRaw(sql, todayNyc(), "user_settings", settings);
+    if (hasData(settings)) await upsertRaw(sql, athleteToday(), "user_settings", settings);
   } catch (e) {
     console.warn(`  user_settings failed: ${(e as Error).message}`);
   }
@@ -241,21 +241,21 @@ export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promis
   // uses the raw + parsed data just ingested. Non-fatal on failure.
   let fitnessUpdated = false;
   try {
-    const traj = await updateFitnessTrajectory(sql, todayNyc());
+    const traj = await updateFitnessTrajectory(sql, athleteToday());
     fitnessUpdated = traj !== null;
   } catch (e) { console.warn(`  fitness trajectory failed: ${(e as Error).message}`); }
 
   // Body composition: 7-day weight EMA + weight-adjusted VDOT / race prediction.
   // Runs AFTER the fitness trajectory (needs its vo2max) and overwrites weight_kg
   // with the smoothed value. Non-fatal on failure.
-  try { await updateBodyComp(sql, todayNyc()); }
+  try { await updateBodyComp(sql, athleteToday()); }
   catch (e) { console.warn(`  body comp failed: ${(e as Error).message}`); }
 
   // Daily readiness (traffic light from HRV/sleep/RHR/body-battery z-scores) for
   // today — reads the daily_health_summary just parsed. Non-fatal on failure.
   let readiness: string | null = null;
   try {
-    const rd = await computeDailyReadiness(sql, todayNyc());
+    const rd = await computeDailyReadiness(sql, athleteToday());
     readiness = rd.traffic_light;
   } catch (e) { console.warn(`  readiness failed: ${(e as Error).message}`); }
 

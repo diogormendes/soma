@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { parseRangeDays } from "@/lib/time-ranges";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 /**
@@ -9,6 +10,8 @@ import { parseRangeDays } from "@/lib/time-ranges";
  * getRespirationTrend in app/sleep/page.tsx.
  */
 export async function GET(request: Request) {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const { searchParams } = new URL(request.url);
   const range = searchParams.get("range") || "30d";
   const days = parseRangeDays(range, 30); // app keys (6m…) and legacy Nd keys (#743)
@@ -24,10 +27,10 @@ export async function GET(request: Request) {
     FROM garmin_raw_data s
     FULL OUTER JOIN garmin_raw_data p
       ON s.date = p.date AND p.endpoint_name = 'spo2_data' AND p.raw_json->>'averageSpO2' IS NOT NULL
-      AND p.date >= CURRENT_DATE - ${days}::int
+      AND p.date >= ${today}::date - ${days}::int
     WHERE s.endpoint_name = 'sleep_data'
       AND (s.raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
-      AND s.date >= CURRENT_DATE - ${days}::int
+      AND s.date >= ${today}::date - ${days}::int
       AND (s.raw_json->'dailySleepDTO'->>'averageSpO2Value' IS NOT NULL OR p.raw_json->>'averageSpO2' IS NOT NULL)
     ORDER BY 1 ASC
   `) as { date: string; avg_spo2: number | null; low_spo2: number | null; sleep_spo2: number | null }[];
@@ -41,7 +44,7 @@ export async function GET(request: Request) {
     FROM garmin_raw_data
     WHERE endpoint_name = 'respiration_data'
       AND raw_json->>'avgWakingRespirationValue' IS NOT NULL
-      AND date >= CURRENT_DATE - ${days}::int
+      AND date >= ${today}::date - ${days}::int
     ORDER BY date ASC
   `) as { date: string; awake_resp: number | null; sleep_resp: number | null; low_resp: number | null; high_resp: number | null }[];
 

@@ -272,7 +272,7 @@ async function getPageData() {
       LEFT JOIN strava_bridge_uploads sbu
         ON sbu.garmin_activity_id = ga.activity_id
       WHERE ga.endpoint_name = 'summary'
-        AND ga.raw_json->>'startTimeGMT' >= to_char(NOW() - INTERVAL '30 days', 'YYYY-MM-DD')
+        AND ga.raw_json->>'startTimeGMT' >= to_char((NOW() AT TIME ZONE 'UTC') - INTERVAL '30 days', 'YYYY-MM-DD')
       ORDER BY ga.raw_json->>'startTimeGMT' DESC
     `.catch(() =>
     // The demo database has no strava_bridge_uploads: same rows from activity_sync_log alone.
@@ -295,7 +295,7 @@ async function getPageData() {
         AND asl.destination = 'strava'
         AND asl.status IN ('sent', 'external')
       WHERE ga.endpoint_name = 'summary'
-        AND ga.raw_json->>'startTimeGMT' >= to_char(NOW() - INTERVAL '30 days', 'YYYY-MM-DD')
+        AND ga.raw_json->>'startTimeGMT' >= to_char((NOW() AT TIME ZONE 'UTC') - INTERVAL '30 days', 'YYYY-MM-DD')
       ORDER BY ga.raw_json->>'startTimeGMT' DESC
     `),
     sql`
@@ -319,7 +319,7 @@ async function getPageData() {
         AND asl.destination = 'strava'
         AND asl.status IN ('sent', 'external')
       WHERE h.endpoint_name = 'workout'
-        AND h.raw_json->>'start_time' >= to_char(NOW() - INTERVAL '30 days', 'YYYY-MM-DD')
+        AND h.raw_json->>'start_time' >= to_char((NOW() AT TIME ZONE 'UTC') - INTERVAL '30 days', 'YYYY-MM-DD')
       ORDER BY h.raw_json->>'start_time' DESC
     `,
   ]));

@@ -7,6 +7,7 @@
  * pending plan days and schedules them. Stage: training engine (#187).
  */
 import type { GarminClient } from "garmin-auth";
+import { todayAthlete } from "./athlete-tz";
 import type { QueryFn } from "./db";
 import type { WorkoutStep } from "./plan-generator";
 
@@ -186,14 +187,14 @@ export interface PushResult { pushed: number; failed: number; }
  * push_plan_to_garmin. DB + EXTERNAL Garmin writes (upload + schedule).
  * Requires a GarminClient with POST support (client.post).
  */
-export async function pushPlanToGarmin(sql: QueryFn, client: GarminClient, planId: number): Promise<PushResult> {
+export async function pushPlanToGarmin(sql: QueryFn, client: GarminClient, planId: number, today: string = todayAthlete()): Promise<PushResult> {
   const rows = await sql`
     SELECT id, day_date::text AS day_date, week_number, run_title, workout_steps
     FROM training_plan_day
     WHERE plan_id = ${planId}
       AND garmin_push_status IN ('none', 'pending')
       AND workout_steps IS NOT NULL
-      AND day_date >= CURRENT_DATE
+      AND day_date >= ${today}::date
     ORDER BY day_date`;
 
   let pushed = 0, failed = 0;

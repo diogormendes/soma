@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { parseRangeDays } from "@/lib/time-ranges";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 /**
@@ -9,6 +10,8 @@ import { parseRangeDays } from "@/lib/time-ranges";
  * queries in app/sleep/page.tsx.
  */
 export async function GET(request: Request) {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const { searchParams } = new URL(request.url);
   const range = searchParams.get("range") || "30d";
   const days = parseRangeDays(range, 30); // app keys (6m…) and legacy Nd keys (#743)
@@ -23,7 +26,7 @@ export async function GET(request: Request) {
     FROM garmin_raw_data
     WHERE endpoint_name = 'hrv_data'
       AND raw_json->'hrvSummary'->>'weeklyAvg' IS NOT NULL
-      AND date >= CURRENT_DATE - ${days}::int
+      AND date >= ${today}::date - ${days}::int
     ORDER BY date ASC
   `) as { date: string; weekly_avg: number | null; last_night_avg: number | null; status: string | null }[];
 
@@ -41,7 +44,7 @@ export async function GET(request: Request) {
     FROM garmin_raw_data
     WHERE endpoint_name = 'training_readiness'
       AND raw_json->0->>'score' IS NOT NULL
-      AND date >= CURRENT_DATE - ${days}::int
+      AND date >= ${today}::date - ${days}::int
     ORDER BY date ASC
   `) as {
     date: string; score: number | null; level: string | null;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { parseRangeDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 /* Sport grouping — mirrors SPORT_GROUPS in app/activities/page.tsx. */
@@ -21,6 +22,8 @@ const sportOf = (t: string): string => SPORT_OF[t] ?? "Other";
  * app/activities/page.tsx (non-run/gym activities).
  */
 export async function GET(request: Request) {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const { searchParams } = new URL(request.url);
   const range = searchParams.get("range") || "1y";
   const days = parseRangeDays(range, 365); // all 10 web keys + legacy Nd (soma#754)
@@ -33,7 +36,7 @@ export async function GET(request: Request) {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'treadmill_running', 'strength_training', 'indoor_cycling')
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${today}::date - ${days}::int
     GROUP BY 1, 2 ORDER BY 1 ASC
   `) as { month: string; type_key: string; count: number | string }[];
 
@@ -58,7 +61,7 @@ export async function GET(request: Request) {
     LEFT JOIN garmin_activity_raw w ON w.activity_id = s.activity_id AND w.endpoint_name = 'weather'
     WHERE s.endpoint_name = 'summary'
       AND s.raw_json->'activityType'->>'typeKey' IN ('kiteboarding_v2', 'wind_kite_surfing')
-      AND (s.raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
+      AND (s.raw_json->>'startTimeLocal')::timestamp >= ${today}::date - ${days}::int
     ORDER BY (s.raw_json->>'startTimeLocal')::text ASC
   `) as { name: string | null; date: string; max_speed_kts: number | null; distance_km: number | null; wind_speed_mps: number | null; wind_gust_mps: number | null }[];
 
@@ -92,7 +95,7 @@ export async function GET(request: Request) {
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' NOT IN ('running', 'treadmill_running', 'strength_training', 'indoor_cycling')
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${today}::date - ${days}::int
     ORDER BY (raw_json->>'startTimeLocal')::text DESC
     LIMIT ${range === "all" ? 2000 : 200}
   `) as { activity_id: string; type_key: string; date: string; name: string | null; distance_km: number | null; duration_min: number | null; avg_hr: number | null; calories: number | null; elev_gain: number; max_speed_ms: number | null; swolf: number | null }[];
