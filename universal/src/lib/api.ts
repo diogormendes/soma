@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { withDeviceTz } from "./device-tz";
 
 import { getStoredAuth } from "./auth-store";
 
@@ -23,7 +24,11 @@ export let DAEMON_HOST = hostOf(DAEMON_BASE);
 const API_TOKEN = process.env.EXPO_PUBLIC_API_TOKEN;
 /** True for the embedded-token build; false for a store or side-loaded install that signs in. */
 export const EMBEDDED_TOKEN = Boolean(API_TOKEN);
-export const AUTH_HEADERS: Record<string, string> = API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {};
+// Every request also carries the phone's timezone, read afresh each time (soma#1125). Without it the
+// server could only fall back to Athens, because the app sends no cookie.
+export const AUTH_HEADERS: Record<string, string> = withDeviceTz(
+  API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {},
+);
 export type AuthSource = "embedded" | "stored" | "none";
 /** Where the current bearer comes from; the Status and Sign-in screens show it. */
 export let AUTH_SOURCE: AuthSource = API_TOKEN ? "embedded" : "none";

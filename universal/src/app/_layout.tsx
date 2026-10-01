@@ -9,6 +9,7 @@ import { applyStoredAuth } from "../lib/api";
 // Imported for the side effect: the weight task must be defined before React renders, because
 // Android can start the app headless purely to run it. See lib/weight-task.ts.
 import { startWeightSync } from "../lib/weight-task";
+import { deviceTz } from "../lib/device-tz";
 
 export default function RootLayout() {
   // Read the persisted time range once before any screen fetches with it (soma#754).
@@ -19,6 +20,8 @@ export default function RootLayout() {
   // After the app is ready, so Health Connect's permission sheet opens over the app rather than the
   // splash. It asks once per run at most, then syncs in the foreground either way.
   useEffect(() => { if (ready) void startWeightSync(); }, [ready]);
+  // One line per launch with the zone every request will carry (soma#1125), readable with logcat.
+  useEffect(() => { console.log(`[tz] device zone: ${deviceTz() || "(none)"}`); }, []);
   if (!ready) return <View className="flex-1 bg-base" />;
   return (
     <SafeAreaProvider>

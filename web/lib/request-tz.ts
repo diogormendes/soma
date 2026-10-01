@@ -3,18 +3,18 @@
  *
  * ⛔ THE SERVER HAS NO IDEA WHAT TIME IT IS FOR HIM. Node's clock is the host's, Postgres's is the
  * session's (New York), and `athleteTz()` is a build-time constant that is right at home and wrong
- * the moment he travels. He asked for the app to follow whatever he is holding, so the browser
- * writes its zone into a cookie and every server render reads it from there.
+ * the moment he travels. He asked for the app to follow whatever he is holding, so the native app
+ * sends its zone in a header and the browser writes it into a cookie, and every request reads those.
  *
  * `athleteTz()` remains the fallback, and it is a real one: the drain, the daemons and the scripts
  * have no device to ask, and the very first render of a new session happens before the cookie
  * exists.
  */
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { athleteTz, dateInAthleteTz, readTz } from "./athlete-tz";
-import { TZ_COOKIE } from "./tz-cookie";
+import { TZ_COOKIE, TZ_HEADER } from "./tz-cookie";
 
-export { TZ_COOKIE };
+export { TZ_COOKIE, TZ_HEADER };
 
 /**
  * The zone to reason in for this request.
@@ -25,6 +25,11 @@ export { TZ_COOKIE };
  */
 export async function requestTz(): Promise<string> {
   try {
+    // The app's header first, because the native app has no cookie for this domain (soma#1125).
+    // A browser has no header and falls to its cookie; a job has neither and falls to athleteTz.
+    // `readTz` with an empty fallback rejects a missing or bogus value so the next source is tried.
+    const fromHeader = readTz((await headers()).get(TZ_HEADER), "");
+    if (fromHeader) return fromHeader;
     const jar = await cookies();
     return readTz(jar.get(TZ_COOKIE)?.value);
   } catch {
