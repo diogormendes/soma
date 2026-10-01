@@ -14,7 +14,10 @@ export async function GET(request: Request) {
   const sql = getDb();
 
   const rows = await sql`
-    SELECT date, weight_grams / 1000.0 as weight_kg, bmi, body_fat_pct
+    -- ⛔ date::text, never the bare DATE. node-postgres turns a DATE into a JS Date at the server's
+    -- midnight, and JSON sends that as UTC: 28 Sep in Athens arrives as "2026-09-27T21:00:00.000Z", and
+    -- the app's chart reads the first ten characters, so every weigh-in was drawn a day early.
+    SELECT date::text AS date, weight_grams / 1000.0 as weight_kg, bmi, body_fat_pct
     FROM weight_log
     WHERE coalesce(upper(source_type), '') <> 'USER_SETTING' AND date >= ${today}::date - ${days}::int
     ORDER BY date ASC

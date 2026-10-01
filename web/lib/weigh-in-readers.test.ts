@@ -42,3 +42,15 @@ describe("every weigh-in reader leaves the Garmin profile weight out", () => {
     });
   }
 });
+
+/**
+ * ⛔ THE APP'S WEIGHT CHART WAS DRAWING EVERY WEIGH-IN A DAY EARLY. This route returned the bare DATE,
+ * which node-postgres makes a JS Date at the server's midnight and JSON sends as UTC, so 28 Sep in Athens
+ * arrived as "2026-09-27T21:00:00.000Z". The app labels a point by the first ten characters.
+ */
+describe("the weight history sends calendar dates, not timestamps", () => {
+  it("selects date::text", () => {
+    const src = readFileSync(new URL("../app/api/health/weight/route.ts", import.meta.url), "utf8");
+    expect(src).toMatch(/SELECT date::text AS date/);
+  });
+});
