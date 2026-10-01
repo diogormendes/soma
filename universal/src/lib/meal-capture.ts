@@ -32,13 +32,9 @@ export function slotForHour(h: number): string {
  * was half past six there: dinner rather than pre-sleep, and the wrong calendar day either side of
  * midnight. Empty when the engine cannot say, and the server falls back.
  */
-export function deviceTz(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-  } catch {
-    return "";
-  }
-}
+import { deviceTz } from "./device-tz";
+// Kept as an export of this module too, so existing imports of it keep working.
+export { deviceTz };
 
 /** The acknowledgement. It must not claim the meal is there yet, because it is not. */
 export function captureAck(mode: CaptureMode): string {

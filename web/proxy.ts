@@ -10,7 +10,7 @@ function withDevCors(res: NextResponse, isApi: boolean): NextResponse {
   if (isDev && isApi) {
     res.headers.set("Access-Control-Allow-Origin", "*");
     res.headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-    res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Soma-TZ");
   }
   return res;
 }
@@ -20,7 +20,7 @@ function withDevCors(res: NextResponse, isApi: boolean): NextResponse {
 function withTokenCors(res: NextResponse): NextResponse {
   res.headers.set("Access-Control-Allow-Origin", "*");
   res.headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Soma-TZ");
   return res;
 }
 
