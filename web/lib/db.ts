@@ -57,6 +57,57 @@ export function driverFor(url: string): DbDriver {
   return host.endsWith(".neon.tech") || host.startsWith("pg.") ? "http" : "pool";
 }
 
+/**
+ * A query that has not run yet, in the shape Neon uses, so `sql` fragments can nest.
+ *
+ * ⛔ The local adapter used to run every tagged template the moment it was written. Neon does not:
+ * it builds a query and runs it only when awaited, and a fragment nested inside another template is
+ * inlined into it. Routes written against Neon rely on that (`${cond ? sql`AND x = ${v}` : sql``}`),
+ * and on the local pool each such fragment reached pg as a Promise parameter, so playlist track
+ * search returned 500 on the live host for as long as it had been off Neon (soma#1132).
+ */
+export class LocalQuery implements PromiseLike<Record<string, unknown>[]> {
+  constructor(
+    readonly strings: ReadonlyArray<string>,
+    readonly values: unknown[],
+    private readonly run: (text: string, params: unknown[]) => Promise<Record<string, unknown>[]>,
+  ) {}
+
+  /** The SQL text with $1..$n numbered across every nested fragment, appending values to `params`. */
+  compile(params: unknown[] = []): string {
+    let text = "";
+    this.strings.forEach((s, i) => {
+      text += s;
+      if (i >= this.values.length) return;
+      const v = this.values[i];
+      if (v instanceof LocalQuery) {
+        text += v.compile(params);
+      } else {
+        params.push(v);
+        text += `$${params.length}`;
+      }
+    });
+    return text;
+  }
+
+  then<A = Record<string, unknown>[], B = never>(
+    onFulfilled?: ((rows: Record<string, unknown>[]) => A | PromiseLike<A>) | null,
+    onRejected?: ((reason: unknown) => B | PromiseLike<B>) | null,
+  ): Promise<A | B> {
+    const params: unknown[] = [];
+    const text = this.compile(params);
+    return this.run(text, params).then(onFulfilled, onRejected);
+  }
+
+  catch<B = never>(onRejected?: ((reason: unknown) => B | PromiseLike<B>) | null) {
+    return this.then(undefined, onRejected);
+  }
+
+  finally(onFinally?: (() => void) | null) {
+    return this.then().finally(onFinally);
+  }
+}
+
 // One pool per process, created on first use. `next start` is long-lived, so a pool is right
 // here in a way it never was on a serverless function.
 /** A pool per connection string. See `localDb` for why this is a map. */
@@ -85,15 +136,9 @@ function localDb(url: string): QueryFn {
     // driver holds no pool; `next start` is long-lived and does.
     pool.on("error", (err) => console.error("[db] idle client error:", err.message));
   }
-  const tagged = async (strings: TemplateStringsArray, ...values: unknown[]) => {
-    let text = "";
-    strings.forEach((s, i) => {
-      text += s;
-      if (i < values.length) text += `$${i + 1}`;
-    });
-    const res = await pool!.query(text, values);
-    return res.rows;
-  };
+  const run = async (text: string, params: unknown[]) => (await pool!.query(text, params)).rows;
+  const tagged = (strings: TemplateStringsArray, ...values: unknown[]) =>
+    new LocalQuery(strings, values, run) as unknown as ReturnType<QueryFn>;
   // Neon's client is a tagged template that ALSO carries .query(text, params), and two callers
   // use it for bulk inserts whose placeholder list is built at runtime (pmc-stream's chunked
   // training_load insert, the DJ daemon's song lookup). It returns the ROWS, not pg's result
