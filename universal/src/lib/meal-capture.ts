@@ -9,6 +9,7 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { API_BASE, AUTH_HEADERS } from "./api";
 import type { CaptureCard } from "./capture-status";
+import { deviceTz } from "./device-tz";
 
 export type CaptureMode = "log" | "calibrate";
 /** The five states a capture moves through, mirroring `web/lib/meal-capture.ts`. */
@@ -32,9 +33,6 @@ export function slotForHour(h: number): string {
  * was half past six there: dinner rather than pre-sleep, and the wrong calendar day either side of
  * midnight. Empty when the engine cannot say, and the server falls back.
  */
-import { deviceTz } from "./device-tz";
-// Kept as an export of this module too, so existing imports of it keep working.
-export { deviceTz };
 
 /** The acknowledgement. It must not claim the meal is there yet, because it is not. */
 export function captureAck(mode: CaptureMode): string {
@@ -199,3 +197,6 @@ export async function fetchVocabulary(): Promise<string[]> {
     return [];
   }
 }
+
+// Kept as an export of this module too, so existing imports of it keep working.
+export { deviceTz };
