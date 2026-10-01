@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
   const windowRows = (await sql`
     SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg
     FROM weight_log
-    WHERE weight_grams IS NOT NULL AND weight_grams > 0
+    WHERE coalesce(upper(source_type), '') <> 'USER_SETTING' AND weight_grams IS NOT NULL AND weight_grams > 0
       AND date >= ${date}::date - interval '14 days'
       AND date <= ${date}::date + interval '14 days'
     ORDER BY date

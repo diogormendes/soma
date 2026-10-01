@@ -61,7 +61,7 @@ export async function latestWeighIn(
   const rows = (await sql`
     SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg, body_fat_pct
     FROM weight_log
-    WHERE weight_grams IS NOT NULL AND weight_grams > 0
+    WHERE coalesce(upper(source_type), '') <> 'USER_SETTING' AND weight_grams IS NOT NULL AND weight_grams > 0
       AND date <= ${onOrBefore}::date
       AND date >= ${onOrBefore}::date - ${`${NEIGHBOUR_WINDOW_DAYS} days`}::interval
     ORDER BY date
@@ -86,7 +86,7 @@ export async function latestWeighIn(
   const fallback = (await sql`
     SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg, body_fat_pct
     FROM weight_log
-    WHERE weight_grams IS NOT NULL AND weight_grams > 0 AND date <= ${onOrBefore}::date
+    WHERE coalesce(upper(source_type), '') <> 'USER_SETTING' AND weight_grams IS NOT NULL AND weight_grams > 0 AND date <= ${onOrBefore}::date
     ORDER BY date DESC LIMIT 1
   `) as unknown as { date: string; weight_kg: number; body_fat_pct: number | null }[];
   if (!fallback.length) return null;

@@ -35,7 +35,7 @@ async function trajectory() {
 
   const [profileRows, rawWeightRows] = await Promise.all([
     sql`SELECT weight_kg, estimated_bf_pct, target_bf_pct, target_date, daily_deficit, estimated_ffm_kg FROM nutrition_profile WHERE id = 1`,
-    sql`SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg FROM weight_log WHERE weight_grams IS NOT NULL ORDER BY date`,
+    sql`SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg FROM weight_log WHERE coalesce(upper(source_type), '') <> 'USER_SETTING' AND weight_grams IS NOT NULL ORDER BY date`,
   ]);
 
   // A typo drags the EMA for days and shifts every figure computed off it. Filtered here and mapped
