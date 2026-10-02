@@ -19,12 +19,8 @@ export interface CaptureMessage {
   audio?: string | null; heard?: string | null;
 }
 
-export function slotForHour(h: number): string {
-  if (h < 11) return "breakfast";
-  if (h < 16) return "lunch";
-  if (h < 21) return "dinner";
-  return "pre_sleep";
-}
+// The same boundaries as the web and the widgets, from macro-engine-core (meal-slots).
+export { slotForHour } from "macro-engine-core";
 
 /**
  * The phone's own timezone, so the day and the slot are decided on the clock he is holding.

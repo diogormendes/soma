@@ -8,6 +8,7 @@ import type { QueryFn } from "./db";
 import { latestWeighIn } from "./weigh-ins";
 import { getPortionBands } from "./portion-history";
 import { athleteTz } from "./athlete-tz";
+import { DAY_SLOTS, emptySlots, nextMealSlot } from "macro-engine-core";
 
 export interface ContextIngredient {
   id: string; name: string; category: string;
@@ -65,34 +66,9 @@ export function hhmm(d: Date, tz: string = athleteTz()): string {
   return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz });
 }
 
-/** The order of the day, for naming which slots are still empty. */
-export const DAY_SLOTS = ["breakfast", "lunch", "dinner", "pre_sleep"] as const;
-
-/** The slots with nothing in them yet, in the order they come. */
-export function emptySlots(logged: Array<Pick<LoggedMeal, "slot">>): string[] {
-  const taken = new Set(logged.map((m) => m.slot));
-  return DAY_SLOTS.filter((s) => !taken.has(s));
-}
-
-/**
- * Where the next proper meal belongs: the first empty slot at or after the one the clock suggests.
- *
- * ⛔ NOT simply the earliest empty slot. With nothing logged at half past three that would be
- * breakfast, and a plate of chicken and rice was duly filed as breakfast. A slot in the past that
- * was skipped stays skipped; food arriving now belongs now or later.
- *
- * When everything from here on is taken, it is the last slot of the day, because the food exists
- * and has to go somewhere.
- */
-export function nextMealSlot(logged: Array<Pick<LoggedMeal, "slot">>, clockSlot: string): string {
-  const from = DAY_SLOTS.indexOf(clockSlot as (typeof DAY_SLOTS)[number]);
-  const start = from < 0 ? 0 : from;
-  const empty = new Set(emptySlots(logged));
-  for (let i = start; i < DAY_SLOTS.length; i++) {
-    if (empty.has(DAY_SLOTS[i])) return DAY_SLOTS[i];
-  }
-  return DAY_SLOTS[DAY_SLOTS.length - 1];
-}
+// The order of the day, the empty slots and where the next meal belongs, from macro-engine-core
+// (meal-slots). The reasoning for nextMealSlot (food at 15:30 is not a skipped breakfast) is there.
+export { DAY_SLOTS, emptySlots, nextMealSlot };
 
 export async function buildAgentContext(
   sql: QueryFn, date: string, slot: string, slotBudgetKcal: number, dayRemainingKcal: number,
