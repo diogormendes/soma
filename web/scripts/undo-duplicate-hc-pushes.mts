@@ -11,7 +11,6 @@
  * is BOTH soma's and sharing its date with an older sample of his is removed.
  */
 import { GarminAuth, DBTokenStore } from "garmin-auth";
-import { healGarminTokenRow } from "../lib/garmin-token-heal";
 import { getDb } from "../lib/db";
 
 const apply = process.argv.includes("--apply");
@@ -19,7 +18,6 @@ const apply = process.argv.includes("--apply");
 const PUSH_BEGAN_MS = Date.parse("2026-09-25T13:00:00Z"); // 16:00 Athens, before the 16:07 run
 
 const sql = getDb();
-await healGarminTokenRow(sql);
 const client = await new GarminAuth({ store: new DBTokenStore(process.env.DATABASE_URL!) }).client();
 
 const dates = ((await sql`

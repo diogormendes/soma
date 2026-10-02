@@ -7,11 +7,9 @@
  * an older one is his. That is what separates a duplicate soma caused from his own record.
  */
 import { GarminAuth, DBTokenStore } from "garmin-auth";
-import { healGarminTokenRow } from "../lib/garmin-token-heal";
 import { getDb } from "../lib/db";
 
 const sql = getDb();
-await healGarminTokenRow(sql);
 const client = await new GarminAuth({ store: new DBTokenStore(process.env.DATABASE_URL!) }).client();
 
 const hc = (await sql`

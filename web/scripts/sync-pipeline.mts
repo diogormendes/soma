@@ -6,7 +6,6 @@
  * non-fatal so one failure doesn't abort the rest, mirroring pipeline.py.
  */
 import { GarminAuth, DBTokenStore } from "garmin-auth";
-import { healGarminTokenRow } from "../lib/garmin-token-heal";
 import { HevyClient } from "hevy2garmin";
 import { getDb, type QueryFn } from "../lib/db";
 import { runGarminIngest } from "../lib/garmin-ingest";
@@ -118,7 +117,6 @@ await step("meal-captures", async () => {
 // 3+4. Garmin client for the external-write steps (plan push + run enrichment).
 let garminClient: Awaited<ReturnType<GarminAuth["client"]>> | null = null;
 try {
-  await healGarminTokenRow(sql); // flat DI row → nested, before DBTokenStore reads it (#723)
   garminClient = await new GarminAuth({ store: new DBTokenStore(databaseUrl) }).client();
 } catch (e) {
   console.error("[sync] Garmin auth for push/enrich failed:", (e as Error).message);

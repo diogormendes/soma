@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import type { HevyExercise } from "@/lib/hevy-types";
+import { HevyClient } from "hevy2garmin";
 
 export const runtime = "nodejs";
 
@@ -88,27 +89,9 @@ export async function POST(req: Request) {
         },
       };
 
-      const res = await fetch(
-        `https://api.hevyapp.com/v1/workouts/${workoutId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "api-key": hevyApiKey,
-          },
-          body: JSON.stringify(putBody),
-        }
-      );
-
-      if (res.ok) {
-        updatedHevy = true;
-      } else {
-        console.error(
-          "Hevy PUT failed:",
-          res.status,
-          await res.text().catch(() => "")
-        );
-      }
+      // hevy2garmin's client: the same PUT, with its retry on 429/5xx and HevyAuthError on 401/403.
+      await new HevyClient(hevyApiKey).updateWorkout(String(workoutId), putBody);
+      updatedHevy = true;
     } catch (e) {
       console.error("Hevy PUT error:", e);
     }

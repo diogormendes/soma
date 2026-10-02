@@ -8,13 +8,10 @@
  * copy's stale row and could invalidate the live login.
  */
 import { GarminAuth, DBTokenStore } from "garmin-auth";
-import { healGarminTokenRow } from "../lib/garmin-token-heal";
-import { getDb, makeDb } from "../lib/db";
+import { makeDb } from "../lib/db";
 import { lateWeighInDates, syncDay, athleteToday } from "../lib/garmin-ingest";
 import { processDay } from "../lib/garmin-parse-day";
 
-const live = getDb();
-await healGarminTokenRow(live);
 const client = await new GarminAuth({ store: new DBTokenStore(process.env.DATABASE_URL!) }).client();
 const copy = makeDb("postgresql://gkos@127.0.0.1:5432/verify_soma");
 const [{ db }] = (await copy`SELECT current_database() AS db`) as unknown as { db: string }[];

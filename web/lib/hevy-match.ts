@@ -5,58 +5,12 @@
  * writes. A dedup layer for Stage 2 (#184).
  */
 import type { QueryFn } from "./db";
-import { matchHevyToGarmin, toUtcDate, type HevyDt, type GarminAct } from "hevy2garmin";
+import { matchHevyToGarmin, resolveExclusiveMatches, toUtcDate, type HevyDt, type GarminAct, type TimedMatch } from "hevy2garmin";
 
-export { matchHevyToGarmin, toUtcDate };
-export type { HevyDt, GarminAct };
+export { matchHevyToGarmin, resolveExclusiveMatches, toUtcDate };
+export type { HevyDt, GarminAct, TimedMatch };
 
-/** A match with the gap between the two starts, which is what decides a contested activity. */
-export interface TimedMatch { hevyId: string; aid: number; deltaMs: number; }
-
-/**
- * One Garmin activity belongs to at most one Hevy workout (soma#994).
- *
- * matchHevyToGarmin runs two passes. The first pairs a workout with an activity that starts
- * within a minute of it. The second hands any workout still unmatched the closest activity
- * within SIX HOURS, because Hevy can report a local time as though it were UTC. Nothing removes
- * an activity from the pool between the two, so a workout with no activity of its own takes one
- * that the first pass already paired exactly.
- *
- * That is not hypothetical. Three activities were each claimed by two workouts, and every one of
- * them has the same shape: one workout starting at the same second as the activity, and a second
- * starting 44 to 50 minutes later with nothing of its own. The gym description is written to the
- * activity a claim names, so the later workout's description overwrote the real one's.
- *
- * The winner is the smaller gap, and an exact tie goes to the lower hevy_id so that a re-run
- * reaches the same answer. A match whose workout or activity cannot be timed is dropped rather
- * than guessed at.
- */
-export function resolveExclusiveMatches(
-  matches: Array<{ hevyId: string; aid: number }>,
-  hevyDts: HevyDt[],
-  garminActs: GarminAct[],
-): { kept: TimedMatch[]; dropped: TimedMatch[] } {
-  const startOf = new Map(hevyDts.map((h) => [h.hevyId, h.date.getTime()]));
-  const actAt = new Map(garminActs.map((g) => [g.aid, Date.parse(g.gmt + "Z")]));
-
-  const timed: TimedMatch[] = [];
-  const dropped: TimedMatch[] = [];
-  for (const m of matches) {
-    const h = startOf.get(m.hevyId), a = actAt.get(m.aid);
-    if (h === undefined || a === undefined || isNaN(a)) { dropped.push({ ...m, deltaMs: NaN }); continue; }
-    timed.push({ ...m, deltaMs: Math.abs(a - h) });
-  }
-
-  const best = new Map<number, TimedMatch>();
-  for (const m of timed) {
-    const cur = best.get(m.aid);
-    if (!cur || m.deltaMs < cur.deltaMs || (m.deltaMs === cur.deltaMs && m.hevyId < cur.hevyId)) best.set(m.aid, m);
-  }
-  const kept = [...best.values()];
-  const keptIds = new Set(kept.map((m) => m.hevyId + "\u0000" + m.aid));
-  for (const m of timed) if (!keptIds.has(m.hevyId + "\u0000" + m.aid)) dropped.push(m);
-  return { kept, dropped };
-}
+// One Garmin activity per Hevy workout (soma#994) is hevy2garmin's resolveExclusiveMatches.
 
 /**
  * Load Hevy workout times + Garmin strength activities from the DB, match, and

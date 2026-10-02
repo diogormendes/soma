@@ -5,11 +5,7 @@
  * with the sync env loaded.
  */
 import { GarminAuth, DBTokenStore } from "garmin-auth";
-import { healGarminTokenRow } from "../lib/garmin-token-heal";
-import { getDb } from "../lib/db";
 
-const sql = getDb();
-await healGarminTokenRow(sql);
 const auth = new GarminAuth({ store: new DBTokenStore(process.env.DATABASE_URL!) });
 const client = await auth.client();
 
