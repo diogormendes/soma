@@ -106,6 +106,7 @@ interface SyncLogEntry {
   sent_count: number;
   external_count: number;
   error_count: number;
+  rejected_count: number;
   last_sync: string;
 }
 
@@ -163,6 +164,7 @@ async function getPageData() {
                COUNT(*) FILTER (WHERE status = 'sent')::int as sent_count,
                COUNT(*) FILTER (WHERE status = 'external')::int as external_count,
                COUNT(*) FILTER (WHERE status = 'error')::int as error_count,
+               COUNT(*) FILTER (WHERE status = 'rejected')::int as rejected_count,
                MAX(processed_at) as last_sync
         FROM activity_sync_log
         GROUP BY source_platform, destination
@@ -172,6 +174,7 @@ async function getPageData() {
                COUNT(*)::int AS sent_count,
                0::int AS external_count,
                0::int AS error_count,
+               0::int AS rejected_count,
                MAX(uploaded_at) AS last_sync
         FROM strava_bridge_uploads
         ORDER BY last_sync DESC NULLS LAST
@@ -183,6 +186,7 @@ async function getPageData() {
                COUNT(*) FILTER (WHERE status = 'sent')::int as sent_count,
                COUNT(*) FILTER (WHERE status = 'external')::int as external_count,
                COUNT(*) FILTER (WHERE status = 'error')::int as error_count,
+               COUNT(*) FILTER (WHERE status = 'rejected')::int as rejected_count,
                MAX(processed_at) as last_sync
         FROM activity_sync_log
         GROUP BY source_platform, destination
@@ -794,6 +798,11 @@ export default async function ConnectionsPage() {
                           {entry.error_count > 0 && (
                             <Badge variant="outline" className="text-xs border-red-500/50 text-red-400">
                               {entry.error_count} errors
+                            </Badge>
+                          )}
+                          {entry.rejected_count > 0 && (
+                            <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-400" title="Garmin refused these uploads three times; soma stopped retrying them">
+                              {entry.rejected_count} rejected
                             </Badge>
                           )}
                         </div>
