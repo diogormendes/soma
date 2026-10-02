@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { KCAL_PER_KG_FAT } from "macro-engine-core";
+import { computeWeightEma } from "banister";
 import { keepPlausible } from "@/lib/weigh-ins";
 import { getDb } from "@/lib/db";
 import { deficitWindow, windowLabel } from "@/lib/deficit-window";
@@ -60,13 +61,13 @@ async function trajectory() {
 
   // Process weight data with 5-day EMA smoothing + pull-forward to last actual
   const weights: { date: string; weight: number; smoothed: number; bf: number; smoothedBf: number }[] = [];
-  let ema = 0;
-  const alpha = 2 / (5 + 1); // 5-day EMA (more responsive than 7-day)
+  // 5-day EMA (more responsive than 7-day), from banister at full precision: the points are
+  // rounded once, below, for display.
+  const emaPoints = computeWeightEma(weightRows.map((row) => [String(row.date), Number(row.weight_kg)]), 5, null);
 
-  for (const row of weightRows) {
+  for (const [i, row] of weightRows.entries()) {
     const w = Number(row.weight_kg);
-    if (ema === 0) ema = w;
-    else ema = alpha * w + (1 - alpha) * ema;
+    const ema = emaPoints[i].weight_ema;
 
     const fatKg = Math.max(0, w - ffm);
     const bf = (fatKg / w) * 100;

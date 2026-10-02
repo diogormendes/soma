@@ -10,7 +10,7 @@ import {
   fatigueFactorCalc,
   colorForNode,
   getTooltip } from "@/lib/training-engine";
-import { getBasePace } from "banister";
+import { getBasePace, DEFAULT_CALIBRATION_WEIGHT_KG } from "banister";
 import { hmSecondsFromVdot } from "banister";
 import { todayForRequest } from "@/lib/request-tz";
 
@@ -159,7 +159,7 @@ export async function GET(request: Request) {
   // Compute factors
   const rf = readinessFactorCalc(compositeScore);
   const ff = fatigueFactorCalc(tsb);
-  const wf = weightKg != null ? weightKg / 80.5 : 1.0; // calibration weight = 80.5 kg
+  const wf = weightKg != null ? weightKg / DEFAULT_CALIBRATION_WEIGHT_KG : 1.0;
   const sliderFactor = 1.0; // default
   // Predicted HM pace = base HM pace × merge factors (readiness, fatigue, weight)
   const combinedFactor = rf < 0 ? 1.0 : rf * ff * wf;

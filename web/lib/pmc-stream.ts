@@ -6,18 +6,13 @@
  * this module. DB-only, no external writes.
  */
 import type { QueryFn } from "./db";
-import { computeActivityLoad, computeTrimp, computePmc, crossModalScale, DEFAULT_TAU_CTL, DEFAULT_TAU_ATL } from "banister";
+import { computeActivityLoad, computeTrimp, computePmc, crossModalScale, dailyLoadSeries, DEFAULT_TAU_CTL, DEFAULT_TAU_ATL } from "banister";
 
 export { computeActivityLoad, computeTrimp, computePmc, crossModalScale, DEFAULT_TAU_CTL, DEFAULT_TAU_ATL };
 export type { ActivityLoad, PmcEntry } from "banister";
 import type { PmcEntry } from "banister";
 
 const r = (x: number, n: number) => Number(x.toFixed(n)); // Python round(x, n) for n>=1
-
-/** UTC date arithmetic for gap-filling (YYYY-MM-DD only, no TZ drift). */
-function addDaysUtc(dateStr: string, days: number): string {
-  return new Date(Date.parse(dateStr + "T00:00:00Z") + days * 86_400_000).toISOString().slice(0, 10);
-}
 
 /**
  * Extract per-activity EPOC from garmin_activity_raw summaries into training_load.
@@ -110,19 +105,9 @@ export async function computeAndStorePmc(sql: QueryFn, tauCtl = DEFAULT_TAU_CTL,
     ORDER BY activity_date`;
   if (!rows.length) return [];
 
-  const loadByDate = new Map<string, number>();
-  for (const row of rows) {
-    const scale = crossModalScale(row.source);
-    const prev = loadByDate.get(row.activity_date) ?? 0.0;
-    loadByDate.set(row.activity_date, prev + Number(row.load_value) * scale);
-  }
-
-  const keys = [...loadByDate.keys()].sort();
-  const startDate = keys[0], endDate = keys[keys.length - 1];
-  const dailyLoads: Array<[string, number]> = [];
-  for (let cur = startDate; cur <= endDate; cur = addDaysUtc(cur, 1)) {
-    dailyLoads.push([cur, loadByDate.get(cur) ?? 0.0]);
-  }
+  // The same series the Banister fit reads: banister's dailyLoadSeries (cross-modal scaled, summed
+  // per day, rest days as 0).
+  const dailyLoads = dailyLoadSeries(rows.map((r) => ({ date: r.activity_date, source: r.source, load: Number(r.load_value) })));
 
   const pmc = computePmc(dailyLoads, tauCtl, tauAtl);
   // Batch the upsert (matches Python's execute_values): a per-row loop is ~4700
