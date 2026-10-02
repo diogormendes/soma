@@ -6,15 +6,12 @@
  * I created carry a `samplePk` minted minutes ago; anything older is his and must not be touched.
  */
 import { GarminAuth, DBTokenStore } from "garmin-auth";
-import { healGarminTokenRow } from "../lib/garmin-token-heal";
 import { makeDb } from "../lib/db";
 
 const TOKENS_URL = "postgresql://gkos@127.0.0.1:5432/soma";
 const WEIGHTS_URL = "postgresql://gkos@127.0.0.1:5432/verify_soma";
 const CUTOFF = Date.now() - 2 * 60 * 60 * 1000; // anything minted in the last two hours is mine
 
-const tokenSql = makeDb(TOKENS_URL);
-await healGarminTokenRow(tokenSql);
 const auth = new GarminAuth({ store: new DBTokenStore(TOKENS_URL) });
 const client = await auth.client();
 

@@ -8,7 +8,6 @@
  * his account and his log are left exactly as found.
  */
 import { GarminAuth, DBTokenStore } from "garmin-auth";
-import { healGarminTokenRow } from "../lib/garmin-token-heal";
 import { makeDb } from "../lib/db";
 import { pushWeightsToGarmin, weightsOwedToGarmin } from "../lib/weight-push";
 
@@ -20,8 +19,6 @@ const WEIGHTS_URL = process.env.WEIGHTS_URL ?? "postgresql://gkos@127.0.0.1:5432
 const TOKENS_URL = process.env.TOKENS_URL ?? "postgresql://gkos@127.0.0.1:5432/soma";
 
 const sql = makeDb(WEIGHTS_URL);
-const tokenSql = makeDb(TOKENS_URL);
-await healGarminTokenRow(tokenSql);
 const auth = new GarminAuth({ store: new DBTokenStore(TOKENS_URL) });
 const client = await auth.client();
 

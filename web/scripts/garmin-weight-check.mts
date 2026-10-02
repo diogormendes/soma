@@ -9,14 +9,10 @@
  * rule is about heart-rate completeness and never reconsiders a weight.
  */
 import { GarminAuth, DBTokenStore } from "garmin-auth";
-import { healGarminTokenRow } from "../lib/garmin-token-heal";
-import { getDb } from "../lib/db";
 
 const from = process.argv[2] ?? "2026-09-01";
 const to = process.argv[3] ?? new Date().toISOString().slice(0, 10);
 
-const sql = getDb();
-await healGarminTokenRow(sql);
 const auth = new GarminAuth({ store: new DBTokenStore(process.env.DATABASE_URL!) });
 const client = await auth.client();
 

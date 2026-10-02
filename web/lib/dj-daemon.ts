@@ -13,7 +13,6 @@ import { writeFileSync, renameSync, readFileSync, unlinkSync } from "fs";
 import { todayAthlete } from "./athlete-tz";
 import { ensureDjPaths } from "./dj-paths";
 import { GarminAuth, DBTokenStore } from "garmin-auth";
-import { healGarminTokenRow } from "./garmin-token-heal";
 import { getDb } from "./db";
 import { spotifyFetch } from "./spotify-client";
 import { hrrToBpm, latestHrFromGarminData } from "./bpm-formula";
@@ -152,7 +151,6 @@ export async function runDaemon(opts: DaemonOpts): Promise<void> {
   process.on("SIGTERM", onStop);
   process.on("SIGINT", onStop);
 
-  await healGarminTokenRow(getDb()); // flat DI row → nested, before DBTokenStore reads it (#723)
   const auth = new GarminAuth({ store: new DBTokenStore(process.env.DATABASE_URL!) });
   const garmin = await auth.client();
   const profile = (await garmin.connectapi(PROFILE_URL)) as { displayName?: string };
