@@ -4,6 +4,7 @@ import type { GraphNode } from "@/lib/training-engine";
 import { DEFAULT_BASE_PACE } from "@/lib/training-engine";
 import { PaceWaterfall } from "@/components/pace-waterfall";
 import { ResponseCurve } from "@/components/response-curve";
+import { DEFAULT_CALIBRATION_WEIGHT_KG } from "banister";
 
 export interface GraphTooltipProps {
   node: GraphNode;
@@ -131,7 +132,7 @@ export function GraphTooltip({ node, depth, x, y, allNodes }: GraphTooltipProps)
         />
       );
     } else if (node.id === "weight_factor") {
-      const CALIBRATION_WEIGHT = 80.5;
+      const CALIBRATION_WEIGHT = DEFAULT_CALIBRATION_WEIGHT_KG;
       const weightEma = allNodes.get("weight_ema")?.value ?? CALIBRATION_WEIGHT;
       const weightDelta = weightEma - CALIBRATION_WEIGHT;
       const wf = node.value!;

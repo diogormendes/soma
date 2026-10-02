@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getLivePlan, getTrailingLoad } from "@/lib/live-plan";
 import { todayForRequest } from "@/lib/request-tz";
+import { DEFAULT_CALIBRATION_WEIGHT_KG, adjustVdotForWeight } from "banister";
 
 export const dynamic = "force-dynamic";
 
@@ -103,7 +104,7 @@ export async function GET() {
   const planDays = livePlan.days;
 
   const pmc = pmcRows[0] ?? { ctl: 0, atl: 0, tsb: 0 };
-  const fitness = fitnessRows[0] ?? { vo2max: 47, vdot_adjusted: 47, weight_kg: 80.5 };
+  const fitness = fitnessRows[0] ?? { vo2max: 47, vdot_adjusted: 47, weight_kg: DEFAULT_CALIBRATION_WEIGHT_KG };
   const banister = banisterRows[0] ?? { p0: 0, k1: 0.05, k2: 0.08, tau1: 42, tau2: 7, n_anchors: 0, current_vdot: 0 };
   const readiness = readinessRows[0] ?? { composite_score: null, traffic_light: "unknown", flags: [] };
   const calib = calibRows[0] ?? { phase: 1, data_days: 0, weights: { hrv: 0.25, sleep: 0.25, rhr: 0.25, bb: 0.25 }, force_equal: false };
@@ -179,7 +180,7 @@ export async function GET() {
       vo2max: Number(fitness.vo2max),
       vdotAdjusted: effectiveVdot,
       weightKg: Number(fitness.weight_kg),
-      calibrationWeightKg: 80.5,
+      calibrationWeightKg: DEFAULT_CALIBRATION_WEIGHT_KG,
     },
     planDays: planDays.map((d) => ({
       id: d.id,
@@ -210,7 +211,7 @@ export async function GET() {
         ourScore: Number(r.our_score ?? 0),
       })),
       fitness: (() => {
-        const calibWeight = 80.5; // reference weight for VDOT calibration
+        const calibWeight = DEFAULT_CALIBRATION_WEIGHT_KG; // reference weight for VDOT calibration
         let lastWeight: number | null = null;
         return garminVo2Rows.map((r) => {
           const vo2 = Number(r.vo2max ?? 0);
@@ -218,7 +219,7 @@ export async function GET() {
           // Use DB vdot_adjusted if available, otherwise compute from weight
           const vdotAdj = r.vdot_adjusted != null
             ? Number(r.vdot_adjusted)
-            : lastWeight ? vo2 * (calibWeight / lastWeight) : vo2;
+            : lastWeight ? adjustVdotForWeight(vo2, calibWeight, lastWeight) : vo2;
           return {
             date: r.date,
             garminVo2max: vo2,
@@ -227,14 +228,14 @@ export async function GET() {
         });
       })(),
       racePrediction: (() => {
-        const calibWeight = Number(fitness.weight_kg) || 80.5;
+        const calibWeight = Number(fitness.weight_kg) || DEFAULT_CALIBRATION_WEIGHT_KG;
         let lastWeight: number | null = null;
         return garminRaceRows.map((r) => {
           const vo2 = Number(r.vo2max ?? 0);
           if (r.weight_kg != null) lastWeight = Number(r.weight_kg);
           const vdotAdj = r.vdot_adjusted != null
             ? Number(r.vdot_adjusted)
-            : lastWeight ? vo2 * (calibWeight / lastWeight) : vo2;
+            : lastWeight ? adjustVdotForWeight(vo2, calibWeight, lastWeight) : vo2;
           return {
             date: r.date,
             garminSeconds: r.race_prediction_seconds ? Number(r.race_prediction_seconds) : null,
