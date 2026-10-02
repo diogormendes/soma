@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import SegmentEditor, { Segment, RepeatGroup, SegmentItem, BPM_DEFAULTS, TYPE_COLORS } from "./segment-editor";
 import { nanoid } from "nanoid";
 import { useState, useMemo } from "react";
+import { flatItems } from "run-dj/segments";
 
 function newSegment(type: Segment["type"] = "easy", duration_s = 600): Segment {
   const bpm = BPM_DEFAULTS[type] ?? { min: 125, max: 145, valence_min: 0.3, valence_max: 0.7 };
@@ -18,9 +19,7 @@ function fmt(s: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export function flatItems(items: SegmentItem[]): Segment[] {
-  return items.flatMap(item => item.type === "repeat" ? item.children : [item as Segment]);
-}
+export { flatItems };
 
 interface Props {
   items: SegmentItem[];

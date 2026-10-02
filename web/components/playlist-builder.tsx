@@ -10,88 +10,16 @@ import SongAssignmentPanel from "./song-assignment-panel";
 import SpotifyPlayer from "./spotify-player";
 import PlaylistRunSelector from "./playlist-run-selector";
 import PumpUpModal from "./pump-up-modal";
-import { Segment, SegmentItem, RepeatGroup, SegmentType, BPM_DEFAULTS } from "./segment-editor";
+import { Segment, SegmentItem, RepeatGroup } from "./segment-editor";
 import { flatItems } from "./run-segment-timeline";
 import { SongData } from "./song-card";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
 import { nanoid } from "nanoid";
+import { parsedToItems as parsedToItemsWithIds, segsForGenerate as segsForGenerateWithIds, type ParsedStep } from "run-dj/segments";
 
-type ParsedStep = { type?: string; duration_s?: number } | { type: "repeat"; repeat_count: number; children: ParsedStep[] };
-
-function makeSegment(p: { type?: string; duration_s?: number }): Segment {
-  const type = (p.type as SegmentType) ?? "easy";
-  const bpm = BPM_DEFAULTS[type] ?? { min: 125, max: 145, valence_min: 0.3, valence_max: 0.7 };
-  return { id: nanoid(), type, duration_s: p.duration_s ?? 600, bpm_min: bpm.min, bpm_max: bpm.max, bpm_tolerance: 8, sync_mode: "auto" as const, valence_min: bpm.valence_min, valence_max: bpm.valence_max };
-}
-
-function parsedToItems(parsed: ParsedStep[]): SegmentItem[] {
-  return parsed.map(p => {
-    if (p.type === "repeat" && "children" in p) {
-      const repeatCount = (p as { repeat_count: number }).repeat_count ?? 1;
-      const rawChildren = (p as { children: ParsedStep[] }).children;
-      // Flatten any nested repeats in template (simplified: treat nested as individual steps)
-      const templateSegs = rawChildren
-        .filter(c => c.type !== "repeat")
-        .map(c => makeSegment(c as { type?: string; duration_s?: number }));
-      if (!templateSegs.length) return makeSegment({ type: "easy", duration_s: 600 });
-      const allChildren: Segment[] = [];
-      for (let i = 0; i < repeatCount; i++) {
-        for (const seg of templateSegs) {
-          allChildren.push(i === 0 ? seg : { ...seg, id: nanoid() });
-        }
-      }
-      return { id: nanoid(), type: "repeat" as const, repeat_count: repeatCount, template_size: templateSegs.length, children: allChildren } satisfies RepeatGroup;
-    }
-    return makeSegment(p as { type?: string; duration_s?: number });
-  });
-}
-
-// Song generation bundling:
-// - Short repeat groups (all template steps ≤120s, e.g. strides): collapse ENTIRE group
-//   into ONE segment (total duration, dominant BPM) → one continuous music block
-// - Long repeat groups (any template step >120s, e.g. 5×1000m): bundle BY TEMPLATE TYPE
-//   across iterations → "Interval (5×)" gets one pool, "Recovery (5×)" gets another
-// - Regular segments: 1-to-1 (unchanged)
-// flatIndexMap[apiIdx] = flat panel indices that receive songs from that API segment.
-function segsForGenerate(items: SegmentItem[]): { segments: Segment[]; flatIndexMap: number[][] } {
-  const segments: Segment[] = [];
-  const flatIndexMap: number[][] = [];
-  let flatIdx = 0;
-  for (const item of items) {
-    if (item.type === "repeat") {
-      const group = item as RepeatGroup;
-      const template = group.children.slice(0, group.template_size);
-      const allShort = template.every(s => s.duration_s <= 120);
-      if (allShort) {
-        // One bundle for the whole group (strides, short drills)
-        const dominant = template.find(s => s.type !== "recovery" && s.type !== "rest") ?? template[0];
-        const totalDuration = group.children.reduce((s, c) => s + c.duration_s, 0);
-        segments.push({ ...dominant, id: nanoid(), duration_s: totalDuration });
-        const indices = Array.from({ length: group.children.length }, (_, i) => flatIdx + i);
-        flatIndexMap.push(indices);
-        flatIdx += group.children.length;
-      } else {
-        // Bundle each template step type across all iterations
-        // e.g. 5×[interval+recovery] → one "interval" bundle + one "recovery" bundle
-        for (let t = 0; t < template.length; t++) {
-          const step = template[t];
-          segments.push({ ...step, id: nanoid(), duration_s: step.duration_s * group.repeat_count });
-          const indices: number[] = [];
-          for (let r = 0; r < group.repeat_count; r++) {
-            indices.push(flatIdx + r * group.template_size + t);
-          }
-          flatIndexMap.push(indices);
-        }
-        flatIdx += group.children.length;
-      }
-    } else {
-      segments.push(item as Segment);
-      flatIndexMap.push([flatIdx]);
-      flatIdx++;
-    }
-  }
-  return { segments, flatIndexMap };
-}
+// Parsed steps to segments and the song-pool bundling are run-dj's segments module, with nanoid ids.
+const parsedToItems = (parsed: ParsedStep[]): SegmentItem[] => parsedToItemsWithIds(parsed, nanoid);
+const segsForGenerate = (items: SegmentItem[]) => segsForGenerateWithIds(items, nanoid);
 
 interface SegmentSongs { songs: SongData[]; loading?: boolean; poolCount?: number; warning?: string; }
 
