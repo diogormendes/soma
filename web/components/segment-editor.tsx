@@ -5,22 +5,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SEGMENT_TYPES, BPM_DEFAULTS, type SegmentType, type Segment } from "run-dj/segments";
 
-export const SEGMENT_TYPES = ["warmup","easy","aerobic","tempo","interval","vo2max","recovery","rest","strides","cooldown"] as const;
-export type SegmentType = typeof SEGMENT_TYPES[number];
-
-export const BPM_DEFAULTS: Record<SegmentType, { min: number; max: number; valence_min: number; valence_max: number }> = {
-  warmup:   { min: 100, max: 140, valence_min: 0.3, valence_max: 0.7 },
-  easy:     { min: 125, max: 145, valence_min: 0.3, valence_max: 0.7 },
-  aerobic:  { min: 125, max: 145, valence_min: 0.3, valence_max: 0.7 },
-  tempo:    { min: 160, max: 180, valence_min: 0.1, valence_max: 0.5 },
-  interval: { min: 175, max: 195, valence_min: 0.0, valence_max: 0.4 },
-  vo2max:   { min: 175, max: 195, valence_min: 0.0, valence_max: 0.4 },
-  recovery: { min: 125, max: 145, valence_min: 0.3, valence_max: 0.7 },
-  rest:     { min: 80,  max: 110, valence_min: 0.3, valence_max: 0.7 },
-  strides:  { min: 160, max: 180, valence_min: 0.1, valence_max: 0.5 },
-  cooldown: { min: 60,  max: 90,  valence_min: 0.6, valence_max: 1.0 },
-};
+// The segment model (types, BPM and valence ranges) is run-dj's segments module, shared with the
+// app. The colours are this screen's own.
+export { SEGMENT_TYPES, BPM_DEFAULTS, type SegmentType, type Segment, type RepeatGroup, type SegmentItem } from "run-dj/segments";
 
 export const TYPE_COLORS: Record<SegmentType, string> = {
   warmup: "bg-yellow-500", easy: "bg-green-500", aerobic: "bg-blue-500",
@@ -28,22 +17,6 @@ export const TYPE_COLORS: Record<SegmentType, string> = {
   recovery: "bg-sky-400", rest: "bg-slate-400", strides: "bg-amber-400", cooldown: "bg-slate-600",
 };
 
-export interface Segment {
-  id: string; type: SegmentType; duration_s: number;
-  bpm_min: number; bpm_max: number; bpm_tolerance: number;
-  sync_mode: "sync" | "async" | "auto";
-  valence_min: number; valence_max: number;
-}
-
-export interface RepeatGroup {
-  id: string;
-  type: "repeat";
-  repeat_count: number;
-  template_size: number;   // steps in one iteration
-  children: Segment[];     // all iterations (repeat_count × template_size)
-}
-
-export type SegmentItem = Segment | RepeatGroup;
 
 interface Props {
   segment: Segment;
