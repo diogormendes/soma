@@ -1,4 +1,4 @@
-import { runForwardSimulation, type ProjectedDay, type SimulationSeeds, type SimulationPlanDay as FsPlanDay } from "banister";
+import { runForwardSimulation, type ProjectedDay, type SimulationSeeds, type SimulationPlanDay as FsPlanDay, DEFAULT_CALIBRATION_WEIGHT_KG } from "banister";
 import type { ForwardSim } from "./api";
 
 export type { ProjectedDay };
@@ -22,7 +22,7 @@ export function projectDays(
     fitness: {
       vdotAdjusted: sim.fitness.vdotAdjusted,
       weightKg: sim.fitness.weightKg ?? 70,
-      calibrationWeightKg: sim.fitness.calibrationWeightKg ?? 80.5,
+      calibrationWeightKg: sim.fitness.calibrationWeightKg ?? DEFAULT_CALIBRATION_WEIGHT_KG,
     },
     planDays: sim.planDays as unknown as FsPlanDay[],
     sliderMultiplier,

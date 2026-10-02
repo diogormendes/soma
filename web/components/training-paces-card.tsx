@@ -3,78 +3,14 @@
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Timer } from "lucide-react";
+import { paceForZone, timeFromVdot } from "banister";
 
-// ── Daniels/Gilbert VDOT equations (ported from sync/src/training_engine/vdot.py) ──
+// Daniels/Gilbert VDOT equations from banister (vdot), the training engine's single source.
 
-/** Oxygen cost of running at a given velocity (mL/kg/min). */
-function vo2Cost(velocityMMin: number): number {
-  const v = velocityMMin;
-  return -4.60 + 0.182258 * v + 0.000104 * v * v;
-}
-
-/** Fraction of VO2max sustainable for a given duration. */
-function vo2DemandFraction(timeMin: number): number {
-  const t = timeMin;
-  return (
-    0.8 +
-    0.1894393 * Math.exp(-0.012778 * t) +
-    0.2989558 * Math.exp(-0.1932605 * t)
-  );
-}
-
-/** VDOT from a race performance. */
-function vdotFromRace(distanceM: number, timeSeconds: number): number {
-  const timeMin = timeSeconds / 60.0;
-  const velocity = distanceM / timeMin;
-  const vo2 = vo2Cost(velocity);
-  const fraction = vo2DemandFraction(timeMin);
-  return vo2 / fraction;
-}
-
-/** Velocity (m/min) at a given fraction of VO2max. */
-function velocityAtFraction(vdot: number, fraction: number): number {
-  const targetVo2 = vdot * fraction;
-  const a = 0.000104;
-  const b = 0.182258;
-  const c = -4.60 - targetVo2;
-  const discriminant = b * b - 4 * a * c;
-  return (-b + Math.sqrt(discriminant)) / (2 * a);
-}
-
-/** Predict race time from VDOT using binary search. */
-function timeFromVdot(vdot: number, distanceM: number): number {
-  let lo = 60.0;
-  let hi = 86400.0;
-  for (let i = 0; i < 80; i++) {
-    const mid = (lo + hi) / 2.0;
-    const computed = vdotFromRace(distanceM, mid);
-    if (computed > vdot) lo = mid;
-    else hi = mid;
-  }
-  return (lo + hi) / 2.0;
-}
-
-// Zone %VO2max fractions calibrated to Daniels' published tables
-const ZONE_FRACTIONS: Record<string, [number, number]> = {
-  easy: [0.6435, 0.7015],
-  marathon: [0.813, 0.813],
-  threshold: [0.8772, 0.8772],
-  interval: [0.965, 0.965],
-  repetition: [1.0474, 1.0817],
-};
-
-/** Training pace in sec/km for a zone. Returns [fast, slow] for ranges, [pace, pace] for single. */
-function paceForZone(vdot: number, zone: string): [number, number] {
-  const [lowFrac, highFrac] = ZONE_FRACTIONS[zone];
-  if (zone === "easy" || zone === "repetition") {
-    const fastVel = velocityAtFraction(vdot, highFrac);
-    const slowVel = velocityAtFraction(vdot, lowFrac);
-    return [Math.round((1000.0 / fastVel) * 60.0), Math.round((1000.0 / slowVel) * 60.0)];
-  }
-  const midFrac = (lowFrac + highFrac) / 2.0;
-  const vel = velocityAtFraction(vdot, midFrac);
-  const pace = Math.round((1000.0 / vel) * 60.0);
-  return [pace, pace];
+/** A zone's pace in sec/km as [fast, slow]; a single-pace zone gives the same number twice. */
+function zonePace(vdot: number, zone: string): [number, number] {
+  const p = paceForZone(vdot, zone);
+  return Array.isArray(p) ? [Math.round(p[0]), Math.round(p[1])] : [Math.round(p), Math.round(p)];
 }
 
 /** Format seconds to M:SS pace string. */
@@ -115,7 +51,7 @@ function computeZonePaces(vdot: number): ZonePace[] {
   ];
 
   return zones.map(({ key, zone, label }) => {
-    const [fast, slow] = paceForZone(vdot, key);
+    const [fast, slow] = zonePace(vdot, key);
     const pace = fast === slow ? fmtPace(fast) : `${fmtPace(fast)}\u2013${fmtPace(slow)}`;
     return { zone, label, pace };
   });
@@ -123,7 +59,7 @@ function computeZonePaces(vdot: number): ZonePace[] {
 
 function computeGoalPaces(vdot: number): GoalPace[] {
   // A goal = threshold pace
-  const [tPace] = paceForZone(vdot, "threshold");
+  const [tPace] = zonePace(vdot, "threshold");
 
   // B goal = predicted HM pace
   const hmTime = timeFromVdot(vdot, 21097.5);
