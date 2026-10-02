@@ -19,7 +19,7 @@ import { transcribeAudio, textForAgent } from "./transcribe";
 import { getVocabulary } from "./capture-vocabulary";
 import type { Ingredient } from "./portion-solver";
 import { sendPush } from "./notify-push";
-import { slotsRemaining, slotBudget } from "macro-engine-core";
+import { slotsRemaining, slotBudget, slotBudgetByShare } from "macro-engine-core";
 
 
 export interface LandedMeal { slot: string; summary: string; captureId: number; mealLogId: number | null }
@@ -99,7 +99,10 @@ async function budgetForDay(
   // would have the meal compete with the version of itself it is replacing, which on 2026-09-20
   // drove the day headroom negative and scaled the replacement to nothing.
   return {
-    slotKcal: slotBudget({ dayTarget, consumed, slotsLeft: slotsRemaining(slot) }),
+    // The plan's shares over the slots still ahead (breakfast 28, lunch 25, dinner 37, pre-sleep 10),
+    // so the agent sizes a meal the way the plan screen budgets it. Decided 2026-10-02; it was an
+    // even split of what was left.
+    slotKcal: slotBudgetByShare({ dayTarget, consumed, slot }),
     dayLeft: Math.max(0, dayTarget - consumed),
     // What the day already holds, so "based on the day so far" is a real input rather than a
     // figure of speech. Unlike dayLeft this does not depend on a plan existing.

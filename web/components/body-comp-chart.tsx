@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { KCAL_PER_KG_FAT } from "macro-engine-core";
 import { Card, CardContent } from "@/components/ui/card";
 import type { ChartTooltipProps } from "@/lib/chart-types";
 import {
@@ -545,7 +546,7 @@ export function BodyCompChart() {
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={(() => {
                   // Build cumulative data matching weight chart X-axis range
-                  const _totalDeficitNeeded = -Math.round((profile.fatToLose || 5.5) * 7700);
+                  const _totalDeficitNeeded = -Math.round((profile.fatToLose || 5.5) * KCAL_PER_KG_FAT);
                   const deficitData: { date: string; cumulative: number | null; goalPace: number | null; source?: string }[] = [];
                   // Add actual deficit data points
                   for (const d of dailyDeficits) {
