@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { KCAL_PER_KG_FAT } from "macro-engine-core";
 import { keepPlausible } from "@/lib/weigh-ins";
 import { getDb } from "@/lib/db";
 
@@ -173,7 +174,7 @@ export async function POST(req: NextRequest) {
             86400000
         )
       );
-      const rawDeficit = (fatToLose * 7700) / daysLeft;
+      const rawDeficit = (fatToLose * KCAL_PER_KG_FAT) / daysLeft;
       const currentDeficit = Number(profile[0].daily_deficit) || 800;
       const cappedDeficit = Math.min(rawDeficit, currentDeficit);
 

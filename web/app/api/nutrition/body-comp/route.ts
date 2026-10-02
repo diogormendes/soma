@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { KCAL_PER_KG_FAT } from "macro-engine-core";
 import { keepPlausible } from "@/lib/weigh-ins";
 import { getDb } from "@/lib/db";
 import { deficitWindow, windowLabel } from "@/lib/deficit-window";
@@ -106,7 +107,7 @@ async function trajectory() {
   // Target calculations
   const targetWeight = Math.round((ffm / (1 - targetBf / 100)) * 10) / 10;
   const fatToLose = Math.max(0, currentFat - (targetWeight * targetBf / 100));
-  const totalDeficitNeeded = fatToLose * 7700;
+  const totalDeficitNeeded = fatToLose * KCAL_PER_KG_FAT;
   const today = await todayForRequest();
   // Use T12:00 to avoid timezone-related off-by-one when parsing date strings
   const daysRemaining = Math.max(1, Math.round((new Date(targetDate + "T12:00").getTime() - new Date(today + "T12:00").getTime()) / 86400000));
@@ -124,7 +125,7 @@ async function trajectory() {
     || weights[weights.length - 1]?.weight || currentWeight;
   if (dietStartWeight > targetWeight) {
     const startDate = new Date(dietStartDate + "T12:00");
-    const dailyLossKg = deficit / 7700;
+    const dailyLossKg = deficit / KCAL_PER_KG_FAT;
     const daysToTarget = dailyLossKg > 0 ? Math.ceil((dietStartWeight - targetWeight) / dailyLossKg) : 365;
     const goalEndDate = new Date(startDate);
     goalEndDate.setDate(goalEndDate.getDate() + daysToTarget);
@@ -358,7 +359,7 @@ async function trajectory() {
     .filter(d => d.inWindow && d.cumulative != null)
     .map(d => ({
       date: d.date,
-      weight: Math.round((startWeightForPrediction + (d.cumulative as number) / 7700) * 10) / 10, // cumulative is negative for deficit
+      weight: Math.round((startWeightForPrediction + (d.cumulative as number) / KCAL_PER_KG_FAT) * 10) / 10, // cumulative is negative for deficit
       closed: d.closed,
     }));
 

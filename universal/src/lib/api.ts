@@ -1126,37 +1126,9 @@ export function ingredientMacros(ing: Ingredient, grams: number) {
   };
 }
 
-// ── Portion helpers — local twins of macro-engine-core's portion-solver, kept
-// bit-identical so the app's compose editors match the web (count/piece units
-// and raw<->cooked weight conversions). ──────────────────────────────────────
-/** True when the ingredient is measured in pieces/units, not grams. */
-export function isCountBased(ing: Ingredient): boolean {
-  return !!ing.unit && ing.unit !== "g" && !!ing.grams_per_unit;
-}
-export function countToGrams(ing: Ingredient, count: number): number {
-  return count * (Number(ing.grams_per_unit) || 100);
-}
-export function gramsToCount(ing: Ingredient, grams: number): number {
-  const raw = grams / (Number(ing.grams_per_unit) || 100);
-  const step = Number(ing.unit_step) || 0.25;
-  return Math.round(raw / step) * step;
-}
-/** Cooked weight for `rawGrams` (rounded); identity when no raw/cooked ratio. */
-export function rawToCooked(ing: Ingredient, rawGrams: number): number {
-  const r = Number(ing.raw_to_cooked_ratio);
-  if (!ing.is_raw || !r || r <= 0) return rawGrams;
-  return Math.round(rawGrams * r);
-}
-export function cookedToRaw(ing: Ingredient, cookedGrams: number): number {
-  const r = Number(ing.raw_to_cooked_ratio);
-  if (!ing.is_raw || !r || r <= 0) return cookedGrams;
-  return Math.round(cookedGrams / r);
-}
-/** True when this ingredient supports a raw<->cooked weight toggle. */
-export function hasRawCookedToggle(ing: Ingredient): boolean {
-  const r = Number(ing.raw_to_cooked_ratio);
-  return !!ing.is_raw && !!r && r > 0 && r !== 1;
-}
+// Portion helpers (count units and raw/cooked weights) from macro-engine-core, the same functions the
+// web uses, so the app's compose editors cannot drift from it.
+export { isCountBased, countToGrams, gramsToCount, rawToCooked, cookedToRaw, hasRawCookedToggle } from "macro-engine-core";
 
 export interface RebalanceChange { slot: string; ingredient: string; from: number; to: number }
 /** Redistribute grams across the unlocked slots after `changedSlot` to hit the
