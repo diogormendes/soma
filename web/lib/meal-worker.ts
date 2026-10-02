@@ -19,26 +19,13 @@ import { transcribeAudio, textForAgent } from "./transcribe";
 import { getVocabulary } from "./capture-vocabulary";
 import type { Ingredient } from "./portion-solver";
 import { sendPush } from "./notify-push";
+import { slotsRemaining, slotBudget } from "macro-engine-core";
 
-/** A day with no plan still gets an ordinary meal rather than a budget of nothing. */
-const DEFAULT_MEAL_KCAL = 500;
-/** The slots that make up a day, in order. during_workout sits outside it. */
-const DAY_SLOTS = ["breakfast", "lunch", "dinner", "pre_sleep"] as const;
 
 export interface LandedMeal { slot: string; summary: string; captureId: number; mealLogId: number | null }
 
-export function slotsRemaining(slot: string): number {
-  const i = DAY_SLOTS.indexOf(slot as (typeof DAY_SLOTS)[number]);
-  // during_workout is fuelling, not a point in the day, so it gets what is left rather than a share.
-  return i < 0 ? 1 : DAY_SLOTS.length - i;
-}
-
-export function slotBudget(o: { dayTarget: number; consumed: number; slotsLeft: number }): number {
-  if (!o.dayTarget) return DEFAULT_MEAL_KCAL;
-  const left = o.dayTarget - o.consumed;
-  if (left <= 0) return 0;
-  return Math.round(left / Math.max(1, o.slotsLeft));
-}
+// How much of the day is left for this slot, from macro-engine-core (meal-slots).
+export { slotsRemaining, slotBudget };
 
 /** A stable catalog id from a food's name, or null when the name has nothing usable in it. */
 export function ingredientIdFor(name: string): string | null {

@@ -33,12 +33,7 @@ export const MAX_ATTEMPTS = 2;
  * type check. `tsc --noEmit` cannot see that, because the types it checks against are written
  * during `next build`, so the only way to catch it before CI is to run the build.
  */
-export function slotForHour(h: number): string {
-  if (h < 11) return "breakfast";
-  if (h < 16) return "lunch";
-  if (h < 21) return "dinner";
-  return "pre_sleep";
-}
+export { slotForHour } from "macro-engine-core";
 
 /** Append without mutating, so a caller can keep the previous thread to compare against. */
 export function appendMessage(thread: CaptureMessage[], msg: CaptureMessage): CaptureMessage[] {
