@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { neon, NeonQueryPromise } from "@neondatabase/serverless";
 import { Pool, types as pgTypes } from "pg";
 
 /**
@@ -20,6 +20,30 @@ export const neonTypes = {
   getTypeParser: (oid: number, format?: "text" | "binary") =>
     oid === DATE_OID ? dateAsText : pgTypes.getTypeParser(oid, format as "text"),
 };
+
+/**
+ * The Neon HTTP driver with that rule applied to every query.
+ *
+ * ⛔ `neon(url, { types })` DOES NOT DO THIS. Neon 1.0 reads `types` only from a query's own options,
+ * never from the options given to `neon()`, so the DATE rule above was silently dropped on every host
+ * that uses this driver: Vercel production, the app's server, kept sending "2026-09-28T00:00:00.000Z"
+ * (soma#1151). Each query is re-wrapped as a NeonQueryPromise carrying the types, which keeps it lazy
+ * and keeps nested `sql` fragments composing, as Neon's own queries do.
+ */
+export function httpDb(url: string): QueryFn {
+  const base = neon(url);
+  const tagged = (strings: TemplateStringsArray, ...values: unknown[]) => {
+    const q = base(strings, ...values) as unknown as {
+      execute: ConstructorParameters<typeof NeonQueryPromise>[0];
+      queryData: ConstructorParameters<typeof NeonQueryPromise>[1];
+      opts?: ConstructorParameters<typeof NeonQueryPromise>[2];
+    };
+    return new NeonQueryPromise(q.execute, q.queryData, { ...(q.opts ?? {}), types: neonTypes });
+  };
+  (tagged as unknown as { query: unknown }).query = (text: string, params: unknown[] = []) =>
+    base.query(text, params, { types: neonTypes });
+  return tagged as unknown as QueryFn;
+}
 
 /** A tagged-template function that always resolves to an array of row objects. */
 export type QueryFn = (
@@ -174,7 +198,7 @@ function isBuildPhase(): boolean {
  */
 export function makeDb(url: string): QueryFn {
   if (!url) throw new Error("makeDb needs a connection string");
-  return driverFor(url) === "http" ? (neon(url, { types: neonTypes }) as QueryFn) : localDb(url);
+  return driverFor(url) === "http" ? httpDb(url) : localDb(url);
 }
 
 export function getDb(): QueryFn {
@@ -193,7 +217,7 @@ export function getDb(): QueryFn {
     // exactly how a missing key on the portfolio went unnoticed through three builds.
     throw new Error("DATABASE_URL is not set");
   }
-  return driverFor(url) === "http" ? (neon(url, { types: neonTypes }) as QueryFn) : localDb(url);
+  return driverFor(url) === "http" ? httpDb(url) : localDb(url);
 }
 
 /** Retry once on a transport hiccup: a Neon cold start, or the gateway between a request
