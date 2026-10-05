@@ -3,12 +3,8 @@ name: Publish Docker image
 on:
   push:
     branches: [main]
-    paths:
-      - "web/**"
-      - "Dockerfile"
-      - ".dockerignore"
-      - "docker-compose.yml"
-      - ".github/workflows/docker-publish.yml"
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
 
 permissions:
@@ -36,7 +32,9 @@ jobs:
         with:
           images: drmspidi/soma
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
 
       - name: Build and push
