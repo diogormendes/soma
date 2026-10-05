@@ -271,9 +271,10 @@ const GARMIN_SSO_URL =
   "&redirectAfterAccountLoginUrl=https%3A%2F%2Fsso.garmin.com%2Fsso%2Fembed" +
   "&redirectAfterAccountCreationUrl=https%3A%2F%2Fsso.garmin.com%2Fsso%2Fembed";
 
-// DI OAuth exchange worker (garmin-auth >= 0.3.0). The legacy
-// `hevy2garmin-exchange` worker stays alive for older hevy2garmin deployments.
-const CF_WORKER_URL = "https://hevy2garmin-exchange-di.gkos.workers.dev/exchange";
+// The ticket exchange on the shared Garmin SSO worker (garmin-auth's
+// DEFAULT_SSO_WORKER_URL). The old hevy2garmin-exchange-di worker was deleted
+// in 2026-09 (garmin-auth#47) and answers 404 (#1161).
+export const CF_WORKER_URL = "https://garmin-auth-sso.gkos.workers.dev/exchange";
 
 function GarminBrowserAuth({
   onSuccess,
