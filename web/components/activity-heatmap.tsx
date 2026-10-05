@@ -227,7 +227,7 @@ export function ActivityHeatmap({ data }: { data: DayData[] }) {
           {dayLabels.map((label, i) => (
             <div
               key={i}
-              className="flex items-center justify-end"
+              className="flex flex-1 items-center justify-end"
               style={{ aspectRatio: "auto", minHeight: "14px" }}
             >
               <span className="text-[10px] text-muted-foreground w-5 text-right leading-none">
