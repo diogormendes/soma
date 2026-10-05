@@ -98,9 +98,17 @@ Shared logic is published as npm packages — [`macro-engine-core`](https://gith
 
 ### 1 — Database
 
+If you are setting up Soma from scratch, you must apply the initial base schema before running the incremental migrations.
+
 ```bash
+# Apply the base schema
+psql "$DATABASE_URL" -f "scripts/db-init/schema.sql"
+
 # Apply the schema migrations (in order)
 for f in web/lib/db/migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
+
+# (Optional) Seed the database with demo data
+psql "$DATABASE_URL" -f "scripts/db-init/demo-seed.sql"
 ```
 
 ### 2 — Web app
