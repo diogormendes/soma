@@ -6,13 +6,13 @@
  * non-fatal so one failure doesn't abort the rest, mirroring pipeline.py.
  */
 import { GarminAuth, DBTokenStore } from "garmin-auth";
-import { healGarminTokenRow } from "../lib/garmin-token-heal";
 import { HevyClient } from "hevy2garmin";
 import { getDb, type QueryFn } from "../lib/db";
 import { runGarminIngest } from "../lib/garmin-ingest";
 import { getHevyApiKey, syncAllWorkouts } from "../lib/hevy-ingest";
 import { enrichNewWorkouts } from "../lib/hevy-enrich-run";
 import { computeHevyLoads } from "../lib/training-load";
+import { drainCaptures, reviveStalled } from "../lib/meal-worker";
 import { backfillLoadFromHistory, computeAndStorePmc } from "../lib/pmc-stream";
 import { fitFromDb } from "../lib/banister";
 import { pushPlanToGarmin } from "../lib/garmin-workout-builder";
@@ -20,6 +20,7 @@ import { getLivePlan } from "../lib/live-plan";
 import { enrichGarminRunActivities } from "../lib/garmin-run-enrich";
 import { uploadEnrichedToGarmin } from "../lib/hevy-upload";
 import { enrichGarminGymActivities } from "../lib/garmin-gym-enrich";
+import { pushWeightsToGarmin } from "../lib/weight-push";
 import { notifyPendingWorkouts } from "../lib/notify";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -103,10 +104,19 @@ await step("hevy", async () => {
 // reasons that are not training. computeAndStorePmc keeps the classic 42/7 constants.
 await step("banister-fit", () => fitFromDb(sql));
 
+// 2b. Meal captures. The capture route starts the worker without awaiting it, so a restart
+// mid-flight would otherwise stand a row in `running` for ever and nothing would look at it
+// again. This is also the only thing that picks up a sentence captured while the web process
+// was down, which matters because the sentence is the one thing that cannot be recomputed.
+await step("meal-captures", async () => {
+  const revived = await reviveStalled(sql);
+  const drained = await drainCaptures(sql, 10);
+  return { revived, drained };
+});
+
 // 3+4. Garmin client for the external-write steps (plan push + run enrichment).
 let garminClient: Awaited<ReturnType<GarminAuth["client"]>> | null = null;
 try {
-  await healGarminTokenRow(sql); // flat DI row → nested, before DBTokenStore reads it (#723)
   garminClient = await new GarminAuth({ store: new DBTokenStore(databaseUrl) }).client();
 } catch (e) {
   console.error("[sync] Garmin auth for push/enrich failed:", (e as Error).message);
@@ -129,6 +139,16 @@ if (garminClient) {
   // After the upload, so a workout uploaded in this pass is described in this pass too
   // (soma#982). Idempotent through the garmin_enrichment ledger, so a re-run is a no-op.
   await step("gym-enrich", () => enrichGarminGymActivities(sql, garminClient!, webBaseUrl));
+  // Weigh-ins the phone read out of Health Connect, sent onward to Garmin.
+  //
+  // ⛔ ONLY rows soma itself originated go out, which is why weightsOwedToGarmin filters on
+  // source_type = HEALTH_CONNECT and nothing else. Every other value in that column was minted by
+  // Garmin (MANUAL means "typed into Garmin", not "typed into soma"), and sending those back
+  // duplicates his own history beside itself. It already happened once, on 2026-09-24, to 29 rows.
+  //
+  // Each row is marked as it lands rather than after the batch, so a failure halfway through
+  // re-sends only what never arrived.
+  await step("weight-push", () => pushWeightsToGarmin(sql, garminClient!));
 }
 
 // 5. Telegram + push notifications for workouts now on Garmin.

@@ -21,7 +21,6 @@
  * ⚠️ Strava keeps the description it was given at forward time, months ago. This fixes Garmin.
  */
 import { GarminAuth, DBTokenStore } from "garmin-auth";
-import { healGarminTokenRow } from "../lib/garmin-token-heal";
 import { getDb } from "../lib/db";
 import { describeGymWorkout } from "../lib/garmin-gym-enrich";
 
@@ -56,7 +55,6 @@ if (!write) {
   process.exit(0);
 }
 
-await healGarminTokenRow(sql);
 const client = await new GarminAuth({ store: new DBTokenStore(process.env.DATABASE_URL!) }).client();
 
 let rewritten = 0;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { rangeToDays } from "@/lib/time-ranges";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 /**
@@ -9,6 +10,8 @@ import { rangeToDays } from "@/lib/time-ranges";
  * getTrainingLoadTrend + getCadenceStride in app/running/page.tsx.
  */
 export async function GET(request: Request) {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const { searchParams } = new URL(request.url);
   // Match web exactly: the app sends the 10 range tokens (1w..all); map each to
   // the same day count web's rangeToDays uses (1m=30, 3m=90, all=3650, …).
@@ -27,7 +30,7 @@ export async function GET(request: Request) {
     FROM garmin_raw_data
     WHERE endpoint_name = 'training_status'
       AND raw_json->'mostRecentTrainingStatus' IS NOT NULL
-      AND date >= CURRENT_DATE - ${days}::int
+      AND date >= ${today}::date - ${days}::int
     ORDER BY date ASC
   `) as { date: string; acute: number | null; chronic: number | null; acwr: number | null }[];
 
@@ -41,7 +44,7 @@ export async function GET(request: Request) {
       AND raw_json->>'averageRunningCadenceInStepsPerMinute' IS NOT NULL
       AND (raw_json->>'averageRunningCadenceInStepsPerMinute')::float >= 120
       AND (raw_json->>'distance')::float > 1000
-      AND (raw_json->>'startTimeLocal')::timestamp >= CURRENT_DATE - ${days}::int
+      AND (raw_json->>'startTimeLocal')::timestamp >= ${today}::date - ${days}::int
     ORDER BY (raw_json->>'startTimeLocal')::timestamp ASC
   `) as { date: string; cadence: number | null; stride: number | null }[];
 

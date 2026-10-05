@@ -12,40 +12,14 @@
  */
 import React from "react";
 
-export type PerMealProteinLevel = "red" | "amber" | "yellow" | "green" | "plenty";
+// The rule itself (0.4 g/kg floor, 0.55 g/kg plenty, fixed grams without a weight) is
+// macro-engine-core's meal-protein, shared with the app.
+import { mealProteinLevel, mealProteinThresholds, type MealProteinLevel } from "macro-engine-core";
 
-const MPS_G_PER_KG = 0.4;
-const PLENTY_G_PER_KG = 0.55;
-const FALLBACK_MPS_G = 30;
-
-interface Thresholds {
-  red: number;       // below this = "low protein"
-  amber: number;     // below this = "below MPS"
-  yellow: number;    // below this = "near MPS"
-  plenty: number;    // above this = "plenty" (hidden)
-}
-
-function thresholds(weightKg: number | null | undefined): Thresholds {
-  if (!weightKg || weightKg <= 0) {
-    return { red: 15, amber: 25, yellow: 30, plenty: 55 };
-  }
-  const mps = Math.max(20, Math.round(weightKg * MPS_G_PER_KG));
-  const plenty = Math.max(40, Math.round(weightKg * PLENTY_G_PER_KG));
-  return {
-    red: Math.max(10, Math.round(mps * 0.5)),
-    amber: Math.max(15, Math.round(mps * 0.83)),
-    yellow: mps,
-    plenty,
-  };
-}
+export type PerMealProteinLevel = MealProteinLevel;
 
 export function perMealProteinLevel(g: number, weightKg?: number | null): PerMealProteinLevel {
-  const t = thresholds(weightKg);
-  if (g < t.red) return "red";
-  if (g < t.amber) return "amber";
-  if (g < t.yellow) return "yellow";
-  if (g <= t.plenty) return "green";
-  return "plenty";
+  return mealProteinLevel(g, weightKg);
 }
 
 export function ProteinQualityPill({ grams, weightKg }: { grams: number; weightKg?: number | null }) {
@@ -63,9 +37,8 @@ export function ProteinQualityPill({ grams, weightKg }: { grams: number; weightK
       : level === "amber"
         ? "below MPS"
         : "near MPS";
-  const mpsFloor = weightKg && weightKg > 0
-    ? Math.max(20, Math.round(weightKg * MPS_G_PER_KG))
-    : FALLBACK_MPS_G;
+  // The floor the pill is judged against (0.4 g/kg, or 30 g without a weight).
+  const mpsFloor = mealProteinThresholds(weightKg).yellow;
   return (
     <span
       className={`text-[9px] ml-1.5 px-1 py-[1px] rounded border ${cls} tabular-nums`}

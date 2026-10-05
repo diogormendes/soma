@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { latestWeighIn, keepPlausible } from "@/lib/weigh-ins";
 import { getDb } from "@/lib/db";
 import { computeMacroTargetsFromContext } from "@/lib/macro-targets";
 import type { Mode } from "@/lib/mode-engine";
@@ -11,10 +12,10 @@ import { reconcile, type DayIn } from "@/lib/energy-reconcile";
 import { nutritionEngagement, WEEK_ENGAGEMENT_FLOOR_DAYS } from "@/lib/engagement";
 import { getWeightTrend } from "@/lib/weight-trend";
 import { trendAte } from "@/lib/trend-ate";
-import { computeAlcoholDisplacement } from "macro-engine-core";
-import { todayAthlete } from "@/lib/athlete-tz";
+import { computeAlcoholDisplacement, computeRunCalories, KCAL_PER_STEP_PER_KG, redistributeRemaining } from "macro-engine-core";
 import { isMissingRelation, warnMissingRelationOnce } from "@/lib/missing-relation";
 import { num, rec } from "@/lib/json";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 const VALID_MODES: readonly Mode[] = [
@@ -22,61 +23,22 @@ const VALID_MODES: readonly Mode[] = [
 ];
 
 /**
- * Per-slot calorie distribution fractions.
- *
- * Only kcal. Protein/carbs/fat/fiber have no scientific basis for per-slot
- * allocation (Schoenfeld & Aragon 2018; Trommelen 2023). See
- * `web/lib/nutrition-types.ts` for the full invariant.
+ * Per-slot calorie budgets: what is left of the day, spread over the slots not yet eaten or skipped
+ * by the plan's shares. macro-engine-core's `redistributeRemaining` does the split, with kcal only:
+ * protein, carbs, fat and fiber have no scientific basis for per-slot allocation (Schoenfeld &
+ * Aragon 2018; Trommelen 2023). See `web/lib/nutrition-types.ts` for the full invariant.
  */
-const SLOT_KCAL_DISTRIBUTION: Record<string, number> = {
-  breakfast: 0.28,
-  lunch: 0.25,
-  dinner: 0.37,
-  pre_sleep: 0.1,
-};
-
-const ALL_SLOTS = ["breakfast", "lunch", "dinner", "pre_sleep"] as const;
-
-/**
- * Redistribute remaining daily kcal across unfilled meal slots, weighted by
- * each slot's default kcal fraction. Non-kcal macros are not allocated.
- */
-function redistributeRemaining(
+function kcalSlotBudgets(
   dayKcalTarget: number,
   eatenKcalBySlot: Record<string, number>,
   skippedSlots: string[] = [],
 ): SlotBudgets {
-  let totalEaten = 0;
-  const filledSlots = new Set<string>();
-  for (const [slot, kcal] of Object.entries(eatenKcalBySlot)) {
-    filledSlots.add(slot);
-    totalEaten += kcal;
-  }
-  for (const s of skippedSlots) filledSlots.add(s);
-
-  const remaining = Math.max(0, dayKcalTarget - totalEaten);
-  const unfilled = ALL_SLOTS.filter((s) => !filledSlots.has(s));
-
-  if (unfilled.length === 0) {
-    return Object.fromEntries(
-      ALL_SLOTS.map((s) => [s, { calories: eatenKcalBySlot[s] ?? 0 }]),
-    );
-  }
-
-  const slotWeights: Record<string, number> = {};
-  for (const s of unfilled) slotWeights[s] = SLOT_KCAL_DISTRIBUTION[s];
-  const totalWeight = Object.values(slotWeights).reduce((a, b) => a + b, 0) || 1;
-
-  const result: SlotBudgets = {};
-  for (const slot of ALL_SLOTS) {
-    if (filledSlots.has(slot)) {
-      result[slot] = { calories: Math.round(eatenKcalBySlot[slot] ?? 0) };
-    } else {
-      const frac = slotWeights[slot] / totalWeight;
-      result[slot] = { calories: Math.round(remaining * frac) };
-    }
-  }
-  return result;
+  const kcalOnly = (calories: number) => ({ calories, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+  const eaten = Object.fromEntries(Object.entries(eatenKcalBySlot).map(([s, k]) => [s, kcalOnly(k)]));
+  return Object.fromEntries(
+    redistributeRemaining(kcalOnly(dayKcalTarget), eaten, skippedSlots)
+      .map((b) => [b.slot, { calories: Math.round(b.calories) }]),
+  );
 }
 
 /** What a day looks like before any nutrition table exists: nothing logged, nothing planned. */
@@ -113,7 +75,7 @@ export async function GET(req: NextRequest) {
 
 async function planForDay(req: NextRequest) {
   const sql = getDb();
-  const todayStr = todayAthlete();
+  const todayStr = await todayForRequest();
   const date = req.nextUrl.searchParams.get("date") ?? todayStr;
 
   // Nothing else creates the day's row before something is logged, so the first view of a new
@@ -260,13 +222,11 @@ async function planForDay(req: NextRequest) {
 
     // Use latest weight from weight_log (more current than profile)
     try {
-      const weightRows = await sql`
-        SELECT weight_grams / 1000.0 AS weight_kg FROM weight_log
-        WHERE weight_grams IS NOT NULL
-        ORDER BY date DESC LIMIT 1
-      `;
-      if (weightRows[0]?.weight_kg) {
-        const lw = Number(weightRows[0].weight_kg);
+      // ⛔ This was `ORDER BY date DESC LIMIT 1` with no date bound, so a mistyped weigh-in would
+      // have set his calorie target until the next one arrived. Judged against its neighbours.
+      const latest = await latestWeighIn(sql, new Date().toISOString().slice(0, 10), "plan");
+      if (latest) {
+        const lw = latest.weightKg;
         if (lw > 0) weightKg = lw;
       }
     } catch {}
@@ -295,9 +255,9 @@ async function planForDay(req: NextRequest) {
     } catch {}
 
     // Recompute step calories from scratch using weight-based formula
-    const calPerStep = 0.000423 * weightKg; // conservative: ~-50 kcal/day vs Garmin
+    const calPerStep = KCAL_PER_STEP_PER_KG * weightKg; // conservative: ~-50 kcal/day vs Garmin
     const isClosed = plan?.status === "closed";
-    const isPast = date < todayAthlete();
+    const isPast = date < (await todayForRequest());
     const stepsForCalc = (isClosed || isPast) && actualSteps !== null ? actualSteps : expectedSteps;
     const rawStepCalories = Math.round(stepsForCalc * calPerStep);
 
@@ -336,7 +296,7 @@ async function planForDay(req: NextRequest) {
     // Compute run calories — use plan value, or estimate from distance × weight
     let baseRunCal = Number(plan.exercise_calories) || 0;
     if (baseRunCal === 0 && runDistanceKm > 0) {
-      baseRunCal = Math.round(runDistanceKm * 1.0 * weightKg);
+      baseRunCal = computeRunCalories(runDistanceKm, weightKg);
     }
     const runCal = runEnabled ? baseRunCal : 0;
 
@@ -457,7 +417,7 @@ async function planForDay(req: NextRequest) {
       eatenKcalBySlot[slot] = (eatenKcalBySlot[slot] ?? 0) + (Number(m.calories) || 0);
     }
 
-    slotBudgets = redistributeRemaining(dayTargets.calories, eatenKcalBySlot, skippedSlots);
+    slotBudgets = kcalSlotBudgets(dayTargets.calories, eatenKcalBySlot, skippedSlots);
 
     // ── Build observability breakdown ──
     breakdown = {
@@ -533,12 +493,15 @@ async function planForDay(req: NextRequest) {
     t.setUTCDate(t.getUTCDate() + n);
     return t.toISOString().slice(0, 10);
   };
-  const weighIns = (
-    await sql`
-      SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg
-      FROM weight_log WHERE weight_grams IS NOT NULL AND date <= ${date}::date ORDER BY date
-    `
-  ).map((w: Record<string, unknown>) => ({ date: String(w.date), weightKg: Number(w.weight_kg) }));
+  const weighIns = keepPlausible(
+    (
+      await sql`
+        SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg
+        FROM weight_log WHERE coalesce(upper(source_type), '') <> 'USER_SETTING' AND weight_grams IS NOT NULL AND date <= ${date}::date ORDER BY date
+      `
+    ).map((w: Record<string, unknown>) => ({ date: String(w.date), weightKg: Number(w.weight_kg) })),
+    "plan-span",
+  );
   const windowStart = shiftDate(date, -6);
   // The span starts at the beginning of the last complete weigh-in interval
   // before the window: the rate that fills the window's unlogged days is that

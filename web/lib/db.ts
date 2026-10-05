@@ -1,5 +1,49 @@
-import { neon } from "@neondatabase/serverless";
-import { Pool } from "pg";
+import { neon, NeonQueryPromise } from "@neondatabase/serverless";
+import { Pool, types as pgTypes } from "pg";
+
+/**
+ * ⛔ A DATE IS A CALENDAR DAY, SO IT STAYS TEXT.
+ *
+ * Both drivers parse a DATE column into a JS Date at the SERVER's midnight, and JSON sends a Date as UTC.
+ * 28 September in Athens therefore left the server as "2026-09-27T21:00:00.000Z". The app's charts label
+ * a point by its first ten characters, so they were a day early, and so was every
+ * `d instanceof Date ? d.toISOString().split("T")[0] : …` guard written to cope with it, because that
+ * ISO string is the previous day. Handing DATE back as the text Postgres sent ("2026-09-28") removes the
+ * moment altogether. Timestamps keep their default parsing: they ARE moments.
+ */
+export const DATE_OID = 1082;
+const dateAsText = (value: string): string => value;
+pgTypes.setTypeParser(DATE_OID, dateAsText);
+
+/** The same rule for the Neon HTTP driver, which the demo and the gateway hosts use. */
+export const neonTypes = {
+  getTypeParser: (oid: number, format?: "text" | "binary") =>
+    oid === DATE_OID ? dateAsText : pgTypes.getTypeParser(oid, format as "text"),
+};
+
+/**
+ * The Neon HTTP driver with that rule applied to every query.
+ *
+ * ⛔ `neon(url, { types })` DOES NOT DO THIS. Neon 1.0 reads `types` only from a query's own options,
+ * never from the options given to `neon()`, so the DATE rule above was silently dropped on every host
+ * that uses this driver: Vercel production, the app's server, kept sending "2026-09-28T00:00:00.000Z"
+ * (soma#1151). Each query is re-wrapped as a NeonQueryPromise carrying the types, which keeps it lazy
+ * and keeps nested `sql` fragments composing, as Neon's own queries do.
+ */
+export function httpDb(url: string): QueryFn {
+  const base = neon(url);
+  const tagged = (strings: TemplateStringsArray, ...values: unknown[]) => {
+    const q = base(strings, ...values) as unknown as {
+      execute: ConstructorParameters<typeof NeonQueryPromise>[0];
+      queryData: ConstructorParameters<typeof NeonQueryPromise>[1];
+      opts?: ConstructorParameters<typeof NeonQueryPromise>[2];
+    };
+    return new NeonQueryPromise(q.execute, q.queryData, { ...(q.opts ?? {}), types: neonTypes });
+  };
+  (tagged as unknown as { query: unknown }).query = (text: string, params: unknown[] = []) =>
+    base.query(text, params, { types: neonTypes });
+  return tagged as unknown as QueryFn;
+}
 
 /** A tagged-template function that always resolves to an array of row objects. */
 export type QueryFn = (
@@ -37,9 +81,61 @@ export function driverFor(url: string): DbDriver {
   return host.endsWith(".neon.tech") || host.startsWith("pg.") ? "http" : "pool";
 }
 
+/**
+ * A query that has not run yet, in the shape Neon uses, so `sql` fragments can nest.
+ *
+ * ⛔ The local adapter used to run every tagged template the moment it was written. Neon does not:
+ * it builds a query and runs it only when awaited, and a fragment nested inside another template is
+ * inlined into it. Routes written against Neon rely on that (`${cond ? sql`AND x = ${v}` : sql``}`),
+ * and on the local pool each such fragment reached pg as a Promise parameter, so playlist track
+ * search returned 500 on the live host for as long as it had been off Neon (soma#1132).
+ */
+export class LocalQuery implements PromiseLike<Record<string, unknown>[]> {
+  constructor(
+    readonly strings: ReadonlyArray<string>,
+    readonly values: unknown[],
+    private readonly run: (text: string, params: unknown[]) => Promise<Record<string, unknown>[]>,
+  ) {}
+
+  /** The SQL text with $1..$n numbered across every nested fragment, appending values to `params`. */
+  compile(params: unknown[] = []): string {
+    let text = "";
+    this.strings.forEach((s, i) => {
+      text += s;
+      if (i >= this.values.length) return;
+      const v = this.values[i];
+      if (v instanceof LocalQuery) {
+        text += v.compile(params);
+      } else {
+        params.push(v);
+        text += `$${params.length}`;
+      }
+    });
+    return text;
+  }
+
+  then<A = Record<string, unknown>[], B = never>(
+    onFulfilled?: ((rows: Record<string, unknown>[]) => A | PromiseLike<A>) | null,
+    onRejected?: ((reason: unknown) => B | PromiseLike<B>) | null,
+  ): Promise<A | B> {
+    const params: unknown[] = [];
+    const text = this.compile(params);
+    return this.run(text, params).then(onFulfilled, onRejected);
+  }
+
+  catch<B = never>(onRejected?: ((reason: unknown) => B | PromiseLike<B>) | null) {
+    return this.then(undefined, onRejected);
+  }
+
+  finally(onFinally?: (() => void) | null) {
+    return this.then().finally(onFinally);
+  }
+}
+
 // One pool per process, created on first use. `next start` is long-lived, so a pool is right
 // here in a way it never was on a serverless function.
-let pool: Pool | null = null;
+/** A pool per connection string. See `localDb` for why this is a map. */
+const pools = new Map<string, Pool>();
 
 /**
  * The same tagged-template shape as `neon()`, over a normal Postgres connection. The template
@@ -47,23 +143,26 @@ let pool: Pool | null = null;
  * tell the difference and no query text changes.
  */
 function localDb(url: string): QueryFn {
+  // ⛔ ONE POOL PER URL, KEYED BY URL. This was a single module-level `pool`, created on the first
+  // call and then returned for EVERY later call whatever url was asked for. `getDb()` never showed
+  // it, because it always passes the same DATABASE_URL. A script that wanted two databases at once
+  // got one: it created the pool on `soma`, then asked for `verify_soma`, was silently handed
+  // `soma`, and its SELECT returned nothing and its UPDATE hit the wrong database. Both looked like
+  // success. That cost 29 unwanted weigh-ins written into his live Garmin account, because the
+  // cleanup that should have removed them queried an empty result and reported "nothing to do".
+  let pool = pools.get(url);
   if (!pool) {
     pool = new Pool({ connectionString: url, max: 8, idleTimeoutMillis: 30_000 });
+    pools.set(url, pool);
     // ⛔ AN IDLE CLIENT EMITTING error WITH NO LISTENER TAKES THE PROCESS DOWN. pg is explicit
     // about this, and idle clients emit on any backend restart, so one `brew services restart
     // postgresql` would kill the pinned host. This never mattered against Neon because the HTTP
     // driver holds no pool; `next start` is long-lived and does.
     pool.on("error", (err) => console.error("[db] idle client error:", err.message));
   }
-  const tagged = async (strings: TemplateStringsArray, ...values: unknown[]) => {
-    let text = "";
-    strings.forEach((s, i) => {
-      text += s;
-      if (i < values.length) text += `$${i + 1}`;
-    });
-    const res = await pool!.query(text, values);
-    return res.rows;
-  };
+  const run = async (text: string, params: unknown[]) => (await pool!.query(text, params)).rows;
+  const tagged = (strings: TemplateStringsArray, ...values: unknown[]) =>
+    new LocalQuery(strings, values, run) as unknown as ReturnType<QueryFn>;
   // Neon's client is a tagged template that ALSO carries .query(text, params), and two callers
   // use it for bulk inserts whose placeholder list is built at runtime (pmc-stream's chunked
   // training_load insert, the DJ daemon's song lookup). It returns the ROWS, not pg's result
@@ -89,6 +188,19 @@ function isBuildPhase(): boolean {
   return process.env.NEXT_PHASE === "phase-production-build" || process.env.npm_lifecycle_event === "build";
 }
 
+/**
+ * A connection to a named database, for the rare caller that needs two at once.
+ *
+ * ⚠️ WHY THIS EXISTS. A check script writes its probe rows to `verify_soma` so his real log is
+ * untouched, but the GARMIN TOKENS live only in `soma`, and a token store pointed at the wrong
+ * database reports "Login needs MFA / fresh SSO" — which reads as an expired credential and is
+ * nothing of the kind. `getDb()` remains the one connection every route and the sync should use.
+ */
+export function makeDb(url: string): QueryFn {
+  if (!url) throw new Error("makeDb needs a connection string");
+  return driverFor(url) === "http" ? httpDb(url) : localDb(url);
+}
+
 export function getDb(): QueryFn {
   // `next build` never needs a database (soma#940). Prerendered pages and ISR route handlers get
   // the empty stub whatever DATABASE_URL says; the first request after deploy regenerates them with
@@ -105,7 +217,7 @@ export function getDb(): QueryFn {
     // exactly how a missing key on the portfolio went unnoticed through three builds.
     throw new Error("DATABASE_URL is not set");
   }
-  return driverFor(url) === "http" ? (neon(url) as QueryFn) : localDb(url);
+  return driverFor(url) === "http" ? httpDb(url) : localDb(url);
 }
 
 /** Retry once on a transport hiccup: a Neon cold start, or the gateway between a request

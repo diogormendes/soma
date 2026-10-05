@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { todayForRequest } from "@/lib/request-tz";
 
 export const revalidate = 300;
 
@@ -10,6 +11,8 @@ export const revalidate = 300;
 const n = (v: unknown): number | null => (v == null ? null : Number(v));
 
 export async function GET() {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const sql = getDb();
   try {
     const rows = await sql`
@@ -22,7 +25,7 @@ export async function GET() {
         body_battery_max,
         COALESCE(moderate_intensity_minutes, 0) + COALESCE(vigorous_intensity_minutes, 0) as intensity
       FROM daily_health_summary
-      WHERE date >= CURRENT_DATE - make_interval(days => 14)
+      WHERE date >= ${today}::date - make_interval(days => 14)
       ORDER BY date ASC
     `;
     const pick = (k: string) =>

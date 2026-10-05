@@ -6,6 +6,7 @@
  * active plan's future days. Invoked via /api/admin/plan (CRON_SECRET-gated).
  */
 import type { GarminClient } from "garmin-auth";
+import { todayAthlete } from "./athlete-tz";
 import type { QueryFn } from "./db";
 import { allPaces, hmGoalPaces } from "./vdot";
 import {
@@ -90,11 +91,11 @@ export interface RegenResult { updated: number; skipped: number }
  * garmin_push_status pushed→pending so the plan-push cron re-pushes them.
  * Port of regenerate(). DB.
  */
-export async function regenerateWorkoutSteps(sql: QueryFn): Promise<RegenResult> {
+export async function regenerateWorkoutSteps(sql: QueryFn, today: string = todayAthlete()): Promise<RegenResult> {
   const rows = await sql`
     SELECT id, run_title, target_distance_km, week_number
     FROM training_plan_day
-    WHERE day_date >= CURRENT_DATE AND run_type != 'rest'
+    WHERE day_date >= ${today}::date AND run_type != 'rest'
     ORDER BY day_date`;
   let updated = 0, skipped = 0;
   for (const row of rows) {

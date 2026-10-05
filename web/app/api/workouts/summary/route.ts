@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { parseRangeDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 /**
@@ -9,6 +10,8 @@ import { getDb } from "@/lib/db";
  * in app/workouts/page.tsx: weekly volume, summary stats, recent list, top exercises.
  */
 export async function GET(request: Request) {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const { searchParams } = new URL(request.url);
   const range = searchParams.get("range") || "90d";
   const days = parseRangeDays(range, 90); // all 10 web keys + legacy Nd (soma#754)
@@ -24,7 +27,7 @@ export async function GET(request: Request) {
         jsonb_array_elements(raw_json->'exercises') as e,
         jsonb_array_elements(e->'sets') as st
       WHERE endpoint_name = 'workout'
-        AND (raw_json->>'start_time')::timestamp >= CURRENT_DATE - ${days}::int
+        AND (raw_json->>'start_time')::timestamp >= ${today}::date - ${days}::int
         AND st->>'type' = 'normal'
         AND (st->>'weight_kg')::float > 0
         AND (st->>'reps')::int > 0
@@ -41,7 +44,7 @@ export async function GET(request: Request) {
       AVG(jsonb_array_length(raw_json->'exercises')) as avg_exercises
     FROM hevy_raw_data
     WHERE endpoint_name = 'workout'
-      AND (raw_json->>'start_time')::timestamp >= CURRENT_DATE - ${days}::int
+      AND (raw_json->>'start_time')::timestamp >= ${today}::date - ${days}::int
   `) as { total_workouts: number; training_days: number; avg_duration_min: number | null; avg_exercises: number | null }[];
 
   // recent workouts (with exercises to compute per-workout volume + top exercises)
@@ -52,7 +55,7 @@ export async function GET(request: Request) {
       raw_json->'exercises' as exercises
     FROM hevy_raw_data
     WHERE endpoint_name = 'workout'
-      AND (raw_json->>'start_time')::timestamp >= CURRENT_DATE - ${days}::int
+      AND (raw_json->>'start_time')::timestamp >= ${today}::date - ${days}::int
     ORDER BY (raw_json->>'start_time') DESC
     LIMIT 20
   `) as { id: string; title: string; start_time: string; end_time: string; exercise_count: number; exercises: unknown }[];
@@ -88,7 +91,7 @@ export async function GET(request: Request) {
     SELECT e->>'title' as name, COUNT(*) as sessions
     FROM hevy_raw_data, jsonb_array_elements(raw_json->'exercises') as e
     WHERE endpoint_name = 'workout'
-      AND (raw_json->>'start_time')::timestamp >= CURRENT_DATE - ${days}::int
+      AND (raw_json->>'start_time')::timestamp >= ${today}::date - ${days}::int
       AND e->>'title' IS NOT NULL
     GROUP BY 1 ORDER BY 2 DESC LIMIT 8
   `) as { name: string; sessions: number | string }[];

@@ -1,29 +1,16 @@
 import { View } from "react-native";
 import { Text } from "soma-style";
+import { mealProteinLevel, type MealProteinLevel } from "macro-engine-core";
 
 /* ── Per-meal protein quality (MPS signaling) ──────────────────────────────
  * Schoenfeld & Aragon 2018 / Trommelen 2023: the muscle-protein-synthesis
  * floor is ~0.4 g/kg per eating event (≈30 g at 75 kg, scaling with mass).
  * A pill flags a logged meal that falls below that floor; meals at/above it
- * show nothing. Mirrors web/lib/per-meal-protein.tsx. */
-export type PerMealProteinLevel = "red" | "amber" | "yellow" | "green" | "plenty";
-const MPS_G_PER_KG = 0.4;
-const PLENTY_G_PER_KG = 0.55;
-
-function proteinThresholds(weightKg: number | null | undefined) {
-  if (!weightKg || weightKg <= 0) return { red: 15, amber: 25, yellow: 30, plenty: 55 };
-  const mps = Math.max(20, Math.round(weightKg * MPS_G_PER_KG));
-  const plenty = Math.max(40, Math.round(weightKg * PLENTY_G_PER_KG));
-  return { red: Math.max(10, Math.round(mps * 0.5)), amber: Math.max(15, Math.round(mps * 0.83)), yellow: mps, plenty };
-}
+ * show nothing. The rule is macro-engine-core's meal-protein, shared with the web. */
+export type PerMealProteinLevel = MealProteinLevel;
 
 export function perMealProteinLevel(g: number, weightKg?: number | null): PerMealProteinLevel {
-  const t = proteinThresholds(weightKg);
-  if (g < t.red) return "red";
-  if (g < t.amber) return "amber";
-  if (g < t.yellow) return "yellow";
-  if (g <= t.plenty) return "green";
-  return "plenty";
+  return mealProteinLevel(g, weightKg);
 }
 
 const PILL: Record<"red" | "amber" | "yellow", { fg: string; bg: string; label: string }> = {

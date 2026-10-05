@@ -11,17 +11,15 @@
  * not bit-identical to the Python (scipy) fit — this is a model fit, not a
  * deterministic transform.
  */
-import { banisterPredict, fitBanister, DEFAULT_PARAMS, type BanisterParams, type DailyLoad, type Anchor } from "banister";
+import { banisterPredict, fitBanister, DEFAULT_PARAMS, dailyLoadSeries, detectAnchorRuns, type BanisterParams, type DailyLoad, type Anchor, type RunInput, type AnchorRun } from "banister";
 import type { QueryFn } from "./db";
-import { vdotFromRace } from "./vdot";
-import { crossModalScale } from "./pmc-stream";
 import { dateInAthleteTz } from "./athlete-tz";
 
 export type { BanisterParams };
-export { banisterPredict, DEFAULT_PARAMS };
+export { banisterPredict, DEFAULT_PARAMS, detectAnchorRuns, type RunInput, type AnchorRun };
 
 /** Today (YYYY-MM-DD) in the athlete's timezone (soma#872). */
-function todayNyc(now: Date = new Date()): string {
+function athleteToday(now: Date = new Date()): string {
   return dateInAthleteTz(now);
 }
 
@@ -29,26 +27,7 @@ function daysBetween(a: string, b: string): number {
   return Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86_400_000);
 }
 
-export interface RunInput { date: string; avg_hr: number; distance_m: number; duration_s: number; activity_id?: number; }
-export interface AnchorRun extends RunInput { vdot: number; }
-
-/**
- * Detect maximal-effort anchor runs (avg_hr ≥ pct·HRmax AND distance ≥ min),
- * compute VDOT for each, sort by date. Port of detect_anchor_runs.
- */
-export function detectAnchorRuns(
-  runs: RunInput[], estimatedHrmax: number, hrThresholdPct = 0.9, minDistanceM = 2000,
-): AnchorRun[] {
-  const hrCutoff = estimatedHrmax * hrThresholdPct;
-  const anchors: AnchorRun[] = [];
-  for (const run of runs) {
-    const avgHr = run.avg_hr || 0, distanceM = run.distance_m || 0, durationS = run.duration_s || 0;
-    if (avgHr < hrCutoff || distanceM < minDistanceM || durationS <= 0) continue;
-    anchors.push({ ...run, vdot: vdotFromRace(distanceM, durationS) });
-  }
-  anchors.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  return anchors;
-}
+// Anchor detection (a hard run of at least 2 km, with its VDOT) is banister's detectAnchorRuns.
 
 /** Load running-activity anchors from garmin_activity_raw. Port of load_anchors_from_db. */
 export async function loadAnchorsFromDb(sql: QueryFn, estimatedHrmax = 190): Promise<AnchorRun[]> {
@@ -82,17 +61,11 @@ export async function loadDailyLoadsFromDb(sql: QueryFn): Promise<[DailyLoad[], 
     FROM training_load ORDER BY activity_date`;
   if (!rows.length) return [[], ""];
 
-  const loadByDate = new Map<string, number>();
-  for (const row of rows) {
-    const scale = crossModalScale(row.source);
-    loadByDate.set(row.activity_date, (loadByDate.get(row.activity_date) ?? 0) + Number(row.load_value) * scale);
-  }
-  const keys = [...loadByDate.keys()].sort();
-  const startDate = keys[0], endDate = keys[keys.length - 1];
-  const dailyLoads: DailyLoad[] = [];
-  for (let cur = startDate; cur <= endDate; cur = new Date(Date.parse(cur + "T00:00:00Z") + 86_400_000).toISOString().slice(0, 10)) {
-    dailyLoads.push([daysBetween(startDate, cur), loadByDate.get(cur) ?? 0]);
-  }
+  // Cross-modal scaling, per-day sums and rest days as 0 are banister's dailyLoadSeries, the same
+  // series the PMC reads.
+  const series = dailyLoadSeries(rows.map((r) => ({ date: r.activity_date, source: r.source, load: Number(r.load_value) })));
+  const startDate = series[0][0];
+  const dailyLoads: DailyLoad[] = series.map(([d, load]) => [daysBetween(startDate, d), load]);
   return [dailyLoads, startDate];
 }
 
@@ -108,7 +81,7 @@ export async function fitFromDb(sql: QueryFn, estimatedHrmax = 190): Promise<Ban
   let anchors = await loadAnchorsFromDb(sql, estimatedHrmax);
   const [dailyLoads, minDate] = await loadDailyLoadsFromDb(sql);
 
-  const cutoff = new Date(Date.parse(todayNyc() + "T00:00:00Z") - 730 * 86_400_000).toISOString().slice(0, 10);
+  const cutoff = new Date(Date.parse(athleteToday() + "T00:00:00Z") - 730 * 86_400_000).toISOString().slice(0, 10);
   const recent = anchors.filter((a) => a.date.slice(0, 10) >= cutoff);
   if (recent.length >= 2) anchors = recent;
 
@@ -118,7 +91,7 @@ export async function fitFromDb(sql: QueryFn, estimatedHrmax = 190): Promise<Ban
   }
 
   const params = fitBanister(dailyLoads, anchorInputs);
-  const todayIdx = minDate ? daysBetween(minDate, todayNyc()) : 0;
+  const todayIdx = minDate ? daysBetween(minDate, athleteToday()) : 0;
   const currentVdot = dailyLoads.length ? banisterPredict(params, dailyLoads, todayIdx) : params.p0;
 
   await sql`

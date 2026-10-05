@@ -14,7 +14,13 @@ import { Text, Card, Badge, type BadgeTone } from "soma-style";
 import { useChat as useChatSheet } from "./ChatContext";
 import { MarkdownText } from "./MarkdownText";
 
-import { API_BASE } from "../lib/api";
+import { API_BASE, AUTH_HEADERS } from "../lib/api";
+import { chatBaseFrom, chatTransportFor } from "../lib/chat-base";
+
+// The chat runs on the Mac over the tailnet; Vercel answers 410 for it (soma#1136). Read at call
+// time, because the sign-in screen can move API_BASE.
+const CHAT_BASE_ENV = process.env.EXPO_PUBLIC_SOMA_CHAT_BASE;
+const chatUrl = (path: string) => `${chatBaseFrom(CHAT_BASE_ENV, API_BASE)}${path}`;
 
 /* First-pass React Native port of the web chat-widget. Talks to the same
    /api/chat SSE endpoint (a local `claude -p` subprocess on the Mac, or the
@@ -69,15 +75,15 @@ function summarizeToolInput(name: string, input: Record<string, unknown> | null)
 function useChatStream() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
-  const [transport, setTransport] = useState<"unknown" | "local" | "proxy" | "offline">("unknown");
+  const [transport, setTransport] = useState<"unknown" | "local" | "tailnet" | "proxy" | "offline">("unknown");
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    expoFetch(`${API_BASE}/api/chat/session`)
+    expoFetch(chatUrl("/api/chat/session"), { headers: { ...AUTH_HEADERS } })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then(() => setTransport(API_BASE.includes("localhost") ? "local" : "proxy"))
+      .then(() => setTransport(chatTransportFor(CHAT_BASE_ENV, API_BASE)))
       .catch(() => setTransport("offline"));
-    expoFetch(`${API_BASE}/api/chat/history`)
+    expoFetch(chatUrl("/api/chat/history"), { headers: { ...AUTH_HEADERS } })
       .then((r) => r.json())
       .then((d: { messages?: Message[] }) => {
         if (Array.isArray(d.messages) && d.messages.length) setMessages(d.messages);
@@ -187,9 +193,9 @@ function useChatStream() {
     const ac = new AbortController();
     abortRef.current = ac;
     try {
-      const resp = await expoFetch(`${API_BASE}/api/chat`, {
+      const resp = await expoFetch(chatUrl("/api/chat"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
         signal: ac.signal,
       });
@@ -251,9 +257,9 @@ function useChatStream() {
   const cancel = useCallback(() => abortRef.current?.abort(), []);
   const reset = useCallback(() => {
     setMessages([]);
-    expoFetch(`${API_BASE}/api/chat/session`, {
+    expoFetch(chatUrl("/api/chat/session"), {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId: "" }),
     }).catch(() => {});
   }, []);
@@ -267,6 +273,7 @@ function useChatStream() {
 
 const TRANSPORT_TONE: Record<string, BadgeTone> = {
   local: "success",
+  tailnet: "success",
   proxy: "teal",
   offline: "danger",
   unknown: "neutral",

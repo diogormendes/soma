@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { latestWeighIn } from "@/lib/weigh-ins";
 import { getDb } from "@/lib/db";
-import { todayAthlete } from "@/lib/athlete-tz";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 /**
@@ -32,13 +33,11 @@ export async function GET() {
         ORDER BY date DESC
         LIMIT 1
       `,
-      sql`
-        SELECT weight_grams / 1000.0 AS weight_kg, body_fat_pct
-        FROM weight_log
-        WHERE weight_grams IS NOT NULL
-        ORDER BY date DESC
-        LIMIT 1
-      `,
+      // ⛔ Was `ORDER BY date DESC LIMIT 1` with no date bound. `latestWeighIn` judges the newest
+      // reading against its neighbours and carries the body fat with it.
+      latestWeighIn(sql, new Date().toISOString().slice(0, 10), "onboard").then((w) =>
+        w ? [{ weight_kg: w.weightKg, body_fat_pct: w.bodyFatPct }] : [],
+      ),
       sql`
         SELECT vo2max
         FROM fitness_trajectory
@@ -256,7 +255,7 @@ export async function POST(req: NextRequest) {
   `;
 
   // Generate today's plan immediately
-  const today = todayAthlete();
+  const today = await todayForRequest();
   try {
     const baseUrl = process.env.SOMA_WEB_URL || process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`

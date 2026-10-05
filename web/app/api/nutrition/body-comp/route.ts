@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import { KCAL_PER_KG_FAT } from "macro-engine-core";
+import { computeWeightEma } from "banister";
+import { keepPlausible } from "@/lib/weigh-ins";
 import { getDb } from "@/lib/db";
 import { deficitWindow, windowLabel } from "@/lib/deficit-window";
-import { todayAthlete } from "@/lib/athlete-tz";
 import { isObservedDay } from "@/lib/observed-day";
 import { reconcile, type DayIn, type DaySource } from "@/lib/energy-reconcile";
 import { isMissingRelation, warnMissingRelationOnce } from "@/lib/missing-relation";
+import { todayForRequest } from "@/lib/request-tz";
 
 
 /** What the trajectory looks like before any nutrition table exists. */
@@ -32,10 +35,17 @@ export async function GET() {
 async function trajectory() {
   const sql = getDb();
 
-  const [profileRows, weightRows] = await Promise.all([
+  const [profileRows, rawWeightRows] = await Promise.all([
     sql`SELECT weight_kg, estimated_bf_pct, target_bf_pct, target_date, daily_deficit, estimated_ffm_kg FROM nutrition_profile WHERE id = 1`,
-    sql`SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg FROM weight_log WHERE weight_grams IS NOT NULL ORDER BY date`,
+    sql`SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg FROM weight_log WHERE coalesce(upper(source_type), '') <> 'USER_SETTING' AND weight_grams IS NOT NULL ORDER BY date`,
   ]);
+
+  // A typo drags the EMA for days and shifts every figure computed off it. Filtered here and mapped
+  // back to the row shape, so the four readers below are untouched.
+  const weightRows = keepPlausible(
+    rawWeightRows.map((w: Record<string, unknown>) => ({ date: String(w.date), weightKg: Number(w.weight_kg) })),
+    "body-comp-route",
+  ).map((w) => ({ date: w.date, weight_kg: w.weightKg }));
 
   const profile = profileRows[0];
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 404 });
@@ -51,13 +61,13 @@ async function trajectory() {
 
   // Process weight data with 5-day EMA smoothing + pull-forward to last actual
   const weights: { date: string; weight: number; smoothed: number; bf: number; smoothedBf: number }[] = [];
-  let ema = 0;
-  const alpha = 2 / (5 + 1); // 5-day EMA (more responsive than 7-day)
+  // 5-day EMA (more responsive than 7-day), from banister at full precision: the points are
+  // rounded once, below, for display.
+  const emaPoints = computeWeightEma(weightRows.map((row) => [String(row.date), Number(row.weight_kg)]), 5, null);
 
-  for (const row of weightRows) {
+  for (const [i, row] of weightRows.entries()) {
     const w = Number(row.weight_kg);
-    if (ema === 0) ema = w;
-    else ema = alpha * w + (1 - alpha) * ema;
+    const ema = emaPoints[i].weight_ema;
 
     const fatKg = Math.max(0, w - ffm);
     const bf = (fatKg / w) * 100;
@@ -98,8 +108,8 @@ async function trajectory() {
   // Target calculations
   const targetWeight = Math.round((ffm / (1 - targetBf / 100)) * 10) / 10;
   const fatToLose = Math.max(0, currentFat - (targetWeight * targetBf / 100));
-  const totalDeficitNeeded = fatToLose * 7700;
-  const today = todayAthlete();
+  const totalDeficitNeeded = fatToLose * KCAL_PER_KG_FAT;
+  const today = await todayForRequest();
   // Use T12:00 to avoid timezone-related off-by-one when parsing date strings
   const daysRemaining = Math.max(1, Math.round((new Date(targetDate + "T12:00").getTime() - new Date(today + "T12:00").getTime()) / 86400000));
   const weeksRemaining = Math.max(1, daysRemaining / 7);
@@ -116,7 +126,7 @@ async function trajectory() {
     || weights[weights.length - 1]?.weight || currentWeight;
   if (dietStartWeight > targetWeight) {
     const startDate = new Date(dietStartDate + "T12:00");
-    const dailyLossKg = deficit / 7700;
+    const dailyLossKg = deficit / KCAL_PER_KG_FAT;
     const daysToTarget = dailyLossKg > 0 ? Math.ceil((dietStartWeight - targetWeight) / dailyLossKg) : 365;
     const goalEndDate = new Date(startDate);
     goalEndDate.setDate(goalEndDate.getDate() + daysToTarget);
@@ -236,7 +246,7 @@ async function trajectory() {
     ORDER BY n.date
   `;
 
-  const todayStr = todayAthlete();
+  const todayStr = await todayForRequest();
   const todayMealRows = await sql`
     SELECT COALESCE(SUM(calories), 0) AS total FROM meal_log WHERE date = ${todayStr}
   `;
@@ -350,7 +360,7 @@ async function trajectory() {
     .filter(d => d.inWindow && d.cumulative != null)
     .map(d => ({
       date: d.date,
-      weight: Math.round((startWeightForPrediction + (d.cumulative as number) / 7700) * 10) / 10, // cumulative is negative for deficit
+      weight: Math.round((startWeightForPrediction + (d.cumulative as number) / KCAL_PER_KG_FAT) * 10) / 10, // cumulative is negative for deficit
       closed: d.closed,
     }));
 

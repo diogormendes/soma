@@ -42,8 +42,9 @@ export async function GET() {
       ? JSON.parse(rows[0].credentials)
       : rows[0].credentials;
 
-    // New format (garmin-auth >= 0.3.0): wrapped under ``garmin_tokens``.
-    const tokens = credentials?.garmin_tokens ?? null;
+    // Wrapped under ``garmin_tokens`` (garmin-auth >= 0.3.0), or the flat payload the Python login
+    // wrote, which garmin-auth's DBTokenStore also reads since npm 0.7.2.
+    const tokens = credentials?.garmin_tokens ?? (credentials?.di_token ? credentials : null);
     if (!tokens?.di_token) {
       // Legacy rows (oauth1/oauth2) from garmin-auth < 0.3.0 are no longer
       // refreshable; surface them as expired so the UI prompts re-auth.

@@ -13,15 +13,15 @@ import { writeFileSync, renameSync, readFileSync, unlinkSync } from "fs";
 import { todayAthlete } from "./athlete-tz";
 import { ensureDjPaths } from "./dj-paths";
 import { GarminAuth, DBTokenStore } from "garmin-auth";
-import { healGarminTokenRow } from "./garmin-token-heal";
 import { getDb } from "./db";
 import { spotifyFetch } from "./spotify-client";
 import { hrrToBpm, latestHrFromGarminData } from "./bpm-formula";
-import { SessionState, interleavedShuffle, type Song } from "./dj-shuffle";
+import { SessionState, type Song } from "./dj-shuffle";
+// The queue decision, the BPM targets a search covers and the pick are run-dj's cycle module, the
+// same "brain" the package documents; this file keeps the polling, Spotify, Garmin and the database.
+import { decideQueue, bpmSearchTargets, selectNextTrack } from "run-dj/cycle";
 
 const POLL_INTERVAL = 30_000;
-const QUEUE_AHEAD_MS = 45_000;
-const HR_SHIFT_THRESHOLD = 8;
 const HR_WINDOW_SECONDS = 86_400; // Garmin syncs infrequently
 const SOURCE_REFRESH_INTERVAL = 20;
 const HR_HISTORY_MAX_SECONDS = 7_200;
@@ -104,11 +104,8 @@ export async function queryTracks(
   // Neon's client also exposes .query(text, params) for parameterized dynamic
   // SQL (the QueryFn type only declares the tagged-template form).
   const sql = getDb() as unknown as { query(text: string, params: unknown[]): Promise<Song[]> };
-  const bpmTargets = new Set<number>([targetBpm]);
-  for (const mult of [0.5, 2.0]) {
-    const alt = Math.round(targetBpm * mult);
-    if (alt >= 60 && alt <= 200) bpmTargets.add(alt);
-  }
+  // The target plus half and double tempo, clamped to 60..200 and rounded as the Python DJ rounded.
+  const bpmTargets = bpmSearchTargets(targetBpm);
 
   const conds: string[] = [];
   const params: any[] = [];
@@ -117,7 +114,7 @@ export async function queryTracks(
   if (allowedIds !== null) {
     conds.push(`track_id = ANY(${p([...allowedIds])}::text[])`);
   } else {
-    const sorted = [...bpmTargets].sort((a, b) => a - b);
+    const sorted = bpmTargets;
     conds.push("(" + sorted.map((t) => `tempo BETWEEN ${p(t - bpmWindow)} AND ${p(t + bpmWindow)}`).join(" OR ") + ")");
   }
   if (genres.length) conds.push(`genres && ${p(genres)}`);
@@ -154,7 +151,6 @@ export async function runDaemon(opts: DaemonOpts): Promise<void> {
   process.on("SIGTERM", onStop);
   process.on("SIGINT", onStop);
 
-  await healGarminTokenRow(getDb()); // flat DI row → nested, before DBTokenStore reads it (#723)
   const auth = new GarminAuth({ store: new DBTokenStore(process.env.DATABASE_URL!) });
   const garmin = await auth.client();
   const profile = (await garmin.connectapi(PROFILE_URL)) as { displayName?: string };
@@ -186,7 +182,8 @@ export async function runDaemon(opts: DaemonOpts): Promise<void> {
 
   writeStatus(statusFile, { state: "starting", hr: null, target_bpm: null });
 
-  const todayNyc = () => todayAthlete();
+  // The daemon has no device to ask, so the fallback zone is the right answer here.
+  const todayHere = () => todayAthlete();
 
   while (!stop) {
     try {
@@ -200,7 +197,7 @@ export async function runDaemon(opts: DaemonOpts): Promise<void> {
       }
 
       // 1. Poll Garmin HR.
-      const today = todayNyc();
+      const today = todayHere();
       const hrData = (await garmin.connectapi(`/wellness-service/wellness/dailyHeartRate/${display}?date=${today}`)) as any;
       const hrResult = latestHrFromGarminData(hrData, HR_WINDOW_SECONDS);
       if (hrResult) [lastHr, lastHrTs] = hrResult;
@@ -312,29 +309,20 @@ export async function runDaemon(opts: DaemonOpts): Promise<void> {
       }
 
       // 3. Decide whether to queue.
-      let shouldQueue = false;
-      let replaceReason: string | null = null;
-      let noQueueReason: string | null = null;
+      const decision = decideQueue({ targetBpm, firstQueueDone, queuedTrackId, trackJustChanged, msRemaining, lastTargetBpm });
+      const shouldQueue = decision.shouldQueue;
+      const replaceReason = decision.reason;
+      let noQueueReason = decision.noQueueReason;
       const isPlaying = Boolean(nowPlaying && nowPlaying.is_playing && nowPlaying.item);
-      if (targetBpm === null) noQueueReason = "no_hr";
-      else if (!firstQueueDone) { shouldQueue = true; replaceReason = "initial"; }
-      else if (queuedTrackId !== null) noQueueReason = "already_queued";
-      else if (trackJustChanged) { shouldQueue = true; replaceReason = "track_started"; }
-      else if (msRemaining !== null) {
-        if (msRemaining < QUEUE_AHEAD_MS) { shouldQueue = true; replaceReason = "45s_remaining"; }
-        else if (lastTargetBpm !== null && Math.abs(targetBpm - lastTargetBpm) >= HR_SHIFT_THRESHOLD) { shouldQueue = true; replaceReason = `hr_shift_${lastTargetBpm}_to_${targetBpm}`; }
-      }
-
       if (shouldQueue && targetBpm !== null) {
         const excludeIds = [...session.played, ...session.skipped];
         if (currentTrackId) excludeIds.push(currentTrackId);
         let candidates = await queryTracks(targetBpm, genres, excludeIds, allowedIds, 5);
         if (!candidates.length) candidates = await queryTracks(targetBpm, genres, excludeIds, allowedIds, 15);
         if (!candidates.length && observationFallback) candidates = await queryTracks(targetBpm, genres, excludeIds, null, 15);
-        const shuffled = interleavedShuffle(session.filterCandidates(candidates), session);
+        const next = selectNextTrack(candidates, session, currentTrackId);
 
-        if (shuffled.length) {
-          const next = shuffled[0];
+        if (next) {
           const nextId = next.track_id;
           if (!firstQueueDone && !isPlaying) await sPut("/me/player/play", { uris: [`spotify:track:${nextId}`] });
           else await sPost(`/me/player/queue?uri=spotify:track:${nextId}`);

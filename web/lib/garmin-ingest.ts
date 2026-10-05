@@ -9,7 +9,6 @@
  * params inline (the TS client's connectapi(path) takes no separate params arg).
  */
 import { GarminAuth, DBTokenStore, type GarminClient } from "garmin-auth";
-import { healGarminTokenRow } from "./garmin-token-heal";
 import type { QueryFn } from "./db";
 import {
   DAILY_ENDPOINTS, RANGE_ENDPOINTS, DISCOVERY_ENDPOINTS, ACTIVITY_DETAIL_ENDPOINTS,
@@ -32,8 +31,30 @@ const PROFILE_URL = "/userprofile-service/socialProfile";
 const USER_SETTINGS_URL = "/userprofile-service/userprofile/user-settings";
 
 /** Today's date (YYYY-MM-DD) in the athlete's timezone (soma#872). */
-export function todayNyc(now: Date = new Date()): string {
+export function athleteToday(now: Date = new Date()): string {
   return dateInAthleteTz(now);
+}
+
+/**
+ * Days Garmin holds a weigh-in for that soma has no weight row for.
+ *
+ * ⛔ `getStaleDates` re-fetches a day only while its heart rate is incomplete or its health summary looks
+ * partial. A weigh-in typed into Garmin the next evening lands on a day that is already complete by those
+ * measures, so it was never collected. One range call over the look-back window says which days Garmin
+ * holds a weigh-in for, and any of those missing here is fetched again.
+ */
+export function lateWeighInDates(range: unknown, storedDates: Iterable<string>): string[] {
+  const days = (range as { dailyWeightSummaries?: unknown } | null)?.dailyWeightSummaries;
+  if (!Array.isArray(days)) return [];
+  const stored = new Set(storedDates);
+  const late = new Set<string>();
+  for (const d of days as Array<{ summaryDate?: string; allWeightMetrics?: Array<{ calendarDate?: string }> }>) {
+    const samples = Array.isArray(d?.allWeightMetrics) ? d.allWeightMetrics : [];
+    if (!samples.length) continue;
+    const date = d.summaryDate ?? samples[0]?.calendarDate;
+    if (typeof date === "string" && date.length >= 10 && !stored.has(date.slice(0, 10))) late.add(date.slice(0, 10));
+  }
+  return [...late].sort().reverse();
 }
 
 /** Serialize a GarminRequest into a connectapi path with an inline query string. */
@@ -73,7 +94,7 @@ async function upsertActivityRaw(sql: QueryFn, activityId: number, endpoint: str
  * Today is always included. Port of pipeline._get_stale_dates.
  */
 export async function getStaleDates(sql: QueryFn, maxLookback = 14, now: Date = new Date()): Promise<string[]> {
-  const today = todayNyc(now);
+  const today = athleteToday(now);
   const stale = new Set<string>([today]);
   const dayMs = 86_400_000;
   const todayMs = Date.parse(today + "T00:00:00Z");
@@ -85,8 +106,8 @@ export async function getStaleDates(sql: QueryFn, maxLookback = 14, now: Date = 
                 THEN jsonb_array_length(raw_json->'heartRateValues') ELSE 0 END AS pts
     FROM garmin_raw_data
     WHERE endpoint_name = 'heart_rates'
-      AND date >= CURRENT_DATE - ${maxLookback}::int
-      AND date < CURRENT_DATE
+      AND date >= ${today}::date - ${maxLookback}::int
+      AND date < ${today}::date
     ORDER BY date DESC`;
   let foundComplete = false;
   for (const row of hrRows) {
@@ -104,7 +125,7 @@ export async function getStaleDates(sql: QueryFn, maxLookback = 14, now: Date = 
   // Check 2: health summaries with suspiciously low values (partial sync).
   const partial = await sql`
     SELECT date::text AS date FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - 7 AND date < CURRENT_DATE
+    WHERE date >= ${today}::date - 7 AND date < ${today}::date
       AND (bmr_kilocalories < 1500 OR total_steps < 1000)`;
   for (const row of partial) stale.add(row.date);
 
@@ -207,7 +228,6 @@ export interface IngestResult {
 /** Top-level ingestion: auth, resolve stale dates, sync each. */
 export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promise<IngestResult> {
   // A flat DI row (Python fresh-login) would read as "needs MFA" (#723).
-  await healGarminTokenRow(sql);
   const auth = new GarminAuth({ store: new DBTokenStore(databaseUrl) });
   const client = await auth.client();
   const profile = (await client.connectapi(PROFILE_URL)) as { displayName?: string };
@@ -220,12 +240,28 @@ export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promis
   // estimate uses the default profile, which is what it did before.
   try {
     const settings = await client.connectapi(USER_SETTINGS_URL);
-    if (hasData(settings)) await upsertRaw(sql, todayNyc(), "user_settings", settings);
+    if (hasData(settings)) await upsertRaw(sql, athleteToday(), "user_settings", settings);
   } catch (e) {
     console.warn(`  user_settings failed: ${(e as Error).message}`);
   }
 
   const dates = await getStaleDates(sql);
+  // Days whose weigh-in reached Garmin after the day was already complete. Non-fatal: if the range call
+  // fails, the run goes on with the usual days, as it did before this existed.
+  try {
+    const to = athleteToday();
+    const from = new Date(Date.parse(`${to}T00:00:00Z`) - 14 * 86_400_000).toISOString().slice(0, 10);
+    const range = await client.connectapi(`/weight-service/weight/range/${from}/${to}?includeAll=true`);
+    const stored = (await sql`
+      SELECT DISTINCT date::text AS date FROM weight_log WHERE date >= ${from}::date AND date <= ${to}::date
+    `) as unknown as { date: string }[];
+    const late = lateWeighInDates(range, stored.map((r) => r.date));
+    for (const d of late) if (!dates.includes(d)) dates.push(d);
+    dates.sort().reverse();
+    if (late.length) console.log(`  late weigh-ins to collect: ${late.join(", ")}`);
+  } catch (e) {
+    console.warn(`  late weigh-in check failed: ${(e as Error).message}`);
+  }
   let recordsSaved = 0;
   let activitiesFound = 0;
   let daysParsed = 0;
@@ -241,21 +277,21 @@ export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promis
   // uses the raw + parsed data just ingested. Non-fatal on failure.
   let fitnessUpdated = false;
   try {
-    const traj = await updateFitnessTrajectory(sql, todayNyc());
+    const traj = await updateFitnessTrajectory(sql, athleteToday());
     fitnessUpdated = traj !== null;
   } catch (e) { console.warn(`  fitness trajectory failed: ${(e as Error).message}`); }
 
   // Body composition: 7-day weight EMA + weight-adjusted VDOT / race prediction.
   // Runs AFTER the fitness trajectory (needs its vo2max) and overwrites weight_kg
   // with the smoothed value. Non-fatal on failure.
-  try { await updateBodyComp(sql, todayNyc()); }
+  try { await updateBodyComp(sql, athleteToday()); }
   catch (e) { console.warn(`  body comp failed: ${(e as Error).message}`); }
 
   // Daily readiness (traffic light from HRV/sleep/RHR/body-battery z-scores) for
   // today — reads the daily_health_summary just parsed. Non-fatal on failure.
   let readiness: string | null = null;
   try {
-    const rd = await computeDailyReadiness(sql, todayNyc());
+    const rd = await computeDailyReadiness(sql, athleteToday());
     readiness = rd.traffic_light;
   } catch (e) { console.warn(`  readiness failed: ${(e as Error).message}`); }
 

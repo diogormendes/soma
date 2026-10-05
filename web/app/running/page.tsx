@@ -32,6 +32,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { cutoffIso } from "@/lib/date-range";
+import { todayForRequest } from "@/lib/request-tz";
 
 export const revalidate = 300;
 
@@ -247,6 +248,8 @@ async function getCadenceStride(cutoff: string) {
 }
 
 async function getFitnessScores() {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const sql = getDb();
   const endurance = await sql`
     SELECT
@@ -255,7 +258,7 @@ async function getFitnessScores() {
       (raw_json->>'classification')::int as classification
     FROM garmin_raw_data
     WHERE endpoint_name = 'endurance_score'
-      AND date >= CURRENT_DATE - INTERVAL '12 months'
+      AND date >= ${today}::date - INTERVAL '12 months'
     ORDER BY date ASC
   `;
   const hill = await sql`
@@ -266,7 +269,7 @@ async function getFitnessScores() {
       (raw_json->>'enduranceScore')::int as endurance
     FROM garmin_raw_data
     WHERE endpoint_name = 'hill_score'
-      AND date >= CURRENT_DATE - INTERVAL '12 months'
+      AND date >= ${today}::date - INTERVAL '12 months'
     ORDER BY date ASC
   `;
 

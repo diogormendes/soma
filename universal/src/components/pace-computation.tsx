@@ -3,7 +3,7 @@ import { View, Pressable } from "react-native";
 import Svg, { Polyline, Circle } from "react-native-svg";
 import { Text, Card, Modal } from "soma-style";
 import type { GraphNode, GraphEdge } from "../lib/api";
-import { paceStr } from "banister";
+import { paceStr, DEFAULT_CALIBRATION_WEIGHT_KG } from "banister";
 
 const READINESS_INPUTS = [
   { id: "hrv_z", label: "HRV" },
@@ -227,7 +227,7 @@ export function PaceComputation({ nodes, edges = [], sliderFactor = 1 }: { nodes
         const compositeZ = zs.length ? zs.reduce((a, b) => a + b, 0) / zs.length : null;
         const rf = val("readiness_factor"), ff = val("fatigue_factor"), wf = val("weight_factor");
         const tsb = val("tsb"), wema = val("weight_ema");
-        const CW = 80.5;
+        const CW = DEFAULT_CALIBRATION_WEIGHT_KG;
         const curves: { key: string; label: string; color: string; cx: number; cy: number; points: { x: number; y: number }[] }[] = [];
         if (compositeZ != null && rf != null)
           curves.push({ key: "r", label: "Readiness · composite z", color: "#6ad4a0", cx: compositeZ, cy: rf, points: [{ x: -2, y: 1.05 }, { x: -1, y: 1.05 }, { x: 0, y: 1.0 }, { x: 1, y: 0.97 }] });

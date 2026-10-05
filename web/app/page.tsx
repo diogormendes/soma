@@ -42,6 +42,7 @@ import {
   Heart,
 } from "lucide-react";
 import { cutoffIso } from "@/lib/date-range";
+import { requestTz, todayForRequest } from "@/lib/request-tz";
 
 export const revalidate = 300;
 
@@ -153,6 +154,8 @@ async function getTodayHealth() {
 }
 
 async function getWeeklyAverages() {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -163,12 +166,14 @@ async function getWeeklyAverages() {
       ROUND(AVG(active_kilocalories)) as avg_active_cal,
       COUNT(*) as days_count
     FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - 7
+    WHERE date >= ${today}::date - 7
   `;
   return rows[0] || null;
 }
 
 async function getPreviousWeekAverages() {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -179,7 +184,7 @@ async function getPreviousWeekAverages() {
       ROUND(AVG(active_kilocalories)) as avg_active_cal,
       COUNT(*) as days_count
     FROM daily_health_summary
-    WHERE date >= CURRENT_DATE - 14 AND date < CURRENT_DATE - 7
+    WHERE date >= ${today}::date - 14 AND date < ${today}::date - 7
   `;
   return rows[0] || null;
 }
@@ -217,13 +222,16 @@ async function getWorkoutStats(cutoff: string) {
 
 async function getGymFrequency(cutoff: string) {
   const sql = getDb();
+  // Hevy's start_time is UTC. Cast to a plain timestamp it keeps the UTC wall clock, so a session just
+  // after his midnight on the 1st landed in the previous month. Same conversion as workouts/page.tsx.
+  const tz = await requestTz();
   const rows = await sql`
     SELECT
-      TO_CHAR((raw_json->>'start_time')::timestamp, 'YYYY-MM') as month,
+      TO_CHAR((raw_json->>'start_time')::timestamptz AT TIME ZONE ${tz}, 'YYYY-MM') as month,
       COUNT(*) as workouts
     FROM hevy_raw_data
     WHERE endpoint_name = 'workout'
-      AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
+      AND (raw_json->>'start_time')::timestamptz AT TIME ZONE ${tz} >= ${cutoff}::date
     GROUP BY month
     ORDER BY month ASC
   `;
@@ -376,6 +384,8 @@ async function getRecentActivities(cutoff: string) {
 }
 
 async function getWeeklyTrainingSummary() {
+  // His calendar date on the device making this request, never the database's New York clock.
+  const today = await todayForRequest();
   const sql = getDb();
   // This week (Mon-Sun) and last week
   // Use all Garmin activities (they have calorie/distance data)
@@ -384,7 +394,7 @@ async function getWeeklyTrainingSummary() {
     WITH week_data AS (
       SELECT
         CASE
-          WHEN (raw_json->>'startTimeLocal')::timestamp >= DATE_TRUNC('week', CURRENT_DATE)
+          WHEN (raw_json->>'startTimeLocal')::timestamp >= DATE_TRUNC('week', ${today}::date)
           THEN 'this_week'
           ELSE 'last_week'
         END as period,
@@ -394,7 +404,7 @@ async function getWeeklyTrainingSummary() {
         (raw_json->>'calories')::float as cal
       FROM garmin_activity_raw
       WHERE endpoint_name = 'summary'
-        AND (raw_json->>'startTimeLocal')::timestamp >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '7 days'
+        AND (raw_json->>'startTimeLocal')::timestamp >= DATE_TRUNC('week', ${today}::date) - INTERVAL '7 days'
     )
     SELECT
       period,

@@ -1,5 +1,6 @@
 /** Body-comp stream, DB half: weight EMA and the weight-adjusted VDOT into the tables. computeWeightEma lives in banister. */
 import type { QueryFn } from "./db";
+import { keepPlausible } from "./weigh-ins";
 import { DEFAULT_CALIBRATION_WEIGHT_KG, computeWeightEma } from "banister";
 import { adjustVdotForWeight, timeFromVdot, HM_M, type BodyComp } from "banister";
 const r = (x: number, n: number) => Number(x.toFixed(n)); // Python round(x, n) for n>=1
@@ -21,12 +22,16 @@ export async function updateBodyComp(
   const rows = await sql`
     SELECT date::text AS date, weight_grams / 1000.0 AS weight_kg
     FROM weight_log
-    WHERE date BETWEEN ${startDate} AND ${targetDate}
+    WHERE coalesce(upper(source_type), '') <> 'USER_SETTING' AND date BETWEEN ${startDate} AND ${targetDate}
       AND weight_grams IS NOT NULL AND weight_grams > 0
     ORDER BY date`;
   if (!rows.length) return null;
 
-  const weights: Array<[string, number]> = rows.map((row) => [row.date, Number(row.weight_kg)]);
+  // The 7-day EMA is only as good as its inputs, and a typo drags it for a week.
+  const weights: Array<[string, number]> = keepPlausible(
+    rows.map((row) => ({ date: row.date as string, weightKg: Number(row.weight_kg) })),
+    "body-comp",
+  ).map((w) => [w.date, w.weightKg]);
   const emaResults = computeWeightEma(weights, 7);
   if (!emaResults.length) return null;
 

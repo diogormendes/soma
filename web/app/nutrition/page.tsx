@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import { latestWeighIn } from "@/lib/weigh-ins";
 import { getDb } from "@/lib/db";
 import { listIngredients } from "@/lib/ingredient-catalog";
 import { getLivePlan } from "@/lib/live-plan";
 import { NutritionDashboard } from "@/components/nutrition-dashboard";
 import { NutritionOnboarding } from "@/components/nutrition-onboarding";
 import { BodyCompChart } from "@/components/body-comp-chart";
-import { todayAthlete } from "@/lib/athlete-tz";
+import { todayForRequest } from "@/lib/request-tz";
 
 export const metadata: Metadata = { title: "Nutrition" };
 export const revalidate = 60;
@@ -35,12 +36,10 @@ async function getBootstrap() {
       WHERE bmr_kilocalories IS NOT NULL
       ORDER BY date DESC LIMIT 1
     `,
-    sql`
-      SELECT weight_grams / 1000.0 AS weight_kg
-      FROM weight_log
-      WHERE weight_grams IS NOT NULL
-      ORDER BY date DESC LIMIT 1
-    `,
+    // ⛔ Was `ORDER BY date DESC LIMIT 1`, so a typo would have been the weight on the page.
+    latestWeighIn(sql, new Date().toISOString().slice(0, 10), "nutrition-page").then((w) =>
+      w ? [{ weight_kg: w.weightKg }] : [],
+    ),
     sql`
       SELECT vo2max
       FROM fitness_trajectory
@@ -228,7 +227,7 @@ async function getSleepDetail(date: string) {
 
 export default async function NutritionPage({ searchParams }: { searchParams: Promise<{ date?: string; view?: string }> }) {
   const params = await searchParams;
-  const today = params.date || todayAthlete();
+  const today = params.date || (await todayForRequest());
   const view = params.view || "day";
 
   // Check if onboarding is needed (no nutrition_profile)

@@ -1,95 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { ETHANOL_DENSITY, fatOxidationPauseHours } from "macro-engine-core";
+import { computeDrinkEntry, DRINK_DATABASE } from "macro-engine-core";
 
 // nodejs (not edge): imports the CJS macro-engine-core package for the alcohol
 // helpers, matching the other nutrition routes.
 export const runtime = "nodejs";
 
-// ---------------------------------------------------------------------------
-// Drink database — mirrors Python seed_data.DRINK_DATABASE (9 types)
-// ---------------------------------------------------------------------------
-
-const DRINK_DB: Record<
-  string,
-  {
-    name: string;
-    calories_per_100ml: number;
-    carbs_per_100ml: number;
-    alcohol_pct: number;
-    default_ml: number;
-  }
-> = {
-  beer_light: {
-    name: "Light Beer",
-    calories_per_100ml: 29,
-    carbs_per_100ml: 1.3,
-    alcohol_pct: 4.2,
-    default_ml: 355,
-  },
-  beer_regular: {
-    name: "Regular Beer",
-    calories_per_100ml: 43,
-    carbs_per_100ml: 3.6,
-    alcohol_pct: 5.0,
-    default_ml: 355,
-  },
-  beer_ipa: {
-    name: "IPA",
-    calories_per_100ml: 60,
-    carbs_per_100ml: 4.0,
-    alcohol_pct: 6.5,
-    default_ml: 355,
-  },
-  beer_craft: {
-    name: "Craft Beer",
-    calories_per_100ml: 73.2,
-    carbs_per_100ml: 5.0,
-    alcohol_pct: 7.8,
-    default_ml: 355,
-  },
-  wine_red: {
-    name: "Red Wine",
-    calories_per_100ml: 85,
-    carbs_per_100ml: 2.6,
-    alcohol_pct: 13.5,
-    default_ml: 150,
-  },
-  wine_white: {
-    name: "White Wine",
-    calories_per_100ml: 82,
-    carbs_per_100ml: 2.6,
-    alcohol_pct: 12.5,
-    default_ml: 150,
-  },
-  spirit: {
-    name: "Spirit (neat/rocks)",
-    calories_per_100ml: 220.5,
-    carbs_per_100ml: 0,
-    alcohol_pct: 40.0,
-    default_ml: 44,
-  },
-  margarita: {
-    name: "Margarita",
-    calories_per_100ml: 110,
-    carbs_per_100ml: 11.0,
-    alcohol_pct: 13.0,
-    default_ml: 240,
-  },
-  old_fashioned: {
-    name: "Old Fashioned",
-    calories_per_100ml: 140,
-    carbs_per_100ml: 5.0,
-    alcohol_pct: 20.0,
-    default_ml: 120,
-  },
-};
-
-// ETHANOL_DENSITY (0.789 g/ml) and the fat-oxidation-pause curve now come from
-// macro-engine-core so soma and the package can't drift apart.
+// The drink table and the maths per drink (ethanol density, the fat-oxidation pause) come from
+// macro-engine-core (drink-db, alcohol), so soma and the package cannot drift apart.
 
 export async function GET() {
-  return NextResponse.json({ drinks: DRINK_DB });
+  return NextResponse.json({ drinks: DRINK_DATABASE });
 }
 
 export async function POST(req: NextRequest) {
@@ -107,7 +28,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const drink = DRINK_DB[drink_type];
+  const drink = DRINK_DATABASE[drink_type];
   if (!drink) {
     return NextResponse.json(
       { error: `Unknown drink_type: ${drink_type}` },
@@ -116,11 +37,13 @@ export async function POST(req: NextRequest) {
   }
 
   const totalMl = drink.default_ml * quantity;
-  const calories = Math.round((drink.calories_per_100ml * totalMl) / 100);
-  const carbs = Math.round(((drink.carbs_per_100ml * totalMl) / 100) * 10) / 10;
-  const alcoholGrams =
-    Math.round(totalMl * (drink.alcohol_pct / 100) * ETHANOL_DENSITY * 10) / 10;
-  const pauseHours = Math.round(fatOxidationPauseHours(alcoholGrams) * 10) / 10;
+  const entry = computeDrinkEntry(drink_type, quantity)!;
+  // Whole calories, as the log has always stored them. Carbs, alcohol and the pause keep the
+  // package's one decimal.
+  const calories = Math.round(entry.calories);
+  const carbs = entry.carbs;
+  const alcoholGrams = entry.alcohol_grams;
+  const pauseHours = entry.fat_oxidation_pause_hours;
 
   // Ensure nutrition_day row exists for this date
   await sql`

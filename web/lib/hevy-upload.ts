@@ -16,7 +16,7 @@
  * workouts upload automatically; the three dedup layers above make that safe. It is
  * also exposed as a manual, dry-run-default route (api/cron/hevy-upload) for inspection.
  */
-import { generateFit, uploadFit, renameActivity } from "hevy2garmin";
+import { generateFit, uploadFit, renameActivity, GarminUploadRejected } from "hevy2garmin";
 import type { GarminClient } from "garmin-auth";
 import type { QueryFn } from "./db";
 import { populateGarminIds } from "./hevy-match";
@@ -85,7 +85,7 @@ export async function getWorkoutsToUpload(sql: QueryFn): Promise<UploadCandidate
     WHERE we.status = 'enriched'
       AND we.hevy_id NOT IN (
         SELECT source_id FROM activity_sync_log
-        WHERE source_platform = 'hevy' AND destination = 'garmin' AND status IN ('sent', 'external')
+        WHERE source_platform = 'hevy' AND destination = 'garmin' AND status IN ('sent', 'external', 'rejected')
       )
     ORDER BY we.workout_date DESC`;
   return rows.map((r) => ({
@@ -156,7 +156,23 @@ export function trainingLoadForUpload(
   return scaled > 0 ? scaled : undefined;
 }
 
-export interface UploadOutcome { hevyId: string; status: "uploaded" | "error"; activityId?: number | null; error?: string; }
+export interface UploadOutcome { hevyId: string; status: "uploaded" | "rejected" | "error"; activityId?: number | null; error?: string; }
+
+/**
+ * How many runs a workout Garmin has refused is offered again before soma gives up on it.
+ *
+ * hevy2garmin 0.9 throws GarminUploadRejected when Garmin answers 200 with failures and no
+ * activity. Before 0.9 that answer came back as a success with no activity id and was logged
+ * as `sent`, so a refused workout looked uploaded. A refusal can be passing (Garmin's import
+ * queue) or permanent (a FIT it will never accept), so it is retried on the next runs and then
+ * recorded as `rejected`, which takes it out of the upload queue and shows on /connections.
+ */
+export const MAX_REJECTED_TRIES = 3;
+
+/** The ledger status for a refusal, given how many earlier refusals are already logged. */
+export function rejectionLogStatus(earlierRefusals: number): "retry" | "rejected" {
+  return earlierRefusals + 1 >= MAX_REJECTED_TRIES ? "rejected" : "retry";
+}
 
 /** Generate a FIT for one workout and upload it to Garmin, then rename. Side-effectful. */
 export async function processWorkout(
@@ -196,7 +212,8 @@ export async function processWorkout(
     }
     return { hevyId: c.hevyId, status: "uploaded", activityId: activityId ?? null };
   } catch (e) {
-    return { hevyId: c.hevyId, status: "error", error: (e as Error).message };
+    const status = e instanceof GarminUploadRejected ? "rejected" : "error";
+    return { hevyId: c.hevyId, status, error: (e as Error).message };
   }
 }
 
@@ -225,6 +242,13 @@ export async function uploadEnrichedToGarmin(
     for (const c of candidates) {
       const outcome = await processWorkout(client, c, athlete);
       outcomes.push(outcome);
+      if (outcome.status === "rejected") {
+        const earlier = await sql`
+          SELECT count(*)::int AS n FROM activity_sync_log
+          WHERE source_platform = 'hevy' AND source_id = ${c.hevyId} AND destination = 'garmin' AND status = 'retry'`;
+        const status = rejectionLogStatus(Number(earlier[0]?.n ?? 0));
+        await logActivitySync(sql, { sourceId: c.hevyId, destination: "garmin", status, error: outcome.error ?? null });
+      }
       if (outcome.status === "uploaded") {
         await logActivitySync(sql, { sourceId: c.hevyId, destination: "garmin", destinationId: outcome.activityId ? String(outcome.activityId) : null, status: "sent" });
         // The upload told us the activity id, so record it now.
