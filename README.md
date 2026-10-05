@@ -99,9 +99,13 @@ Shared logic is published as npm packages — [`macro-engine-core`](https://gith
 ### 1 — Database
 
 ```bash
-# Apply the schema migrations (in order)
-for f in web/lib/db/migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
+# Create every table on an empty database
+psql "$DATABASE_URL" -f web/lib/db/schema.sql
 ```
+
+`schema.sql` already includes everything in `web/lib/db/migrations/`, so a new install does not run
+those. They are for databases created before `schema.sql` existed. When you add a migration, add
+the same change to `schema.sql` too.
 
 ### 2 — Web app
 
