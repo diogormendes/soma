@@ -1125,77 +1125,71 @@ export default async function RunningPage({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Race Time Estimates */}
-          {(records.fastest5k || records.fastest10k) && (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6 pb-6 border-b border-border/50">
-              {records.fastest5k && (
-                <div className="text-center">
-                  <div className="text-xs text-muted-foreground mb-1">Est. 5K Time</div>
-                  <div className="text-2xl font-bold text-green-400">
-                    {(() => {
-                      const secs = Number(records.fastest5k.est_5k_seconds);
-                      const t = Math.round(secs);
-                      const m = Math.floor(t / 60);
-                      const s = t % 60;
-                      return `${m}:${s.toString().padStart(2, "0")}`;
-                    })()}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {formatPace(Number(records.fastest5k.pace))}/km ·{" "}
-                    {new Date(records.fastest5k.date).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+            {records.fastest5k && (
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground mb-1">Est. 5K Time</div>
+                <div className="text-2xl font-bold text-green-400">
+                  {(() => {
+                    const secs = Number(records.fastest5k.est_5k_seconds);
+                    const t = Math.round(secs);
+                    const m = Math.floor(t / 60);
+                    const s = t % 60;
+                    return `${m}:${s.toString().padStart(2, "0")}`;
+                  })()}
                 </div>
-              )}
-              {records.fastest10k && (
-                <div className="text-center">
-                  <div className="text-xs text-muted-foreground mb-1">Est. 10K Time</div>
-                  <div className="text-2xl font-bold text-blue-400">
-                    {(() => {
-                      const secs = Number(records.fastest10k.est_10k_seconds);
-                      const t = Math.round(secs);
-                      const m = Math.floor(t / 60);
-                      const s = t % 60;
-                      return `${m}:${s.toString().padStart(2, "0")}`;
-                    })()}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {formatPace(Number(records.fastest10k.pace))}/km ·{" "}
-                    {new Date(records.fastest10k.date).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </div>
+                <div className="text-xs text-muted-foreground">
+                  {formatPace(Number(records.fastest5k.pace))}/km ·{" "}
+                  {new Date(records.fastest5k.date).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
                 </div>
-              )}
-              {records.fastestPace && (
-                <div className="text-center">
-                  <div className="text-xs text-muted-foreground mb-1">Best Avg Pace</div>
-                  <div className="text-2xl font-bold text-amber-400">
-                    {formatPace(Number(records.fastestPace.pace))}/km
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {Number(records.fastestPace.distance).toFixed(1)} km ·{" "}
-                    {new Date(records.fastestPace.date).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </div>
+              </div>
+            )}
+            {records.fastest10k && (
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground mb-1">Est. 10K Time</div>
+                <div className="text-2xl font-bold text-blue-400">
+                  {(() => {
+                    const secs = Number(records.fastest10k.est_10k_seconds);
+                    const t = Math.round(secs);
+                    const m = Math.floor(t / 60);
+                    const s = t % 60;
+                    return `${m}:${s.toString().padStart(2, "0")}`;
+                  })()}
                 </div>
-              )}
-            </div>
-          )}
-          {/* Other Records */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="text-xs text-muted-foreground">
+                  {formatPace(Number(records.fastest10k.pace))}/km ·{" "}
+                  {new Date(records.fastest10k.date).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </div>
+              </div>
+            )}
+            {records.fastestPace && (
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground mb-1">Best Avg Pace</div>
+                <div className="text-2xl font-bold text-amber-400">
+                  {formatPace(Number(records.fastestPace.pace))}/km
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {Number(records.fastestPace.distance).toFixed(1)} km ·{" "}
+                  {new Date(records.fastestPace.date).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </div>
+              </div>
+            )}
             {records.longest && (
-              <div>
+              <div className="text-center">
                 <div className="text-xs text-muted-foreground mb-1">Longest Run</div>
-                <div className="text-lg font-bold">
+                <div className="text-2xl font-bold text-purple-400">
                   {Number(records.longest.distance).toFixed(1)} km
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -1209,9 +1203,9 @@ export default async function RunningPage({
               </div>
             )}
             {records.maxHR && (
-              <div>
+              <div className="text-center">
                 <div className="text-xs text-muted-foreground mb-1">Max Heart Rate</div>
-                <div className="text-lg font-bold">
+                <div className="text-2xl font-bold text-red-400">
                   {Math.round(Number(records.maxHR.max_hr))} bpm
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -1225,9 +1219,9 @@ export default async function RunningPage({
               </div>
             )}
             {records.maxCal && (
-              <div>
+              <div className="text-center">
                 <div className="text-xs text-muted-foreground mb-1">Most Calories</div>
-                <div className="text-lg font-bold">
+                <div className="text-2xl font-bold text-orange-400">
                   {Math.round(Number(records.maxCal.calories))} kcal
                 </div>
                 <div className="text-xs text-muted-foreground">
