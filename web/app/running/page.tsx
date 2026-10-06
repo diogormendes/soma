@@ -455,32 +455,41 @@ async function getPersonalRecords() {
 async function getOverallHRDistribution(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
+    WITH zones AS (
+      SELECT 1 as sort_order, 'Zone 1 (Recovery)' as zone UNION ALL
+      SELECT 2, 'Zone 2 (Easy)' UNION ALL
+      SELECT 3, 'Zone 3 (Aerobic)' UNION ALL
+      SELECT 4, 'Zone 4 (Threshold)' UNION ALL
+      SELECT 5, 'Zone 5 (Max)'
+    ),
+    activity_zones AS (
+      SELECT
+        CASE
+          WHEN (raw_json->>'averageHR')::float < 120 THEN 1
+          WHEN (raw_json->>'averageHR')::float < 140 THEN 2
+          WHEN (raw_json->>'averageHR')::float < 155 THEN 3
+          WHEN (raw_json->>'averageHR')::float < 170 THEN 4
+          ELSE 5
+        END as sort_order,
+        (raw_json->>'duration')::float / 60 as duration,
+        (raw_json->>'distance')::float / 1000 as distance
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND raw_json->>'averageHR' IS NOT NULL
+        AND (raw_json->>'distance')::float > 1000
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
+    )
     SELECT
-      CASE
-        WHEN (raw_json->>'averageHR')::float < 120 THEN 'Zone 1 (Recovery)'
-        WHEN (raw_json->>'averageHR')::float < 140 THEN 'Zone 2 (Easy)'
-        WHEN (raw_json->>'averageHR')::float < 155 THEN 'Zone 3 (Aerobic)'
-        WHEN (raw_json->>'averageHR')::float < 170 THEN 'Zone 4 (Threshold)'
-        ELSE 'Zone 5 (Max)'
-      END as zone,
-      COUNT(*) as count,
-      ROUND(AVG((raw_json->>'duration')::float / 60)::numeric) as avg_duration,
-      ROUND(AVG((raw_json->>'distance')::float / 1000)::numeric, 1) as avg_km,
-      CASE
-        WHEN (raw_json->>'averageHR')::float < 120 THEN 1
-        WHEN (raw_json->>'averageHR')::float < 140 THEN 2
-        WHEN (raw_json->>'averageHR')::float < 155 THEN 3
-        WHEN (raw_json->>'averageHR')::float < 170 THEN 4
-        ELSE 5
-      END as sort_order
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND raw_json->>'averageHR' IS NOT NULL
-      AND (raw_json->>'distance')::float > 1000
-      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
-    GROUP BY zone, sort_order
-    ORDER BY sort_order ASC
+      z.zone,
+      COUNT(a.sort_order) as count,
+      COALESCE(ROUND(AVG(a.duration)::numeric), 0) as avg_duration,
+      COALESCE(ROUND(AVG(a.distance)::numeric, 1), 0) as avg_km,
+      z.sort_order
+    FROM zones z
+    LEFT JOIN activity_zones a ON z.sort_order = a.sort_order
+    GROUP BY z.zone, z.sort_order
+    ORDER BY z.sort_order ASC
   `;
   return rows as HrZoneRow[];
 }
