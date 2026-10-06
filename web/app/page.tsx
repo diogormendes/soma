@@ -1215,6 +1215,7 @@ export default async function HomePage({
       {/* Fitness Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {/* Fitness Age */}
+        <div>
         {fitnessAge && (
           <Card className="h-full flex flex-col">
             <CardHeader className="pb-2">
@@ -1280,8 +1281,10 @@ export default async function HomePage({
             </CardContent>
           </Card>
         )}
+        </div>
 
         {/* Intensity Minutes */}
+        <div>
         {intensityMin && (
           <Card className="h-full flex flex-col">
             <CardHeader className="pb-2">
