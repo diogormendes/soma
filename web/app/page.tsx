@@ -1216,7 +1216,7 @@ export default async function HomePage({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {/* Fitness Age */}
         {fitnessAge && (
-          <Card>
+          <Card className="h-full flex flex-col">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                 <Heart className="h-4 w-4 text-red-400" />
@@ -1283,7 +1283,7 @@ export default async function HomePage({
 
         {/* Intensity Minutes */}
         {intensityMin && (
-          <Card>
+          <Card className="h-full flex flex-col">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                 <Timer className="h-4 w-4 text-emerald-400" />
