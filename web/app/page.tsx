@@ -1328,6 +1328,7 @@ export default async function HomePage({
             </CardContent>
           </Card>
         )}
+        </div>
       </div>
 
       {/* Body Composition Trend */}
