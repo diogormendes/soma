@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 
 export default function SettingsPage() {
   const [data, setData] = useState({
-    stravaId: "", stravaSecret: "", spotifyId: "", spotifySecret: ""
+    stravaId: "", stravaSecret: "", spotifyId: "", spotifySecret: "", hevyKey: "", hevySecret: "", tgToken: "", tgChat: ""
   });
   const [loading, setLoading] = useState(true);
 
@@ -22,6 +22,10 @@ export default function SettingsPage() {
           stravaSecret: d.stravaSecret || "",
           spotifyId: d.spotifyId || "",
           spotifySecret: d.spotifySecret || "",
+          hevyKey: d.hevyKey || "",
+          hevySecret: d.hevySecret || "",
+          tgToken: d.tgToken || "",
+          tgChat: d.tgChat || "",
         });
         setLoading(false);
       });
@@ -83,6 +87,40 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <Label>Client Secret</Label>
             <Input type="password" value={data.spotifySecret} onChange={e => setData({...data, spotifySecret: e.target.value})} placeholder="********" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Hevy API & Webhook</CardTitle>
+          <CardDescription>Get these from your Hevy developer settings.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Hevy API Key</Label>
+            <Input type="password" value={data.hevyKey} onChange={e => setData({...data, hevyKey: e.target.value})} placeholder="********" />
+          </div>
+          <div className="space-y-2">
+            <Label>Webhook Secret</Label>
+            <Input type="password" value={data.hevySecret} onChange={e => setData({...data, hevySecret: e.target.value})} placeholder="********" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Telegram Bot</CardTitle>
+          <CardDescription>Token from BotFather and your Chat ID to receive push notifications.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Bot Token</Label>
+            <Input type="password" value={data.tgToken} onChange={e => setData({...data, tgToken: e.target.value})} placeholder="********" />
+          </div>
+          <div className="space-y-2">
+            <Label>Chat ID</Label>
+            <Input value={data.tgChat} onChange={e => setData({...data, tgChat: e.target.value})} />
           </div>
         </CardContent>
       </Card>

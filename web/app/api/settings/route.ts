@@ -5,7 +5,6 @@ import { getSetting, setSetting } from "@/lib/settings";
 export async function GET() {
   try {
     const sql = getDb();
-    // Ensure table exists (auto-migration for self-hosters)
     await sql`
       CREATE TABLE IF NOT EXISTS public.app_settings (
         key character varying(50) PRIMARY KEY,
@@ -18,17 +17,26 @@ export async function GET() {
     const stravaSecret = await getSetting("STRAVA_CLIENT_SECRET");
     const spotifyId = await getSetting("SPOTIFY_CLIENT_ID");
     const spotifySecret = await getSetting("SPOTIFY_CLIENT_SECRET");
+    const hevyKey = await getSetting("HEVY_API_KEY");
+    const hevySecret = await getSetting("HEVY_WEBHOOK_SECRET");
+    const tgToken = await getSetting("TELEGRAM_BOT_TOKEN");
+    const tgChat = await getSetting("TELEGRAM_CHAT_ID");
 
     return NextResponse.json({
       stravaId: stravaId || process.env.STRAVA_CLIENT_ID || "",
       stravaSecret: stravaSecret ? "********" : (process.env.STRAVA_CLIENT_SECRET ? "********" : ""),
       spotifyId: spotifyId || process.env.SPOTIFY_CLIENT_ID || "",
       spotifySecret: spotifySecret ? "********" : (process.env.SPOTIFY_CLIENT_SECRET ? "********" : ""),
+      hevyKey: hevyKey || process.env.HEVY_API_KEY || "",
+      hevySecret: hevySecret ? "********" : (process.env.HEVY_WEBHOOK_SECRET ? "********" : ""),
+      tgToken: tgToken ? "********" : (process.env.TELEGRAM_BOT_TOKEN ? "********" : ""),
+      tgChat: tgChat || process.env.TELEGRAM_CHAT_ID || "",
     });
   } catch (e) {
     console.error("DB error in settings API:", e);
     return NextResponse.json({
       stravaId: "", stravaSecret: "", spotifyId: "", spotifySecret: "",
+      hevyKey: "", hevySecret: "", tgToken: "", tgChat: "",
       error: "No database connection"
     });
   }
@@ -41,6 +49,10 @@ export async function POST(req: Request) {
     if (body.stravaSecret && body.stravaSecret !== "********") await setSetting("STRAVA_CLIENT_SECRET", body.stravaSecret);
     if (body.spotifyId !== undefined) await setSetting("SPOTIFY_CLIENT_ID", body.spotifyId);
     if (body.spotifySecret && body.spotifySecret !== "********") await setSetting("SPOTIFY_CLIENT_SECRET", body.spotifySecret);
+    if (body.hevyKey !== undefined) await setSetting("HEVY_API_KEY", body.hevyKey);
+    if (body.hevySecret && body.hevySecret !== "********") await setSetting("HEVY_WEBHOOK_SECRET", body.hevySecret);
+    if (body.tgToken && body.tgToken !== "********") await setSetting("TELEGRAM_BOT_TOKEN", body.tgToken);
+    if (body.tgChat !== undefined) await setSetting("TELEGRAM_CHAT_ID", body.tgChat);
     
     return NextResponse.json({ success: true });
   } catch (e) {
