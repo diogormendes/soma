@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Settings2 } from "lucide-react";
 import {
   LayoutDashboard,
   Dumbbell,
@@ -17,7 +17,6 @@ import {
   Menu,
   X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Settings } from "lucide-react";
 import { SyncButton } from "@/components/sync-button";
 import { SomaLogo } from "@/components/soma-logo";
 
@@ -30,8 +29,7 @@ const navItems = [
   { href: "/activities", icon: Mountain, label: "Activities", shortcut: "5", mobile: false },
   { href: "/sleep", icon: Moon, label: "Sleep", shortcut: "6", mobile: true },
   { href: "/playlist", icon: Music2, label: "Playlist", shortcut: "7", mobile: false },
-  { href: "/settings", icon: Settings, label: "Settings", shortcut: "9", mobile: true },
-  { href: "/connections", icon: Cable, label: "Sync", shortcut: "8", mobile: false },
+  { href: "/connections", icon: Settings2, label: "Settings", shortcut: "8", mobile: false },
 ];
 
 export function Sidebar() {

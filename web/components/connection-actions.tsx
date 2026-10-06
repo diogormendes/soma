@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Unplug, Link as LinkIcon } from "lucide-react";
 import { CredentialsDialog } from "@/components/credentials-dialog";
+import { ApiConfigModal } from "@/components/api-config-modal";
 
 const platformLabels: Record<string, string> = {
   garmin: "Garmin Connect",
@@ -41,6 +42,9 @@ export function ConnectionActions({ platform, isConnected, connectionType }: Con
     if (platform === "strava") {
       window.location.href = "/api/strava/auth";
     }
+    if (platform === "spotify") {
+      window.location.href = "/api/playlist/spotify/auth";
+    }
   }
 
   if (connectionType === "oauth") {
@@ -58,10 +62,13 @@ export function ConnectionActions({ platform, isConnected, connectionType }: Con
       );
     }
     return (
-      <Button variant="default" size="sm" onClick={handleConnect}>
-        <LinkIcon className="h-4 w-4" />
-        Connect
-      </Button>
+      <div className="flex gap-2">
+        <ApiConfigModal platform={platform} />
+        <Button variant="outline" size="sm" onClick={handleConnect}>
+          <LinkIcon className="h-4 w-4 mr-1" />
+          Connect
+        </Button>
+      </div>
     );
   }
 
