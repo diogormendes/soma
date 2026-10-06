@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getSetting } from "@/lib/settings";
 
 export const runtime = "nodejs";
 
@@ -24,22 +25,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${baseUrl}/connections?error=spotify_denied`);
   }
 
+  const clientId = (await getSetting("SPOTIFY_CLIENT_ID")) || process.env.SPOTIFY_CLIENT_ID;
+
+  if (!clientId) {
+    return NextResponse.redirect(`${baseUrl}/settings?error=spotify_not_configured`);
+  }
+
   const stateData = decodeState(stateParam);
   if (!stateData?.verifier) {
     return NextResponse.redirect(`${baseUrl}/connections?error=spotify_invalid`);
   }
 
   const { verifier, returnTo } = stateData;
+  const redirectUri = process.env.SPOTIFY_REDIRECT_URI || `${baseUrl}/api/playlist/spotify/callback`;
 
-  // Exchange code for tokens
   const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
-      redirect_uri: process.env.SPOTIFY_REDIRECT_URI!,
-      client_id: process.env.SPOTIFY_CLIENT_ID!,
+      redirect_uri: redirectUri,
+      client_id: clientId,
       code_verifier: verifier,
     }),
   });
@@ -53,13 +60,11 @@ export async function GET(req: NextRequest) {
   const tokens = await tokenRes.json();
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
-  // Fetch Spotify user profile
   const profileRes = await fetch("https://api.spotify.com/v1/me", {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
   });
   const profile = profileRes.ok ? await profileRes.json() : null;
 
-  // Store credentials in DB
   const sql = getDb();
   await sql`
     INSERT INTO platform_credentials (platform, auth_type, credentials, connected_at, expires_at, status)

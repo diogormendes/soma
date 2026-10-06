@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
-
+import { getSetting } from "@/lib/settings";
 
 export async function GET() {
-  const clientId = process.env.STRAVA_CLIENT_ID;
+  const clientId = (await getSetting("STRAVA_CLIENT_ID")) || process.env.STRAVA_CLIENT_ID;
   if (!clientId) {
-    return NextResponse.json(
-      { error: "STRAVA_CLIENT_ID not configured" },
-      { status: 500 }
-    );
+    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/settings?error=strava_not_configured`);
   }
 
   const redirectUri = `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/strava/callback`;

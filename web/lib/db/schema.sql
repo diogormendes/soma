@@ -2213,3 +2213,4 @@ ALTER TABLE ONLY public.training_plan_day
 --
 -- PostgreSQL database dump complete
 --
+CREATE TABLE public.app_settings ( key character varying(50) PRIMARY KEY, value jsonb NOT NULL, updated_at timestamp with time zone DEFAULT now() );

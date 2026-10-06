@@ -1,0 +1,288 @@
+<div align="center">
+  <br>
+  <img src="soma-icon.png" width="60" alt="soma" />
+  <br><br>
+  <h2>soma</h2>
+  <p>Your health stack, finally unified.<br>
+  Garmin · Hevy · Strava — one self-hosted dashboard, your data, your server.</p>
+  <br>
+
+  **[Live Demo →](https://soma-demo.gkos.dev)**
+
+  <br>
+
+  [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdrkostas%2Fsoma&root-directory=web&env=DATABASE_URL,STRAVA_CLIENT_ID,STRAVA_CLIENT_SECRET,NEXT_PUBLIC_BASE_URL&envDescription=See%20the%20setup%20guide&envLink=https%3A%2F%2Fgithub.com%2Fdrkostas%2Fsoma%23setup)
+
+  <br>
+
+  [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](./LICENSE)
+  [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=next.js)](https://nextjs.org)
+  [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+  [![Postgres](https://img.shields.io/badge/Neon-PostgreSQL-00E5BF?style=flat-square&logo=postgresql&logoColor=white)](https://neon.tech)
+
+  <br><br>
+</div>
+
+---
+
+## Overview
+
+Daily steps, resting heart rate, stress trend, body composition, recovery status, weekly training load, activity streaks — your full health picture on one page.
+
+<img src="screenshots/overview.png" width="100%" alt="Overview — daily steps, resting heart rate, VO2max, sleep and this week's training" />
+
+---
+
+## Running
+
+Pace progression across every run, monthly mileage history, VO2max trend, training zones, HR vs pace scatter, split analysis, shoe mileage tracking.
+
+<img src="screenshots/running.png" width="100%" alt="Running — distance, pace, heart rate and VO2max, with pace progression and monthly mileage" />
+
+---
+
+## Workouts
+
+Muscle activation map (front & back) with volume by muscle group across all sessions. Exercise progression, personal records, gym frequency heatmap.
+
+<img src="screenshots/workouts.png" width="100%" alt="Workouts — muscle activation map, front and back, with volume by muscle group" />
+
+---
+
+## Sleep & Recovery
+
+Sleep stages over time (deep, light, REM, awake), score trend, sleep schedule, HRV, blood oxygen, respiration rate, body battery, training readiness.
+
+<img src="screenshots/sleep.png" width="100%" alt="Sleep and recovery — duration, score, deep and REM share, with sleep stages and score trend" />
+
+---
+
+## Sync Hub
+
+See exactly what synced, configure push rules (e.g. Hevy strength → Strava), and monitor the live data pipeline.
+
+<img src="screenshots/connections.png" width="100%" alt="Sync hub — Garmin and Hevy ingest into Soma, with push rules out to Strava, Garmin and Telegram" />
+
+---
+
+## Architecture
+
+```
+Garmin Connect ──┐
+                 ├──▶  TS sync (Actions + Vercel crons)  ──▶  Neon PostgreSQL  ◀──  web/ (Next.js)  ──▶  Vercel
+Hevy API ────────┘                                                                       │
+                                                                                         ▼
+                                                                                    Strava (push)
+```
+
+The stack is **all TypeScript**. The ingest/routing pipeline runs as GitHub Actions
+([`.github/workflows/sync.yml`](.github/workflows/sync.yml) → `scripts/sync-pipeline.mts`)
+plus Vercel cron functions, composing the same lib modules the `web/` app reads.
+Shared logic is published as npm packages — [`macro-engine-core`](https://github.com/drkostas/macro-engine),
+[`banister`](https://github.com/drkostas/banister), [`run-dj`](https://github.com/drkostas/run-dj),
+[`garmin-auth`](https://github.com/drkostas/garmin-auth) — and the UI (`web/` + the cross-platform
+`universal/` Expo app) renders from the shared [`soma-style`](https://github.com/drkostas/soma-style) design system.
+
+---
+
+## Setup
+
+### Prerequisites
+
+| Service | Required | Notes |
+|---|---|---|
+| [Neon](https://neon.tech) | ✓ | Free tier works |
+| Garmin Connect | ✓ | Any Garmin device |
+| [Hevy Pro](https://hevy.com) | optional | Strength workouts |
+| [Strava API app](https://www.strava.com/settings/api) | optional | Activity push |
+
+### 1 — Database
+
+If you are setting up Soma from scratch, you must apply the initial base schema before running the incremental migrations.
+
+```bash
+# Apply the base schema
+psql "$DATABASE_URL" -f "scripts/db-init/schema.sql"
+
+# Apply the schema migrations (in order)
+for f in web/lib/db/migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
+
+# (Optional) Seed the database with demo data
+psql "$DATABASE_URL" -f "scripts/db-init/demo-seed.sql"
+```
+
+### 2 — Web app
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdrkostas%2Fsoma&root-directory=web&env=DATABASE_URL,STRAVA_CLIENT_ID,STRAVA_CLIENT_SECRET,NEXT_PUBLIC_BASE_URL&envDescription=See%20the%20setup%20guide&envLink=https%3A%2F%2Fgithub.com%2Fdrkostas%2Fsoma%23setup)
+
+Set **Root Directory → `web`** in Vercel, then add:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Neon connection string |
+| `AUTH_SECRET` | Random 32-char string (`openssl rand -base64 32`) |
+| `GITHUB_CLIENT_ID` | From your [GitHub OAuth app](https://github.com/settings/developers) |
+| `GITHUB_CLIENT_SECRET` | From your GitHub OAuth app |
+| `GITHUB_OWNER_USERNAME` | Your GitHub username (only this account gets access) |
+| `NEXT_PUBLIC_BASE_URL` | Your Vercel URL |
+| `GITHUB_PAT` | GitHub Personal Access Token with `repo:workflow` scope — needed for the **Sync Now** button |
+| `STRAVA_CLIENT_ID` | From your Strava API settings *(optional)* |
+| `STRAVA_CLIENT_SECRET` | From your Strava API settings *(optional)* |
+
+**GitHub OAuth app setup:** go to [github.com/settings/developers](https://github.com/settings/developers) → New OAuth App → set **Authorization callback URL** to `https://your-app.vercel.app/api/auth/callback/github`.
+
+Then visit `/connections` to complete Strava OAuth.
+
+### 3 — Sync engine
+
+<details>
+<summary><strong>GitHub Actions</strong> (recommended — free, runs in the cloud)</summary>
+<br>
+
+Add to your fork under **Settings → Secrets → Actions**:
+
+| Secret | Value |
+|---|---|
+| `DATABASE_URL` | Neon connection string |
+| `GARMIN_EMAIL` | Garmin Connect email |
+| `GARMIN_PASSWORD` | Garmin Connect password |
+| `HEVY_API_KEY` | Hevy API key *(Pro required)* |
+| `STRAVA_CLIENT_ID` | Strava client ID |
+| `STRAVA_CLIENT_SECRET` | Strava client secret |
+| `TELEGRAM_BOT_TOKEN` | *(optional)* |
+| `TELEGRAM_CHAT_ID` | *(optional)* |
+
+Runs every 4 hours via [`.github/workflows/sync.yml`](.github/workflows/sync.yml). Trigger instantly via the **Sync Now** button on the Connections page, or from the **Actions** tab.
+
+</details>
+
+
+---
+
+## Development
+
+```bash
+cd web && npm install && npm run dev          # → http://localhost:3456
+cd web && npx tsx scripts/sync-pipeline.mts    # manual sync run (TS pipeline)
+cd universal && npm install && npm run web     # cross-platform Expo app (RN Web)
+```
+
+### In-app Claude chat
+
+A floating chat bubble in the bottom-right of every soma page spawns a
+local `claude -p` subprocess per turn — no API key, no extra service. It
+reuses your Claude Code subscription auth from `~/.claude/`.
+
+Requirements:
+
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated (`claude --version` should print a version).
+- soma running locally (`npm run dev` above). The widget makes a subprocess call, so it can't work on Vercel deployments — local-only by design.
+
+On the first message the route bootstraps a new session, captures its UUID,
+and stores it at `~/.soma/chat.json` so subsequent turns resume the same
+conversation. Click the pencil icon in the chat header to start a fresh
+thread.
+
+The assistant is primed by [`web/lib/chat-system-prompt.md`](web/lib/chat-system-prompt.md) — role, project layout, DB schemas, conventions. Edit that file to change how it behaves.
+
+#### Using the chat from your Vercel deployment (phone / anywhere)
+
+You can have the deployed soma forward chat requests to your Mac's local Claude
+Code via a Cloudflare tunnel. Vercel becomes a thin proxy; the actual
+`claude -p` still runs on your machine against your subscription auth.
+
+**On the Mac (one-time setup):**
+
+```bash
+brew install cloudflared
+cloudflared tunnel login                                    # browser auth
+cloudflared tunnel create soma-chat                         # creates UUID + creds
+cloudflared tunnel route dns soma-chat chat.your-domain.com # your subdomain
+```
+
+`~/.cloudflared/config.yml`:
+
+```yaml
+tunnel: soma-chat
+credentials-file: /Users/<you>/.cloudflared/<UUID>.json
+ingress:
+  - hostname: chat.your-domain.com
+    service: http://localhost:3456
+  - service: http_status:404
+```
+
+Then run it (or `launchctl` it for autostart):
+
+```bash
+cloudflared tunnel run soma-chat
+```
+
+Add a shared secret to `web/.env.local`:
+
+```
+SOMA_CHAT_TOKEN=$(openssl rand -base64 32)
+```
+
+Keep `npm run dev` running on the Mac as usual.
+
+**On Vercel** (Settings → Environment Variables):
+
+| Var | Value |
+|---|---|
+| `SOMA_CHAT_TUNNEL_URL` | `https://chat.your-domain.com` |
+| `SOMA_CHAT_TOKEN` | same value as the Mac's `.env.local` |
+
+Redeploy. The widget now shows a status dot in the header:
+
+- 🟢 green — direct local subprocess (when you're on `localhost:3456`)
+- 🔵 blue — proxied via Vercel → your Mac's tunnel (when you're on the deployed URL)
+- 🔴 red — tunnel unreachable (Mac asleep, no internet, etc.)
+
+Rotate `SOMA_CHAT_TOKEN` on both sides if it ever leaks. The shared secret is
+the only thing standing between your tunnel's public DNS name and your
+local filesystem.
+
+##### Self-healing autostart with launchd (macOS)
+
+Two plists under `~/Library/LaunchAgents/` (per-user, no sudo) keep
+everything alive across Mac sleep/wake/reboot:
+
+| Plist | Purpose |
+|---|---|
+| `dev.gkos.soma.web.plist` | The verification server: `npm run dev` from `web/` on 127.0.0.1:3457 with `DATABASE_URL` set in the plist environment to `verify_soma`, so Maestro and Playwright runs never write into the live data (refresh the copy with `scripts/verify-db-refresh.sh`). KeepAlive on crash |
+| `dev.gkos.soma.tunnel.plist` | Runs the cloudflared named tunnel (`tunnel run --token <connector>`), KeepAlive |
+
+Logs land in `~/Library/Logs/soma/`. Manage with
+`launchctl bootstrap gui/$UID <plist>` to load and
+`launchctl bootout gui/$UID dev.gkos.soma.web` to temporarily stop for
+hands-on development.
+
+###### Fallback when your domain isn't in Cloudflare DNS
+
+If your domain's authoritative DNS lives somewhere other than Cloudflare,
+you can still use a Cloudflare Quick Tunnel — but its `trycloudflare.com`
+URL rotates on every cloudflared restart. To keep the deployed Vercel
+chat pointed at the live URL automatically, add a third agent that tails
+the tunnel log and syncs URL changes into Vercel env:
+
+| Plist | Purpose |
+|---|---|
+| `dev.gkos.soma.tunnel-watch.plist` | Runs [`web/scripts/soma-tunnel-watch.sh`](web/scripts/soma-tunnel-watch.sh) — tails the tunnel log, detects URL rotation, runs `vercel env rm/add SOMA_CHAT_TUNNEL_URL production` + `vercel deploy --prod` |
+
+Prereq: the Vercel CLI must be logged in (`vercel login`) once on the Mac
+so the watcher's CLI calls work non-interactively.
+
+This becomes unnecessary once you migrate your zone to Cloudflare DNS (the
+named-tunnel route in the previous section), since the URL is then stable.
+
+---
+
+## License
+
+[MIT](./LICENSE)
+
+---
+
+<div align="center">
+  <sub>Built for athletes who want to understand their data, not just collect it.</sub>
+</div>
