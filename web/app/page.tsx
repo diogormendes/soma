@@ -1427,7 +1427,7 @@ export default async function HomePage({
         {/* Last Workout (3rd column in the bottom grid) */}
         {lastWorkout?.workoutId ? (
           <ClickableLastWorkout workoutId={lastWorkout.workoutId}>
-            <Card>
+            <Card className="flex-1 h-full flex flex-col">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   Last Gym Session
@@ -1454,7 +1454,7 @@ export default async function HomePage({
             </Card>
           </ClickableLastWorkout>
         ) : (
-          <Card>
+          <Card className="flex-1 flex flex-col">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Last Gym Session
