@@ -933,14 +933,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
           </Card>
         )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <HeartPulse className="h-4 w-4 text-red-400" />
-              Resting Heart Rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <ExpandableChartCard title="Resting Heart Rate" icon={<HeartPulse className="h-4 w-4 text-red-400" />}>
             {(() => {
               const rhrData = rhrTrend.filter((r) => Number(r.rhr) > 0);
               const latest = rhrData.length > 0 ? Number(rhrData[rhrData.length - 1].rhr) : null;
@@ -969,8 +962,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
               );
             })()}
             <RHRChart data={rhrTrend.map((d) => ({ date: d.date, rhr: Number(d.rhr ?? 0) }))} />
-          </CardContent>
-        </Card>
+        </ExpandableChartCard>
       </div>
 
       {/* Energy: Stress + Body Battery */}
@@ -1017,14 +1009,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
           </Card>
         )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <BatteryCharging className="h-4 w-4 text-green-400" />
-              Body Battery
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <ExpandableChartCard title="Body Battery" icon={<BatteryCharging className="h-4 w-4 text-green-400" />}>
             {(() => {
               const latest = bodyBattery.length > 0 ? bodyBattery[bodyBattery.length - 1] : null;
               const f = freshness(latest?.date ?? null, todayKey());
@@ -1061,8 +1046,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
                 No body battery data
               </div>
             )}
-          </CardContent>
-        </Card>
+        </ExpandableChartCard>
       </div>
 
       {/* Respiratory: SpO2 + Respiration */}
