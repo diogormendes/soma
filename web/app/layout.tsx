@@ -9,6 +9,7 @@ import { TzBeacon } from "@/components/tz-beacon";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { NavProgress } from "@/components/nav-progress";
 import { ChatWidget } from "@/components/chat-widget";
+import { clientErrorScript } from "@/lib/visit-counter";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -49,6 +50,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
+      <head>
+        {/* Optional error reports: forwarded only when a collector is configured. */}
+        <script dangerouslySetInnerHTML={{ __html: clientErrorScript() }} />
+      </head>
       <body className={`${inter.variable} antialiased`}>
         <TooltipProvider>
           {isDemo && (

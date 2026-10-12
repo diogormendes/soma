@@ -52,6 +52,10 @@ const authProxy = auth((req) => {
   // browser calls the Mac over the tailnet from https://soma.gkos.dev.
   if (isApi && pathname.startsWith("/api/chat") && req.method === "OPTIONS") return NextResponse.next();
 
+  // Optional error reports from any visitor's browser. The route forwards them only when a
+  // collector is configured and always answers 204, so it is open like the page itself.
+  if (pathname === "/api/client-error") return NextResponse.next();
+
   if (isDev && isApi && req.method === "OPTIONS") {
     return withDevCors(new NextResponse(null, { status: 204 }), true);
   }
