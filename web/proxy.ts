@@ -1,7 +1,8 @@
 import { auth } from "@/auth";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { tailnetIdentityOk } from "@/lib/chat-transport";
 import { devSessionAllowed } from "@/lib/dev-session";
+import { countVisit } from "@/lib/visit-counter";
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -43,7 +44,7 @@ function hasChatToken(req: { headers: Headers }): boolean {
   return req.headers.get("x-soma-chat-token") === token;
 }
 
-export default auth((req) => {
+const authProxy = auth((req) => {
   const { pathname } = req.nextUrl;
   const isApi = pathname.startsWith("/api/");
 
@@ -101,6 +102,13 @@ export default auth((req) => {
 
   return NextResponse.next();
 });
+
+export default function proxy(req: NextRequest, event: NextFetchEvent) {
+  // Optional visit counter: does nothing unless COLLECTOR_URL and COLLECTOR_TOKEN are set.
+  countVisit(req, event);
+  // next-auth types its wrapper as a route handler; as the proxy it takes the fetch event and passes it on.
+  return authProxy(req, event as unknown as Parameters<typeof authProxy>[1]);
+}
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|soma-icon.png|sw\\.js|manifest\\.webmanifest).*)"],
