@@ -1,0 +1,3 @@
+# secrets files the Vercel CLI would otherwise upload on a hand deploy
+.env
+.env.vercel
