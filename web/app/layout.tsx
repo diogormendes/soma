@@ -9,6 +9,7 @@ import { TzBeacon } from "@/components/tz-beacon";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { NavProgress } from "@/components/nav-progress";
 import { ChatWidget } from "@/components/chat-widget";
+import { chatReachable } from "@/lib/chat-transport";
 import { clientErrorScript } from "@/lib/visit-counter";
 import "./globals.css";
 
@@ -70,7 +71,8 @@ export default function RootLayout({
         <TzBeacon />
         <SWRegister />
         <PWAInstallPrompt />
-        <ChatWidget />
+        {/* Only where a chat can answer: on the public demo every /api/chat* call is a 410. */}
+        {chatReachable() && <ChatWidget />}
       </body>
     </html>
   );
