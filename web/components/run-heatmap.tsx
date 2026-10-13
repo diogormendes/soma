@@ -5,6 +5,7 @@ import Map, { Source, Layer } from "react-map-gl/maplibre";
 import type { LayerProps } from "react-map-gl/maplibre";
 import type { FeatureCollection, LineString } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
+import "@/lib/maplibre-worker";
 
 interface Props {
   routes: Array<Array<[number, number]>>; // array of [lng, lat] arrays
