@@ -13,7 +13,11 @@ name: Bridge activities to Strava (TS)
 
 on:
   schedule:
-    - cron: '0 11,15,19 * * *'   # a few times/day; forwards only new activities
+    # Every hour, off the top of the hour. GitHub drops and delays scheduled runs (some days only
+    # two of three slots fired, hours late), so three slots a day left gaps of 19 hours. A run with
+    # nothing new makes one Garmin list call and exits before the browser starts, so extra runs are
+    # cheap and harmless.
+    - cron: '23 * * * *'
   workflow_dispatch:
     inputs:
       live:
