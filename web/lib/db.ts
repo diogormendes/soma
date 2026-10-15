@@ -1,4 +1,4 @@
-import { neon, NeonQueryPromise } from "@neondatabase/serverless";
+import { neon, neonConfig, NeonQueryPromise } from "@neondatabase/serverless";
 import { Pool, types as pgTypes } from "pg";
 
 /**
@@ -44,6 +44,47 @@ export function httpDb(url: string): QueryFn {
     base.query(text, params, { types: neonTypes });
   return tagged as unknown as QueryFn;
 }
+
+/**
+ * ⭐ A READ THAT MEETS A GATEWAY RESTART IS SENT ONCE MORE (soma#1195).
+ *
+ * While the gateway restarts, the edge in front of it answers 502 for about a second. On 2026-10-16
+ * one restart made soma-demo's home page fail, and the public uptime check read the site as down.
+ * A request that got 502, 503, 504 or no answer at all is sent once more after a short wait, but only
+ * when every query in it is a plain SELECT: a write may already have run on the first attempt, so it
+ * is never resent. Anything this cannot read counts as a write.
+ */
+const RETRY_STATUSES = new Set([502, 503, 504]);
+const RETRY_WAIT_MS = 300;
+
+export function isReadOnlyBody(body: unknown): boolean {
+  if (typeof body !== "string") return false;
+  let parsed: { query?: unknown; queries?: { query?: unknown }[] };
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return false;
+  }
+  const texts = Array.isArray(parsed.queries) ? parsed.queries.map((q) => q?.query) : [parsed.query];
+  return texts.length > 0 && texts.every((t) =>
+    typeof t === "string" && /^\s*select\b/i.test(t) && !/;\s*\S/.test(t));
+}
+
+async function retryReadOnce(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const again = isReadOnlyBody(init?.body);
+  try {
+    const res = await fetch(input, init);
+    if (!again || !RETRY_STATUSES.has(res.status)) return res;
+  } catch (e) {
+    if (!again) throw e;
+  }
+  await new Promise((r) => setTimeout(r, RETRY_WAIT_MS));
+  return fetch(input, init);
+}
+
+// ⚠️ The driver reads its fetch function only from the global config: `neon(url, { fetchFunction })`
+// is ignored, and the extra option breaks query handling ("c.map is not a function").
+neonConfig.fetchFunction = retryReadOnce;
 
 /** A tagged-template function that always resolves to an array of row objects. */
 export type QueryFn = (
