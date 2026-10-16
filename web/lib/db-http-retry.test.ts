@@ -9,6 +9,9 @@ import { httpDb, isReadOnlyBody } from "./db";
 let server: http.Server;
 let hits = 0;
 let failNext = 0;
+// Requests whose response is cut partway: headers and half a body, then the connection drops,
+// which the client sees as `TypeError: terminated` (ECONNRESET) while reading the body (soma#1199).
+let cutNext = 0;
 const previousEndpoint = neonConfig.fetchEndpoint;
 
 beforeAll(async () => {
@@ -16,6 +19,13 @@ beforeAll(async () => {
     req.resume();
     req.on("end", () => {
       hits += 1;
+      if (cutNext > 0) {
+        cutNext -= 1;
+        res.writeHead(200, { "content-type": "application/json", "content-length": "500" });
+        res.write('{"command":"SELECT","rows":[');
+        setTimeout(() => res.socket?.destroy(), 20);
+        return;
+      }
       if (failNext > 0) {
         failNext -= 1;
         res.writeHead(502, { "content-type": "text/html" });
@@ -44,6 +54,7 @@ afterAll(() => {
 beforeEach(() => {
   hits = 0;
   failNext = 0;
+  cutNext = 0;
 });
 
 const sql = () => httpDb("postgresql://soma_app:x@pg.example.org/soma");
@@ -65,6 +76,19 @@ describe("httpDb retries a read once when the gateway answers 502 (soma#1195)", 
   it("a write is never sent twice, because the first attempt may have run", async () => {
     failNext = 1;
     await expect(sql()`INSERT INTO t (a) VALUES (${1})`).rejects.toThrow(/502/);
+    expect(hits).toBe(1);
+  });
+
+  it("a SELECT whose response is cut partway is sent again and succeeds (soma#1199)", async () => {
+    cutNext = 1;
+    const rows = await sql()`SELECT 1 AS n`;
+    expect(rows).toEqual([{ n: "1" }]);
+    expect(hits).toBe(2);
+  });
+
+  it("a write whose response is cut partway is not sent again", async () => {
+    cutNext = 1;
+    await expect(sql()`INSERT INTO t (a) VALUES (${1})`).rejects.toThrow();
     expect(hits).toBe(1);
   });
 

@@ -70,13 +70,24 @@ export function isReadOnlyBody(body: unknown): boolean {
     typeof t === "string" && /^\s*select\b/i.test(t) && !/;\s*\S/.test(t));
 }
 
+/**
+ * A connection can also be cut after the headers, while the body is still arriving: the driver then
+ * fails with `TypeError: terminated` (ECONNRESET), which a status check never sees (soma#1199, the
+ * demo's home page at 16:02 on 2026-10-16). So a read's body is read here, in full, and the driver is
+ * handed a response built from those bytes; a body cut partway counts as a failed attempt.
+ */
+async function readFully(res: Response): Promise<Response> {
+  const body = await res.arrayBuffer();
+  return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+}
+
 async function retryReadOnce(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const again = isReadOnlyBody(init?.body);
+  if (!isReadOnlyBody(init?.body)) return fetch(input, init);
   try {
     const res = await fetch(input, init);
-    if (!again || !RETRY_STATUSES.has(res.status)) return res;
-  } catch (e) {
-    if (!again) throw e;
+    if (!RETRY_STATUSES.has(res.status)) return await readFully(res);
+  } catch {
+    // no answer, or the body was cut: fall through to the one retry
   }
   await new Promise((r) => setTimeout(r, RETRY_WAIT_MS));
   return fetch(input, init);
