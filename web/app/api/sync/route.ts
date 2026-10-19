@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { triggerLocalSync } from "@/lib/sync-pipeline";
 
 export const runtime = "nodejs";
 
@@ -7,9 +8,21 @@ const GITHUB_OWNER = process.env.GITHUB_REPO_OWNER ?? "drkostas";
 const GITHUB_REPO = process.env.GITHUB_REPO_NAME ?? "soma";
 
 export async function POST() {
-  const sql = getDb();
-
   try {
+    // Run sync locally in-process unless explicitly configured to dispatch to GitHub Actions
+    if (process.env.SYNC_MODE !== "github") {
+      const result = await triggerLocalSync("manual");
+      if (!result.started) {
+        return NextResponse.json(
+          { started: false, reason: result.reason ?? "Sync already running" },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json({ started: true, mode: "local", runId: result.runId });
+    }
+
+    const sql = getDb();
+
     // Prevent double-triggering if a sync is already running
     const running = await sql`
       SELECT id, started_at
@@ -59,11 +72,11 @@ export async function POST() {
       );
     }
 
-    return NextResponse.json({ started: true });
+    return NextResponse.json({ started: true, mode: "github" });
   } catch (err) {
     console.error("Error triggering sync:", err);
     return NextResponse.json(
-      { started: false, error: "Failed to trigger sync" },
+      { started: false, error: (err as Error).message || "Failed to trigger sync" },
       { status: 500 }
     );
   }

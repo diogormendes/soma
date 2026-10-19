@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { triggerLocalSync } from "@/lib/sync-pipeline";
+
+export const runtime = "nodejs";
 
 /**
  * Hevy webhook endpoint — receives POST when a workout is saved.
- * Triggers a GitHub Actions sync workflow to fetch the new workout.
+ * Triggers a local sync pipeline (or GitHub Actions when SYNC_MODE === "github")
+ * to fetch and enrich the new workout.
  */
 export async function POST(req: NextRequest) {
   // Verify auth token
@@ -16,6 +20,13 @@ export async function POST(req: NextRequest) {
   const workoutId = body?.workoutId;
 
   console.log(`[Hevy Webhook] Received workout: ${workoutId}`);
+
+  if (process.env.SYNC_MODE !== "github") {
+    triggerLocalSync("hevy-webhook").catch((err) => {
+      console.error("[Hevy Webhook] Local sync trigger failed:", err);
+    });
+    return NextResponse.json({ ok: true, workoutId, mode: "local" });
+  }
 
   // Trigger GitHub Actions sync workflow
   const ghToken = process.env.GITHUB_PAT;
