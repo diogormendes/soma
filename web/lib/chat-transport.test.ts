@@ -90,7 +90,7 @@ describe("requireToken", () => {
 });
 
 // ---- #670: the browser reaches the Mac over the tailnet; Vercel no longer proxies ----
-import { chatGone, tailnetIdentityOk, allowedChatOrigin, withCors, chatPreflight } from "./chat-transport";
+import { chatGone, chatReachable, tailnetIdentityOk, allowedChatOrigin, withCors, chatPreflight } from "./chat-transport";
 import { NextResponse } from "next/server";
 
 describe("chatMode gone (#670)", () => {
@@ -111,6 +111,15 @@ describe("chatMode gone (#670)", () => {
     expect(chatMode()).toBe("proxy");
     delete process.env.VERCEL; delete process.env.SOMA_CHAT_TUNNEL_URL;
     expect(chatMode()).toBe("local");
+  });
+  it("a page can reach a chat only with a browser-side base or a deployment that answers itself", () => {
+    delete process.env.SOMA_CHAT_TUNNEL_URL; process.env.VERCEL = "1";
+    expect(chatReachable("")).toBe(false); // the public demo: every chat call would answer 410
+    expect(chatReachable("https://mac.example:8448")).toBe(true);
+    process.env.SOMA_CHAT_TUNNEL_URL = "https://chat.example";
+    expect(chatReachable("")).toBe(true);
+    delete process.env.VERCEL; delete process.env.SOMA_CHAT_TUNNEL_URL;
+    expect(chatReachable("")).toBe(true);
   });
 });
 

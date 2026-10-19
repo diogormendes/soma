@@ -40,6 +40,7 @@
         }
       ],
       "@bacons/apple-targets",
+      "@maplibre/maplibre-react-native",
       "./plugins/soma-widget/withSomaWidget",
       "./plugins/emulator-cleartext/withEmulatorCleartext",
       "expo-sharing",

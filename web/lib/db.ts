@@ -1,4 +1,4 @@
-import { neon, NeonQueryPromise } from "@neondatabase/serverless";
+import { neon, neonConfig, NeonQueryPromise } from "@neondatabase/serverless";
 import { Pool, types as pgTypes } from "pg";
 
 /**
@@ -44,6 +44,58 @@ export function httpDb(url: string): QueryFn {
     base.query(text, params, { types: neonTypes });
   return tagged as unknown as QueryFn;
 }
+
+/**
+ * ⭐ A READ THAT MEETS A GATEWAY RESTART IS SENT ONCE MORE (soma#1195).
+ *
+ * While the gateway restarts, the edge in front of it answers 502 for about a second. On 2026-10-16
+ * one restart made soma-demo's home page fail, and the public uptime check read the site as down.
+ * A request that got 502, 503, 504 or no answer at all is sent once more after a short wait, but only
+ * when every query in it is a plain SELECT: a write may already have run on the first attempt, so it
+ * is never resent. Anything this cannot read counts as a write.
+ */
+const RETRY_STATUSES = new Set([502, 503, 504]);
+const RETRY_WAIT_MS = 300;
+
+export function isReadOnlyBody(body: unknown): boolean {
+  if (typeof body !== "string") return false;
+  let parsed: { query?: unknown; queries?: { query?: unknown }[] };
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return false;
+  }
+  const texts = Array.isArray(parsed.queries) ? parsed.queries.map((q) => q?.query) : [parsed.query];
+  return texts.length > 0 && texts.every((t) =>
+    typeof t === "string" && /^\s*select\b/i.test(t) && !/;\s*\S/.test(t));
+}
+
+/**
+ * A connection can also be cut after the headers, while the body is still arriving: the driver then
+ * fails with `TypeError: terminated` (ECONNRESET), which a status check never sees (soma#1199, the
+ * demo's home page at 16:02 on 2026-10-16). So a read's body is read here, in full, and the driver is
+ * handed a response built from those bytes; a body cut partway counts as a failed attempt.
+ */
+async function readFully(res: Response): Promise<Response> {
+  const body = await res.arrayBuffer();
+  return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+}
+
+async function retryReadOnce(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  if (!isReadOnlyBody(init?.body)) return fetch(input, init);
+  try {
+    const res = await fetch(input, init);
+    if (!RETRY_STATUSES.has(res.status)) return await readFully(res);
+  } catch {
+    // no answer, or the body was cut: fall through to the one retry
+  }
+  await new Promise((r) => setTimeout(r, RETRY_WAIT_MS));
+  return fetch(input, init);
+}
+
+// ⚠️ The driver reads its fetch function only from the global config: `neon(url, { fetchFunction })`
+// is ignored, and the extra option breaks query handling ("c.map is not a function").
+neonConfig.fetchFunction = retryReadOnce;
 
 /** A tagged-template function that always resolves to an array of row objects. */
 export type QueryFn = (

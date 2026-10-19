@@ -35,6 +35,15 @@ export function chatMode(): ChatMode {
   return "local";
 }
 
+/**
+ * Whether a page on this deployment can reach a chat at all: a browser-side base points it at the
+ * Mac, or this deployment answers the routes itself. Without either (the public demo) every
+ * /api/chat* call answers 410, so the root layout does not render the chat widget.
+ */
+export function chatReachable(base: string = process.env.NEXT_PUBLIC_SOMA_CHAT_BASE ?? ""): boolean {
+  return base.trim() !== "" || chatMode() !== "gone";
+}
+
 /** 410 for the Vercel routes once the tunnel is gone: the browser must call the Mac directly. */
 export function chatGone(): NextResponse {
   return NextResponse.json(

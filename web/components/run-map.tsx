@@ -6,6 +6,7 @@ import type { LayerProps } from "react-map-gl/maplibre";
 import type { ExpressionSpecification } from "maplibre-gl";
 import type { FeatureCollection, Feature, LineString, Point } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
+import "@/lib/maplibre-worker";
 
 export interface GpsPoint {
   lat: number;
