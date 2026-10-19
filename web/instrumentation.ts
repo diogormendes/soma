@@ -24,5 +24,15 @@ export async function register() {
     if (typeof timer.unref === "function") {
       timer.unref();
     }
+
+    const startupTimer = setTimeout(() => {
+      triggerLocalSync("startup").catch((err) => {
+        console.error("[sync-scheduler] Startup sync failed to start:", err);
+      });
+    }, 10_000);
+
+    if (typeof startupTimer.unref === "function") {
+      startupTimer.unref();
+    }
   }
 }

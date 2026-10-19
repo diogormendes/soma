@@ -100,9 +100,14 @@ export async function triggerLocalSync(trigger = "manual"): Promise<{ started: b
       }
     }
 
+    let backfillRemaining = 0;
     try {
       // 1. Garmin daily + activities + parse + training-engine streams + kite.
-      await step("garmin-ingest", () => runGarminIngest(databaseUrl, sql));
+      await step("garmin-ingest", async () => {
+        const res = await runGarminIngest(databaseUrl, sql);
+        backfillRemaining = res.backfillRemaining ?? 0;
+        return res;
+      });
 
       // 2. Hevy pull + enrich + training loads + PMC.
       await step("hevy", async () => {
@@ -174,6 +179,14 @@ export async function triggerLocalSync(trigger = "manual"): Promise<{ started: b
       }
       activeSyncPromise = null;
       console.log("[sync] pipeline complete");
+      if (backfillRemaining > 0 && failures.length < stepsRun) {
+        console.log(`[sync] scheduling next historical backfill batch in 5s (${backfillRemaining} days remaining)`);
+        setTimeout(() => {
+          triggerLocalSync("backfill_continue").catch((err) =>
+            console.error("[sync] backfill continuation failed:", err)
+          );
+        }, 5000);
+      }
     }
   })();
 

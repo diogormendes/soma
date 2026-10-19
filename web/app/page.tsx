@@ -159,18 +159,33 @@ async function getWeeklyAverages(rangeDays: number) {
   const sql = getDb();
   const rows = await sql`
     SELECT
-      ROUND(AVG(NULLIF(total_steps, 0))) as avg_steps,
+      COALESCE(
+        ROUND(AVG(NULLIF(total_steps, 0)) FILTER (WHERE date < ${today}::date)),
+        ROUND(AVG(NULLIF(total_steps, 0)))
+      ) as avg_steps,
       SUM(total_steps) as total_steps,
-      ROUND(AVG(NULLIF(total_distance_meters, 0))) as avg_distance_meters,
+      COALESCE(
+        ROUND(AVG(NULLIF(total_distance_meters, 0)) FILTER (WHERE date < ${today}::date)),
+        ROUND(AVG(NULLIF(total_distance_meters, 0)))
+      ) as avg_distance_meters,
       SUM(total_distance_meters) as total_distance_meters,
       ROUND(AVG(NULLIF(sleep_time_seconds, 0))) as avg_sleep,
       ROUND(AVG(NULLIF(resting_heart_rate, 0))) as avg_rhr,
       MIN(NULLIF(min_heart_rate, 0)) as min_hr,
       MAX(NULLIF(max_heart_rate, 0)) as max_hr,
-      ROUND(AVG(NULLIF(avg_stress_level, 0))) as avg_stress,
+      COALESCE(
+        ROUND(AVG(NULLIF(avg_stress_level, 0)) FILTER (WHERE date < ${today}::date)),
+        ROUND(AVG(NULLIF(avg_stress_level, 0)))
+      ) as avg_stress,
       MAX(NULLIF(max_stress_level, 0)) as max_stress,
-      ROUND(AVG(NULLIF(active_kilocalories, 0))) as avg_active_cal,
-      ROUND(AVG(NULLIF(total_kilocalories, 0))) as avg_total_cal,
+      COALESCE(
+        ROUND(AVG(NULLIF(active_kilocalories, 0)) FILTER (WHERE date < ${today}::date)),
+        ROUND(AVG(NULLIF(active_kilocalories, 0)))
+      ) as avg_active_cal,
+      COALESCE(
+        ROUND(AVG(NULLIF(total_kilocalories, 0)) FILTER (WHERE date < ${today}::date)),
+        ROUND(AVG(NULLIF(total_kilocalories, 0)))
+      ) as avg_total_cal,
       COUNT(*) as days_count
     FROM daily_health_summary
     WHERE date >= ${today}::date - ${rangeDays}::int
@@ -264,19 +279,33 @@ async function getGymFrequency(cutoff: string) {
 async function getRunningStats(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
+    WITH vo2_points AS (
+      SELECT (raw_json->>'vO2MaxValue')::float AS val, (raw_json->>'startTimeLocal')::timestamp AS ts
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->>'vO2MaxValue' IS NOT NULL
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
+      UNION ALL
+      SELECT (raw_json->'mostRecentVO2Max'->'generic'->>'vo2MaxPreciseValue')::float AS val, date::timestamp AS ts
+      FROM garmin_raw_data
+      WHERE endpoint_name = 'training_status'
+        AND raw_json->'mostRecentVO2Max'->'generic'->>'vo2MaxPreciseValue' IS NOT NULL
+        AND date >= ${cutoff}::date
+    )
     SELECT
       COUNT(*) as total_runs,
       SUM((raw_json->>'distance')::float) / 1000.0 as total_km,
-      AVG((raw_json->>'vO2MaxValue')::float) as avg_vo2max,
-      MAX((raw_json->>'vO2MaxValue')::float) as peak_vo2max,
-      (SELECT (a.raw_json->>'vO2MaxValue')::float
-         FROM garmin_activity_raw a
-        WHERE a.endpoint_name = 'summary'
-          AND a.raw_json->>'vO2MaxValue' IS NOT NULL
-          AND a.raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-          AND (a.raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
-        ORDER BY a.activity_id DESC
-        LIMIT 1) as vo2max
+      (SELECT AVG(val) FROM vo2_points) as avg_vo2max,
+      (SELECT MAX(val) FROM vo2_points) as peak_vo2max,
+      COALESCE(
+        (SELECT val FROM vo2_points ORDER BY ts DESC LIMIT 1),
+        (SELECT (raw_json->'mostRecentVO2Max'->'generic'->>'vo2MaxPreciseValue')::float
+           FROM garmin_raw_data
+          WHERE endpoint_name = 'training_status'
+            AND raw_json->'mostRecentVO2Max'->'generic'->>'vo2MaxPreciseValue' IS NOT NULL
+          ORDER BY date DESC LIMIT 1)
+      ) as vo2max
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
       AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')

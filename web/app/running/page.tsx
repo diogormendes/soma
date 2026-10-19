@@ -141,13 +141,27 @@ interface BestSplitRow {
 async function getRunningStats(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
+    WITH vo2_points AS (
+      SELECT (raw_json->>'vO2MaxValue')::float AS val
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->>'vO2MaxValue' IS NOT NULL
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
+      UNION ALL
+      SELECT (raw_json->'mostRecentVO2Max'->'generic'->>'vo2MaxPreciseValue')::float AS val
+      FROM garmin_raw_data
+      WHERE endpoint_name = 'training_status'
+        AND raw_json->'mostRecentVO2Max'->'generic'->>'vo2MaxPreciseValue' IS NOT NULL
+        AND date >= ${cutoff}::date
+    )
     SELECT
       COUNT(*) as total_runs,
       SUM((raw_json->>'distance')::float) / 1000.0 as total_km,
       AVG((raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0)) / 60.0 as avg_pace,
       AVG((raw_json->>'averageHR')::float) as avg_hr,
-      AVG((raw_json->>'vO2MaxValue')::float) as avg_vo2max,
-      MAX((raw_json->>'vO2MaxValue')::float) as peak_vo2max,
+      (SELECT AVG(val) FROM vo2_points) as avg_vo2max,
+      (SELECT MAX(val) FROM vo2_points) as peak_vo2max,
       MAX((raw_json->>'distance')::float) / 1000.0 as longest_run
     FROM garmin_activity_raw
     WHERE endpoint_name = 'summary'
@@ -193,16 +207,30 @@ async function getMonthlyMileage(cutoff: string) {
 async function getVO2MaxTrend(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
-    SELECT DISTINCT ON (LEFT((raw_json->>'startTimeLocal')::text, 10))
-      LEFT((raw_json->>'startTimeLocal')::text, 10) as date,
-      (raw_json->>'vO2MaxValue')::float as vo2max
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND raw_json->>'vO2MaxValue' IS NOT NULL
-      AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
-    ORDER BY LEFT((raw_json->>'startTimeLocal')::text, 10),
-             (raw_json->>'startTimeLocal')::text DESC
+    SELECT DISTINCT ON (date)
+      date,
+      vo2max
+    FROM (
+      SELECT
+        LEFT((raw_json->>'startTimeLocal')::text, 10) as date,
+        (raw_json->>'vO2MaxValue')::float as vo2max,
+        1 as prio
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND raw_json->>'vO2MaxValue' IS NOT NULL
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
+      UNION ALL
+      SELECT
+        date::text as date,
+        (raw_json->'mostRecentVO2Max'->'generic'->>'vo2MaxPreciseValue')::float as vo2max,
+        2 as prio
+      FROM garmin_raw_data
+      WHERE endpoint_name = 'training_status'
+        AND raw_json->'mostRecentVO2Max'->'generic'->>'vo2MaxPreciseValue' IS NOT NULL
+        AND date >= ${cutoff}::date
+    ) combined
+    ORDER BY date ASC, prio ASC
   `;
   return rows as Vo2MaxRow[];
 }

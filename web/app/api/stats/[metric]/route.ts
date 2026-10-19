@@ -263,27 +263,58 @@ async function fetchBodyBattery(sql: SqlFn, days: number, today: string): Promis
 
 async function fetchVo2max(sql: SqlFn, days: number, today: string): Promise<MetricResponse> {
   const current = await sql`
-    SELECT
-      LEFT((raw_json->>'startTimeLocal')::text, 10) as date,
-      (raw_json->>'vO2MaxValue')::float as value
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND raw_json->>'vO2MaxValue' IS NOT NULL
-      AND (raw_json->>'startTimeLocal')::date >= ${today}::date - make_interval(days => ${days})
-    ORDER BY date ASC
+    SELECT DISTINCT ON (date)
+      date,
+      value
+    FROM (
+      SELECT
+        LEFT((raw_json->>'startTimeLocal')::text, 10) as date,
+        (raw_json->>'vO2MaxValue')::float as value,
+        1 as prio
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND raw_json->>'vO2MaxValue' IS NOT NULL
+        AND (raw_json->>'startTimeLocal')::date >= ${today}::date - make_interval(days => ${days})
+      UNION ALL
+      SELECT
+        date::text as date,
+        (raw_json->'mostRecentVO2Max'->'generic'->>'vo2MaxPreciseValue')::float as value,
+        2 as prio
+      FROM garmin_raw_data
+      WHERE endpoint_name = 'training_status'
+        AND raw_json->'mostRecentVO2Max'->'generic'->>'vo2MaxPreciseValue' IS NOT NULL
+        AND date >= ${today}::date - make_interval(days => ${days})
+    ) combined
+    ORDER BY date ASC, prio ASC
   `;
   const previous = await sql`
-    SELECT
-      LEFT((raw_json->>'startTimeLocal')::text, 10) as date,
-      (raw_json->>'vO2MaxValue')::float as value
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
-      AND raw_json->>'vO2MaxValue' IS NOT NULL
-      AND (raw_json->>'startTimeLocal')::date >= ${today}::date - make_interval(days => ${days * 2})
-      AND (raw_json->>'startTimeLocal')::date < ${today}::date - make_interval(days => ${days})
-    ORDER BY date ASC
+    SELECT DISTINCT ON (date)
+      date,
+      value
+    FROM (
+      SELECT
+        LEFT((raw_json->>'startTimeLocal')::text, 10) as date,
+        (raw_json->>'vO2MaxValue')::float as value,
+        1 as prio
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND raw_json->>'vO2MaxValue' IS NOT NULL
+        AND (raw_json->>'startTimeLocal')::date >= ${today}::date - make_interval(days => ${days * 2})
+        AND (raw_json->>'startTimeLocal')::date < ${today}::date - make_interval(days => ${days})
+      UNION ALL
+      SELECT
+        date::text as date,
+        (raw_json->'mostRecentVO2Max'->'generic'->>'vo2MaxPreciseValue')::float as value,
+        2 as prio
+      FROM garmin_raw_data
+      WHERE endpoint_name = 'training_status'
+        AND raw_json->'mostRecentVO2Max'->'generic'->>'vo2MaxPreciseValue' IS NOT NULL
+        AND date >= ${today}::date - make_interval(days => ${days * 2})
+        AND date < ${today}::date - make_interval(days => ${days})
+    ) combined
+    ORDER BY date ASC, prio ASC
   `;
   return buildResponse(
     current.map((r) => ({ date: r.date, value: Number(r.value) })),
@@ -293,23 +324,38 @@ async function fetchVo2max(sql: SqlFn, days: number, today: string): Promise<Met
 
 async function fetchActivities(sql: SqlFn, days: number, today: string): Promise<MetricResponse> {
   const current = await sql`
-    SELECT
-      LEFT((raw_json->>'startTimeLocal')::text, 10) as date,
-      COUNT(*)::int as value
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND (raw_json->>'startTimeLocal')::date >= ${today}::date - make_interval(days => ${days})
+    SELECT date, COUNT(*)::int as value
+    FROM (
+      SELECT LEFT((raw_json->>'startTimeLocal')::text, 10) as date
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' NOT IN ('strength_training', 'gym')
+        AND (raw_json->>'startTimeLocal')::date >= ${today}::date - make_interval(days => ${days})
+      UNION ALL
+      SELECT LEFT((raw_json->>'start_time')::text, 10) as date
+      FROM hevy_raw_data
+      WHERE endpoint_name = 'workout'
+        AND (raw_json->>'start_time')::date >= ${today}::date - make_interval(days => ${days})
+    ) all_acts
     GROUP BY date
     ORDER BY date ASC
   `;
   const previous = await sql`
-    SELECT
-      LEFT((raw_json->>'startTimeLocal')::text, 10) as date,
-      COUNT(*)::int as value
-    FROM garmin_activity_raw
-    WHERE endpoint_name = 'summary'
-      AND (raw_json->>'startTimeLocal')::date >= ${today}::date - make_interval(days => ${days * 2})
-      AND (raw_json->>'startTimeLocal')::date < ${today}::date - make_interval(days => ${days})
+    SELECT date, COUNT(*)::int as value
+    FROM (
+      SELECT LEFT((raw_json->>'startTimeLocal')::text, 10) as date
+      FROM garmin_activity_raw
+      WHERE endpoint_name = 'summary'
+        AND raw_json->'activityType'->>'typeKey' NOT IN ('strength_training', 'gym')
+        AND (raw_json->>'startTimeLocal')::date >= ${today}::date - make_interval(days => ${days * 2})
+        AND (raw_json->>'startTimeLocal')::date < ${today}::date - make_interval(days => ${days})
+      UNION ALL
+      SELECT LEFT((raw_json->>'start_time')::text, 10) as date
+      FROM hevy_raw_data
+      WHERE endpoint_name = 'workout'
+        AND (raw_json->>'start_time')::date >= ${today}::date - make_interval(days => ${days * 2})
+        AND (raw_json->>'start_time')::date < ${today}::date - make_interval(days => ${days})
+    ) all_acts
     GROUP BY date
     ORDER BY date ASC
   `;

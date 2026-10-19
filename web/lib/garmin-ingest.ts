@@ -215,6 +215,90 @@ export async function syncActivitiesForDate(client: GarminClient, sql: QueryFn, 
   }
 }
 
+/**
+ * Find historical dates in the last `maxHistoryDays` (default 365) that have never been synced
+ * into `garmin_raw_data`. Returns the most recent `batchSize` missing dates first so 1M/3M/6M/1Y
+ * windows populate progressively without hitting Garmin rate limits.
+ */
+export async function getBackfillDates(
+  sql: QueryFn,
+  maxHistoryDays = 365,
+  batchSize = 45,
+  now: Date = new Date(),
+  excludeDates: Iterable<string> = [],
+): Promise<{ batch: string[]; remaining: number }> {
+  const today = athleteToday(now);
+  const dayMs = 86_400_000;
+  const todayMs = Date.parse(today + "T00:00:00Z");
+
+  const existingRows = (await sql`
+    SELECT DISTINCT date::text AS date
+    FROM garmin_raw_data
+    WHERE date >= ${today}::date - ${maxHistoryDays}::int
+      AND date < ${today}::date
+  `) as { date: string }[];
+
+  const seen = new Set<string>(existingRows.map((r) => r.date.slice(0, 10)));
+  for (const d of excludeDates) seen.add(d);
+
+  const missing: string[] = [];
+  for (let i = 1; i <= maxHistoryDays; i++) {
+    const d = new Date(todayMs - i * dayMs).toISOString().slice(0, 10);
+    if (!seen.has(d)) missing.push(d);
+  }
+
+  return {
+    batch: missing.slice(0, batchSize),
+    remaining: Math.max(0, missing.length - batchSize),
+  };
+}
+
+/**
+ * Backfill historical Garmin activities in bulk pages of 100 (`start=0, 100, 200`) so runs,
+ * rides, swims, and VO2max readings from the past year are immediately available even before
+ * all 365 daily wellness pages finish backfilling.
+ */
+export async function backfillHistoricalActivities(
+  client: GarminClient,
+  sql: QueryFn,
+  maxActivities = 300,
+): Promise<number> {
+  const existingRows = (await sql`
+    SELECT activity_id::bigint AS aid
+    FROM garmin_activity_raw
+    WHERE endpoint_name = 'summary'
+  `) as { aid: number | string }[];
+  const existingIds = new Set<number>(existingRows.map((r) => Number(r.aid)));
+
+  let added = 0;
+  const pageSize = 100;
+  for (let start = 0; start < maxActivities; start += pageSize) {
+    try {
+      const path = `/activitylist-service/activities/search/activities?start=${start}&limit=${pageSize}`;
+      const activities = (await client.connectapi(path)) as ActivityListEntry[];
+      if (!Array.isArray(activities) || activities.length === 0) break;
+
+      let newInPage = 0;
+      for (const a of activities) {
+        const aid = a.activityId;
+        if (!aid || existingIds.has(aid)) continue;
+        existingIds.add(aid);
+        newInPage++;
+        await upsertActivityRaw(sql, aid, "summary", a);
+        await syncActivityDetails(client, sql, aid);
+        added++;
+      }
+
+      // If an entire page of 100 activities was already stored, older pages are likely stored too
+      if (newInPage === 0 || activities.length < pageSize) break;
+    } catch (e) {
+      console.warn(`  Warning: bulk activity backfill (start=${start}) failed: ${(e as Error).message}`);
+      break;
+    }
+  }
+  return added;
+}
+
 export interface IngestResult {
   displayName: string;
   dates: string[];
@@ -223,9 +307,10 @@ export interface IngestResult {
   daysParsed: number;
   fitnessUpdated: boolean;
   readiness: string | null;
+  backfillRemaining?: number;
 }
 
-/** Top-level ingestion: auth, resolve stale dates, sync each. */
+/** Top-level ingestion: auth, resolve stale dates, sync each, and backfill historical days. */
 export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promise<IngestResult> {
   // A flat DI row (Python fresh-login) would read as "needs MFA" (#723).
   const auth = new GarminAuth({ store: new DBTokenStore(databaseUrl) });
@@ -273,6 +358,52 @@ export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promis
     try { const r = await processDay(sql, date); if (r.health) daysParsed += 1; }
     catch (e) { console.warn(`  parse failed for ${date}: ${(e as Error).message}`); }
   }
+
+  // Bulk-backfill historical activities (up to 300 most recent activities) so 1M/3M/6M/1Y/All
+  // activity & running views have full history right away.
+  try {
+    const bulkActs = await backfillHistoricalActivities(client, sql, 300);
+    if (bulkActs > 0) {
+      activitiesFound += bulkActs;
+      console.log(`  backfilled ${bulkActs} historical Garmin activities`);
+    }
+  } catch (e) {
+    console.warn(`  historical activity backfill failed: ${(e as Error).message}`);
+  }
+
+  // Backfill up to 45 missing historical daily wellness days per run (up to 365 days back).
+  let backfillRemaining = 0;
+  try {
+    const backfill = await getBackfillDates(sql, 365, 45, new Date(), dates);
+    backfillRemaining = backfill.remaining;
+    if (backfill.batch.length > 0) {
+      console.log(`  backfilling ${backfill.batch.length} historical Garmin days (${backfill.remaining} remaining after this batch)`);
+      const concurrency = 3;
+      for (let i = 0; i < backfill.batch.length; i += concurrency) {
+        const chunk = backfill.batch.slice(i, i + concurrency);
+        await Promise.all(
+          chunk.map(async (date) => {
+            const saved = await syncDay(client, sql, display, date);
+            recordsSaved += saved;
+            if (saved === 0) {
+              // Mark checked so empty historical days (watch not worn) are not re-queried forever
+              await upsertRaw(sql, date, "backfill_checked", { checked: true });
+            }
+            try {
+              const r = await processDay(sql, date);
+              if (r.health) daysParsed += 1;
+            } catch (e) {
+              console.warn(`  parse failed for backfill ${date}: ${(e as Error).message}`);
+            }
+          }),
+        );
+      }
+      dates.push(...backfill.batch);
+    }
+  } catch (e) {
+    console.warn(`  historical daily backfill failed: ${(e as Error).message}`);
+  }
+
   // Fitness trajectory (VO2max / EF / decoupling / race prediction) for today —
   // uses the raw + parsed data just ingested. Non-fatal on failure.
   let fitnessUpdated = false;
@@ -295,5 +426,14 @@ export async function runGarminIngest(databaseUrl: string, sql: QueryFn): Promis
     readiness = rd.traffic_light;
   } catch (e) { console.warn(`  readiness failed: ${(e as Error).message}`); }
 
-  return { displayName: display, dates, recordsSaved, activitiesFound, daysParsed, fitnessUpdated, readiness };
+  return {
+    displayName: display,
+    dates,
+    recordsSaved,
+    activitiesFound,
+    daysParsed,
+    fitnessUpdated,
+    readiness,
+    backfillRemaining,
+  };
 }
