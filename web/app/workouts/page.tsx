@@ -277,7 +277,7 @@ async function getProgramSplit(cutoff: string) {
   return rows as ProgramSplitRow[];
 }
 
-async function getExercisePRs() {
+async function getExercisePRs(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     WITH all_sets AS (
@@ -289,6 +289,7 @@ async function getExercisePRs() {
         jsonb_array_elements(raw_json->'exercises') as e,
         jsonb_array_elements(e->'sets') as s
       WHERE endpoint_name = 'workout'
+        AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
         AND s->>'type' = 'normal'
         AND (s->>'weight_kg')::float > 0
     ),
@@ -486,7 +487,7 @@ async function getWorkoutFrequencyByWeekDetailed(cutoff: string) {
   return Array.from(weekMap.values()).sort((a, b) => a.week.localeCompare(b.week));
 }
 
-async function getWorkoutTimeline() {
+async function getWorkoutTimeline(cutoff: string) {
   const sql = getDb();
   // Get per-workout data for summary stat timelines
   const rows = await sql`
@@ -499,6 +500,7 @@ async function getWorkoutTimeline() {
     FROM hevy_raw_data h
     LEFT JOIN workout_enrichment we ON we.hevy_id = h.raw_json->>'id'
     WHERE h.endpoint_name = 'workout'
+      AND (h.raw_json->>'start_time')::timestamp >= ${cutoff}::date
     ORDER BY date ASC
   `;
   return rows as TimelineRow[];
@@ -584,7 +586,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
       getWorkoutSummaryStats(cutoff),
       getTopExercises(cutoff),
       getProgramSplit(cutoff),
-      getExercisePRs(),
+      getExercisePRs(cutoff),
       getTrainingCalendar(tz),
       getWorkoutFrequencyByWeekDetailed(cutoff),
       getMonthlyMuscleVolume(cutoff, tz),
@@ -592,7 +594,7 @@ export default async function WorkoutsPage({ searchParams }: { searchParams: Pro
       getWorkoutCount(),
       getBodyMapVolumes(cutoff),
       getWorkoutHrTrend(cutoff),
-      getWorkoutTimeline(),
+      getWorkoutTimeline(cutoff),
     ]);
 
   const totalWeeks = stats

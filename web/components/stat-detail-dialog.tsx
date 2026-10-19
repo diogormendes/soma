@@ -9,6 +9,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { RANGES as WEB_RANGES } from "@/lib/time-ranges";
 import type { ChartName, ChartValue } from "@/lib/chart-types";
 import {
   ResponsiveContainer,
@@ -45,7 +46,7 @@ interface MetricResponse {
 }
 
 type ChartType = "bar" | "line" | "area" | "stacked-area" | "stacked-bar";
-type Range = "7d" | "30d" | "90d" | "1y";
+type Range = (typeof WEB_RANGES)[number]["value"];
 
 interface MetricConfig {
   title: string;
@@ -124,7 +125,14 @@ const METRIC_CONFIG: Record<string, MetricConfig> = {
   },
 };
 
-const RANGES: Range[] = ["7d", "30d", "90d", "1y"];
+function getActivePageRange(): Range {
+  if (typeof window === "undefined") return "1m";
+  const fromUrl = new URLSearchParams(window.location.search).get("range");
+  const fromStorage = window.localStorage.getItem("soma_time_range");
+  const candidate = fromUrl || fromStorage;
+  const found = WEB_RANGES.find((r) => r.value === candidate);
+  return found ? found.value : "1m";
+}
 
 // --- Component ---
 
@@ -139,9 +147,18 @@ export function StatDetailDialog({
   open,
   onOpenChange,
 }: StatDetailDialogProps) {
-  const [range, setRange] = useState<Range>("30d");
+  const [range, setRange] = useState<Range>("1m");
   const [data, setData] = useState<MetricResponse | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Sync dialog range with active page range when opened
+  useEffect(() => {
+    if (open) {
+      setRange(getActivePageRange());
+    } else {
+      setData(null);
+    }
+  }, [open, metric]);
 
   const fetchData = useCallback(async () => {
     if (!metric) return;
@@ -165,14 +182,6 @@ export function StatDetailDialog({
     }
   }, [open, metric, range, fetchData]);
 
-  // Reset range when opening a different metric
-  useEffect(() => {
-    if (!open) {
-      setData(null);
-      setRange("30d");
-    }
-  }, [open]);
-
   const config = metric ? METRIC_CONFIG[metric] : null;
   if (!config) return null;
 
@@ -189,15 +198,15 @@ export function StatDetailDialog({
         </DialogHeader>
 
         {/* Range toggles */}
-        <div className="flex gap-1">
-          {RANGES.map((r) => (
+        <div className="flex flex-wrap gap-1">
+          {WEB_RANGES.map((r) => (
             <Button
-              key={r}
-              variant={range === r ? "default" : "outline"}
+              key={r.value}
+              variant={range === r.value ? "default" : "outline"}
               size="xs"
-              onClick={() => setRange(r)}
+              onClick={() => setRange(r.value)}
             >
-              {r}
+              {r.label}
             </Button>
           ))}
         </div>

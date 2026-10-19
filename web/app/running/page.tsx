@@ -32,7 +32,6 @@ import {
   BarChart3,
 } from "lucide-react";
 import { cutoffIso } from "@/lib/date-range";
-import { todayForRequest } from "@/lib/request-tz";
 
 export const revalidate = 300;
 
@@ -147,6 +146,7 @@ async function getRunningStats(cutoff: string) {
       SUM((raw_json->>'distance')::float) / 1000.0 as total_km,
       AVG((raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float / 1000.0, 0)) / 60.0 as avg_pace,
       AVG((raw_json->>'averageHR')::float) as avg_hr,
+      AVG((raw_json->>'vO2MaxValue')::float) as avg_vo2max,
       MAX((raw_json->>'vO2MaxValue')::float) as peak_vo2max,
       MAX((raw_json->>'distance')::float) / 1000.0 as longest_run
     FROM garmin_activity_raw
@@ -247,9 +247,7 @@ async function getCadenceStride(cutoff: string) {
   return rows as CadenceStrideRow[];
 }
 
-async function getFitnessScores() {
-  // His calendar date on the device making this request, never the database's New York clock.
-  const today = await todayForRequest();
+async function getFitnessScores(cutoff: string) {
   const sql = getDb();
   const endurance = await sql`
     SELECT
@@ -258,7 +256,7 @@ async function getFitnessScores() {
       (raw_json->>'classification')::int as classification
     FROM garmin_raw_data
     WHERE endpoint_name = 'endurance_score'
-      AND date >= ${today}::date - INTERVAL '12 months'
+      AND date >= ${cutoff}::date
     ORDER BY date ASC
   `;
   const hill = await sql`
@@ -269,7 +267,7 @@ async function getFitnessScores() {
       (raw_json->>'enduranceScore')::int as endurance
     FROM garmin_raw_data
     WHERE endpoint_name = 'hill_score'
-      AND date >= ${today}::date - INTERVAL '12 months'
+      AND date >= ${cutoff}::date
     ORDER BY date ASC
   `;
 
@@ -351,7 +349,7 @@ async function getTrainingLoadTrend(cutoff: string) {
   return rows as TrainingLoadRow[];
 }
 
-async function getPersonalRecords() {
+async function getPersonalRecords(cutoff: string) {
   const sql = getDb();
 
   const [fastest5k, fastest10k, longest, maxHR, maxCal, fastestPace] = await Promise.all([
@@ -367,6 +365,7 @@ async function getPersonalRecords() {
       WHERE endpoint_name = 'summary'
         AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
         AND (raw_json->>'distance')::float >= 4800
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
       ORDER BY (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float, 0) ASC
       LIMIT 1
     `,
@@ -382,6 +381,7 @@ async function getPersonalRecords() {
       WHERE endpoint_name = 'summary'
         AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
         AND (raw_json->>'distance')::float >= 9500
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
       ORDER BY (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float, 0) ASC
       LIMIT 1
     `,
@@ -395,6 +395,7 @@ async function getPersonalRecords() {
       FROM garmin_activity_raw
       WHERE endpoint_name = 'summary'
         AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
       ORDER BY (raw_json->>'distance')::float DESC
       LIMIT 1
     `,
@@ -409,6 +410,7 @@ async function getPersonalRecords() {
       WHERE endpoint_name = 'summary'
         AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
         AND raw_json->>'maxHR' IS NOT NULL
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
       ORDER BY (raw_json->>'maxHR')::float DESC
       LIMIT 1
     `,
@@ -423,6 +425,7 @@ async function getPersonalRecords() {
       WHERE endpoint_name = 'summary'
         AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
         AND raw_json->>'calories' IS NOT NULL
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
       ORDER BY (raw_json->>'calories')::float DESC
       LIMIT 1
     `,
@@ -437,6 +440,7 @@ async function getPersonalRecords() {
       WHERE endpoint_name = 'summary'
         AND raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
         AND (raw_json->>'distance')::float > 3000
+        AND (raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
       ORDER BY (raw_json->>'duration')::float / NULLIF((raw_json->>'distance')::float, 0) ASC
       LIMIT 1
     `,
@@ -524,7 +528,7 @@ async function getRecentRuns(cutoff: string) {
   return rows as RecentRunRow[];
 }
 
-async function getShoeMileage() {
+async function getShoeMileage(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     WITH running_gear AS (
@@ -541,6 +545,7 @@ async function getShoeMileage() {
       WHERE s.endpoint_name = 'summary'
         AND s.raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
         AND g.raw_json->0->>'gearTypeName' = 'Shoes'
+        AND (s.raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
     )
     SELECT
       gear_pk,
@@ -669,12 +674,12 @@ export default async function RunningPage({
       getVO2MaxTrend(cutoff),
       getHRPaceData(cutoff),
       getCadenceStride(cutoff),
-      getPersonalRecords(),
+      getPersonalRecords(cutoff),
       getRecentRuns(cutoff),
-      getFitnessScores(),
+      getFitnessScores(cutoff),
       getTrainingStatus(),
       getOverallHRDistribution(cutoff),
-      getShoeMileage(),
+      getShoeMileage(cutoff),
       getSplitAnalysis(cutoff),
       getBestSplits(cutoff),
       getTrainingLoadTrend(cutoff),
@@ -716,11 +721,8 @@ export default async function RunningPage({
         />
         <StatCard
           title="VO2max"
-          /* Latest VO2max (current fitness), not the range peak — matches the
-             dashboard KPI. Read from the already-fetched trend (ordered date-ASC,
-             so the last entry is the most recent) to avoid adding a DB query on
-             this already query-heavy page. Falls back to the range max. */
           value={(() => {
+            if (stats?.avg_vo2max) return Number(stats.avg_vo2max).toFixed(1);
             const trend = vo2max as { vo2max: number | null }[] | null;
             const latest = trend?.length ? Number(trend[trend.length - 1]?.vo2max) : null;
             return latest
@@ -729,7 +731,7 @@ export default async function RunningPage({
                 ? `${Number(stats.peak_vo2max).toFixed(1)}`
                 : "—";
           })()}
-          subtitle="ml/kg/min"
+          subtitle={stats?.peak_vo2max ? `Peak: ${Number(stats.peak_vo2max).toFixed(1)} ml/kg/min` : "ml/kg/min"}
           icon={<Zap className="h-4 w-4 text-yellow-400" />}
         />
       </div>

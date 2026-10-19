@@ -14,7 +14,7 @@ import { StressChart } from "@/components/stress-chart";
 import { ExpandableExerciseList } from "@/components/expandable-exercise-list";
 import { InteractiveThisWeek } from "@/components/interactive-this-week";
 import { TimeRangeSelector } from "@/components/time-range-selector";
-import { rangeToDays } from "@/lib/time-ranges";
+import { RANGES, rangeToDays } from "@/lib/time-ranges";
 import { getDb } from "@/lib/db";
 import type { Numeric } from "@/lib/json";
 import type { HevyExercise } from "@/lib/hevy-types";
@@ -153,38 +153,61 @@ async function getTodayHealth() {
   return merged;
 }
 
-async function getWeeklyAverages() {
+async function getWeeklyAverages(rangeDays: number) {
   // His calendar date on the device making this request, never the database's New York clock.
   const today = await todayForRequest();
   const sql = getDb();
   const rows = await sql`
     SELECT
-      ROUND(AVG(total_steps)) as avg_steps,
-      ROUND(AVG(sleep_time_seconds)) as avg_sleep,
-      ROUND(AVG(resting_heart_rate)) as avg_rhr,
-      ROUND(AVG(avg_stress_level)) as avg_stress,
-      ROUND(AVG(active_kilocalories)) as avg_active_cal,
+      ROUND(AVG(NULLIF(total_steps, 0))) as avg_steps,
+      SUM(total_steps) as total_steps,
+      ROUND(AVG(NULLIF(total_distance_meters, 0))) as avg_distance_meters,
+      SUM(total_distance_meters) as total_distance_meters,
+      ROUND(AVG(NULLIF(sleep_time_seconds, 0))) as avg_sleep,
+      ROUND(AVG(NULLIF(resting_heart_rate, 0))) as avg_rhr,
+      MIN(NULLIF(min_heart_rate, 0)) as min_hr,
+      MAX(NULLIF(max_heart_rate, 0)) as max_hr,
+      ROUND(AVG(NULLIF(avg_stress_level, 0))) as avg_stress,
+      MAX(NULLIF(max_stress_level, 0)) as max_stress,
+      ROUND(AVG(NULLIF(active_kilocalories, 0))) as avg_active_cal,
+      ROUND(AVG(NULLIF(total_kilocalories, 0))) as avg_total_cal,
       COUNT(*) as days_count
     FROM daily_health_summary
-    WHERE date >= ${today}::date - 7
+    WHERE date >= ${today}::date - ${rangeDays}::int
   `;
   return rows[0] || null;
 }
 
-async function getPreviousWeekAverages() {
+async function getPreviousWeekAverages(rangeDays: number) {
   // His calendar date on the device making this request, never the database's New York clock.
   const today = await todayForRequest();
   const sql = getDb();
   const rows = await sql`
     SELECT
-      ROUND(AVG(total_steps)) as avg_steps,
-      ROUND(AVG(sleep_time_seconds)) as avg_sleep,
-      ROUND(AVG(resting_heart_rate)) as avg_rhr,
-      ROUND(AVG(avg_stress_level)) as avg_stress,
-      ROUND(AVG(active_kilocalories)) as avg_active_cal,
+      ROUND(AVG(NULLIF(total_steps, 0))) as avg_steps,
+      ROUND(AVG(NULLIF(sleep_time_seconds, 0))) as avg_sleep,
+      ROUND(AVG(NULLIF(resting_heart_rate, 0))) as avg_rhr,
+      ROUND(AVG(NULLIF(avg_stress_level, 0))) as avg_stress,
+      ROUND(AVG(NULLIF(active_kilocalories, 0))) as avg_active_cal,
       COUNT(*) as days_count
     FROM daily_health_summary
-    WHERE date >= ${today}::date - 14 AND date < ${today}::date - 7
+    WHERE date >= ${today}::date - ${rangeDays * 2}::int
+      AND date < ${today}::date - ${rangeDays}::int
+  `;
+  return rows[0] || null;
+}
+
+async function getPeriodSleepStats(cutoff: string) {
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      AVG((raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::float) as avg_total,
+      AVG((raw_json->'dailySleepDTO'->'sleepScores'->'overall'->>'value')::float) as avg_score,
+      COUNT(*) as nights
+    FROM garmin_raw_data
+    WHERE endpoint_name = 'sleep_data'
+      AND (raw_json->'dailySleepDTO'->>'sleepTimeSeconds')::int > 0
+      AND date >= ${cutoff}::date
   `;
   return rows[0] || null;
 }
@@ -244,14 +267,14 @@ async function getRunningStats(cutoff: string) {
     SELECT
       COUNT(*) as total_runs,
       SUM((raw_json->>'distance')::float) / 1000.0 as total_km,
-      -- VO2max is a point-in-time fitness metric, not a range aggregate: show the
-      -- latest value regardless of the selected range (was MAX-over-range, which
-      -- made it read 54 at 6M but 57 at "All").
+      AVG((raw_json->>'vO2MaxValue')::float) as avg_vo2max,
+      MAX((raw_json->>'vO2MaxValue')::float) as peak_vo2max,
       (SELECT (a.raw_json->>'vO2MaxValue')::float
          FROM garmin_activity_raw a
         WHERE a.endpoint_name = 'summary'
           AND a.raw_json->>'vO2MaxValue' IS NOT NULL
           AND a.raw_json->'activityType'->>'typeKey' IN ('running', 'treadmill_running')
+          AND (a.raw_json->>'startTimeLocal')::timestamp >= ${cutoff}::date
         ORDER BY a.activity_id DESC
         LIMIT 1) as vo2max
     FROM garmin_activity_raw
@@ -739,7 +762,7 @@ async function getActivityHeatmap(cutoff: string) {
   return Array.from(resultMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
-async function getLastWorkoutDetail() {
+async function getLastWorkoutDetail(cutoff: string) {
   const sql = getDb();
   const rows = await sql`
     SELECT
@@ -750,6 +773,7 @@ async function getLastWorkoutDetail() {
       raw_json->'exercises' as exercises
     FROM hevy_raw_data
     WHERE endpoint_name = 'workout'
+      AND (raw_json->>'start_time')::timestamp >= ${cutoff}::date
     ORDER BY raw_json->>'start_time' DESC
     LIMIT 1
   `;
@@ -862,20 +886,22 @@ export default async function HomePage({
 }) {
   const { range: rangeParam } = await searchParams;
   const rangeDays = rangeToDays(rangeParam);
+  const rangeLabel = RANGES.find((r) => r.days === rangeDays)?.label ?? `${rangeDays}d`;
   const cutoff = cutoffIso(rangeDays);
   const heatmapCutoff = cutoffIso(Math.min(rangeDays, 365));
 
-  const [health, weekly, prevWeekly, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, latestSleep, recovery, rhrTrend, stressTrend] =
+  const [health, weekly, prevWeekly, periodSleep, workouts, gymFreq, runStats, activityCounts, recentActivities, lastWorkout, weeklyTraining, streak, stepsTrend, fitnessAge, intensityMin, weightTrend, calorieTrend, heatmapData, latestSleep, recovery, rhrTrend, stressTrend] =
     await Promise.all([
       getTodayHealth(),
-      getWeeklyAverages(),
-      getPreviousWeekAverages(),
+      getWeeklyAverages(rangeDays),
+      getPreviousWeekAverages(rangeDays),
+      getPeriodSleepStats(cutoff),
       getWorkoutStats(cutoff),
       getGymFrequency(cutoff),
       getRunningStats(cutoff),
       getActivityCounts(cutoff),
       getRecentActivities(cutoff),
-      getLastWorkoutDetail(),
+      getLastWorkoutDetail(cutoff),
       getWeeklyTrainingSummary(),
       getTrainingStreak(),
       getStepsTrend(cutoff),
@@ -890,7 +916,7 @@ export default async function HomePage({
       getStressTrend(cutoff),
     ]);
 
-  // Compute 7-day vs prior-7-day trends
+  // Compute period vs prior-period trends
   const stepsTrendPct = pctChange(Number(weekly?.avg_steps), Number(prevWeekly?.avg_steps));
   const calTrendPct = pctChange(Number(weekly?.avg_active_cal), Number(prevWeekly?.avg_active_cal));
   const rhrTrendPct = pctChange(Number(weekly?.avg_rhr), Number(prevWeekly?.avg_rhr));
@@ -938,58 +964,82 @@ export default async function HomePage({
           {
             metric: "steps",
             title: "Steps",
-            value: health?.total_steps?.toLocaleString() ?? "—",
-            subtitle: health?.total_distance_meters
-              ? `${(health.total_distance_meters / 1000).toFixed(1)} km`
-              : undefined,
+            value: weekly?.avg_steps
+              ? Number(weekly.avg_steps).toLocaleString()
+              : health?.total_steps?.toLocaleString() ?? "—",
+            subtitle: weekly?.total_distance_meters
+              ? `${(Number(weekly.total_distance_meters) / 1000).toFixed(1)} km total · ${rangeLabel} avg/day`
+              : health?.total_distance_meters
+                ? `${(health.total_distance_meters / 1000).toFixed(1)} km`
+                : undefined,
             icon: <Footprints className="h-4 w-4 text-muted-foreground" />,
-            info: "Daily step count from your Garmin watch",
-            trend: stepsTrendPct != null ? { value: stepsTrendPct, label: "7-day avg vs prior week" } : null,
+            info: "Average daily step count from your Garmin watch in the selected period",
+            trend: stepsTrendPct != null ? { value: stepsTrendPct, label: `${rangeLabel} avg vs prior ${rangeLabel}` } : null,
           },
           {
             metric: "calories",
             title: "Active Calories",
-            value: health?.active_kilocalories?.toLocaleString() ?? "—",
-            subtitle: health?.total_kilocalories
-              ? `${health.total_kilocalories.toLocaleString()} total`
-              : undefined,
+            value: weekly?.avg_active_cal
+              ? Number(weekly.avg_active_cal).toLocaleString()
+              : health?.active_kilocalories?.toLocaleString() ?? "—",
+            subtitle: weekly?.avg_total_cal
+              ? `${Number(weekly.avg_total_cal).toLocaleString()} total · ${rangeLabel} avg/day`
+              : health?.total_kilocalories
+                ? `${health.total_kilocalories.toLocaleString()} total`
+                : undefined,
             icon: <Flame className="h-4 w-4 text-orange-400" />,
-            info: "Calories burned above your BMR through activity",
-            trend: calTrendPct != null ? { value: calTrendPct, label: "7-day avg vs prior week" } : null,
+            info: "Average daily calories burned above your BMR through activity in the selected period",
+            trend: calTrendPct != null ? { value: calTrendPct, label: `${rangeLabel} avg vs prior ${rangeLabel}` } : null,
           },
           {
             metric: "rhr",
             title: "Resting HR",
-            value: health?.resting_heart_rate ? `${health.resting_heart_rate}` : "—",
-            subtitle: health?.min_heart_rate && health?.max_heart_rate
-              ? `Range: ${health.min_heart_rate}–${health.max_heart_rate} bpm`
-              : undefined,
+            value: weekly?.avg_rhr
+              ? `${weekly.avg_rhr}`
+              : health?.resting_heart_rate
+                ? `${health.resting_heart_rate}`
+                : "—",
+            subtitle: weekly?.min_hr && weekly?.max_hr
+              ? `Range: ${weekly.min_hr}–${weekly.max_hr} bpm`
+              : health?.min_heart_rate && health?.max_heart_rate
+                ? `Range: ${health.min_heart_rate}–${health.max_heart_rate} bpm`
+                : undefined,
             icon: <HeartPulse className="h-4 w-4 text-red-400" />,
             info: "Lower resting HR generally indicates better cardiovascular fitness. Elite athletes: 40-50 bpm",
             // For RHR, lower is better — invert so a decrease shows green
-            trend: rhrTrendPct != null ? { value: -rhrTrendPct, label: "7-day avg vs prior week (lower is better)" } : null,
+            trend: rhrTrendPct != null ? { value: -rhrTrendPct, label: `${rangeLabel} avg vs prior ${rangeLabel} (lower is better)` } : null,
           },
           {
             metric: "vo2max",
             title: "VO2max",
-            value: runStats?.vo2max ? `${Number(runStats.vo2max).toFixed(1)}` : "—",
-            subtitle: "ml/kg/min",
+            value: runStats?.avg_vo2max
+              ? `${Number(runStats.avg_vo2max).toFixed(1)}`
+              : runStats?.vo2max
+                ? `${Number(runStats.vo2max).toFixed(1)}`
+                : "—",
+            subtitle: runStats?.peak_vo2max
+              ? `Peak: ${Number(runStats.peak_vo2max).toFixed(1)} ml/kg/min`
+              : "ml/kg/min",
             icon: <Zap className="h-4 w-4 text-yellow-400" />,
-            info: "Maximum oxygen uptake. Higher is better. Excellent: 50+ ml/kg/min",
+            info: "Maximum oxygen uptake in the selected period. Higher is better. Excellent: 50+ ml/kg/min",
           },
         ]}
         secondaryCards={[
           {
             metric: "sleep",
             title: "Sleep",
-            // A night older than the watch's cadence is not the headline: absent is
-            // unknown, not the last night we saw (#713, #731).
+            // Show average sleep in the selected period when available; fall back to latest night freshness.
             value: (() => {
+              const avgSec = Number(weekly?.avg_sleep || periodSleep?.avg_total || 0);
+              if (avgSec > 0) return `${(avgSec / 3600).toFixed(1)}h`;
               if (health?.sleep_time_seconds) return `${(health.sleep_time_seconds / 3600).toFixed(1)}h`;
               const f = freshness(latestSleep?.date ?? null, todayKey());
               return !f.stale && latestSleep?.total ? `${(latestSleep.total / 3600).toFixed(1)}h` : "—";
             })(),
             subtitle: (() => {
+              if (periodSleep?.avg_score) {
+                return `Avg score: ${Math.round(Number(periodSleep.avg_score))} · ${Number(periodSleep.nights || 0)} nights`;
+              }
               if (health?.sleep_time_seconds) return latestSleep?.score ? `Score: ${latestSleep.score}` : undefined;
               const f = freshness(latestSleep?.date ?? null, todayKey());
               if (!f.stale) return [latestSleep?.score ? `Score: ${latestSleep.score}` : "", latestSleep?.date ?? ""].filter(Boolean).join(" · ") || undefined;
@@ -997,20 +1047,26 @@ export default async function HomePage({
               return `${staleHeadline("night", f)}${last}`;
             })(),
             icon: <Moon className="h-4 w-4 text-indigo-400" />,
-            info: "Total sleep time from Garmin sleep tracking. Recommended: 7-9 hours",
-            trend: sleepTrendPct != null ? { value: sleepTrendPct, label: "7-day avg vs prior week" } : null,
+            info: "Average total sleep time from Garmin sleep tracking in the selected period. Recommended: 7-9 hours",
+            trend: sleepTrendPct != null ? { value: sleepTrendPct, label: `${rangeLabel} avg vs prior ${rangeLabel}` } : null,
           },
           {
             metric: "stress",
             title: "Avg Stress",
-            value: health?.avg_stress_level ? health.avg_stress_level : "—",
-            subtitle: health?.max_stress_level
-              ? `Peak: ${health.max_stress_level}`
-              : undefined,
+            value: weekly?.avg_stress
+              ? weekly.avg_stress
+              : health?.avg_stress_level
+                ? health.avg_stress_level
+                : "—",
+            subtitle: weekly?.max_stress
+              ? `Peak: ${weekly.max_stress}`
+              : health?.max_stress_level
+                ? `Peak: ${health.max_stress_level}`
+                : undefined,
             icon: <Brain className="h-4 w-4 text-yellow-400" />,
-            info: "Garmin stress score (0-100). Lower is better. 0-25 = Rest, 26-50 = Low, 51-75 = Medium, 76-100 = High",
+            info: "Garmin stress score (0-100) in the selected period. Lower is better. 0-25 = Rest, 26-50 = Low, 51-75 = Medium, 76-100 = High",
             // For stress, lower is better — invert so a decrease shows green
-            trend: stressTrendPct != null ? { value: -stressTrendPct, label: "7-day avg vs prior week (lower is better)" } : null,
+            trend: stressTrendPct != null ? { value: -stressTrendPct, label: `${rangeLabel} avg vs prior ${rangeLabel} (lower is better)` } : null,
           },
           {
             metric: "activities",
@@ -1138,7 +1194,7 @@ export default async function HomePage({
           <ExpandableChartCard
             title="Daily Steps"
             icon={<Footprints className="h-4 w-4" />}
-            subtitle={weekly?.avg_steps ? `7-day avg: ${Number(weekly.avg_steps).toLocaleString()}` : undefined}
+            subtitle={weekly?.avg_steps ? `${rangeLabel} avg: ${Number(weekly.avg_steps).toLocaleString()}` : undefined}
           >
             <StepsTrendChart
               data={stepsTrend.map((s) => ({
@@ -1153,7 +1209,7 @@ export default async function HomePage({
           <ExpandableChartCard
             title="Daily Calories"
             icon={<Flame className="h-4 w-4 text-orange-400" />}
-            subtitle={weekly?.avg_active_cal ? `7-day active avg: ${Number(weekly.avg_active_cal).toLocaleString()} kcal` : undefined}
+            subtitle={weekly?.avg_active_cal ? `${rangeLabel} active avg: ${Number(weekly.avg_active_cal).toLocaleString()} kcal` : undefined}
           >
             <CalorieTrendChart
               data={calorieTrend.map((c) => ({
@@ -1172,12 +1228,12 @@ export default async function HomePage({
           const rhrData = rhrTrend.filter((r) => Number(r.rhr) > 0);
           if (rhrData.length === 0) return null;
           const latest = Number(rhrData[rhrData.length - 1].rhr);
-          const avg7d = rhrData.slice(-7).reduce((s: number, r) => s + Number(r.rhr), 0) / Math.min(rhrData.length, 7);
+          const avgPeriod = rhrData.reduce((s: number, r) => s + Number(r.rhr), 0) / rhrData.length;
           return (
             <ExpandableChartCard
               title="Resting Heart Rate"
               icon={<HeartPulse className="h-4 w-4 text-red-400" />}
-              subtitle={`${latest} bpm · avg ${Math.round(avg7d)}`}
+              subtitle={`${latest} bpm · ${rangeLabel} avg ${Math.round(avgPeriod)}`}
             >
               <RHRChart
                 data={rhrData.map((r) => ({
@@ -1193,12 +1249,12 @@ export default async function HomePage({
           const stressData = stressTrend;
           if (stressData.length === 0) return null;
           const latest = Number(stressData[stressData.length - 1].avg_stress);
-          const avg7d = stressData.slice(-7).reduce((s: number, r) => s + Number(r.avg_stress), 0) / Math.min(stressData.length, 7);
+          const avgPeriod = stressData.reduce((s: number, r) => s + Number(r.avg_stress), 0) / stressData.length;
           return (
             <ExpandableChartCard
               title="Stress Trend"
               icon={<Brain className="h-4 w-4 text-yellow-400" />}
-              subtitle={`Today: ${latest} · avg ${Math.round(avg7d)}`}
+              subtitle={`Latest: ${latest} · ${rangeLabel} avg ${Math.round(avgPeriod)}`}
             >
               <StressChart
                 data={stressData.map((s) => ({

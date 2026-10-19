@@ -401,7 +401,6 @@ async function getSleepRegularity(cutoff: string) {
       AND raw_json->'dailySleepDTO'->>'sleepStartTimestampLocal' IS NOT NULL
       AND date >= ${cutoff}
     ORDER BY date DESC
-    LIMIT 30
   `;
   if (rows.length < 3) return null;
 
@@ -629,7 +628,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
               <Sunrise className="h-4 w-4 text-yellow-400" />
               Sleep Schedule
               {(() => {
-                const recent = sleepSchedule.slice(-7);
+                const recent = sleepSchedule;
                 // Normalize bedtime: hours before 18 are "next day" (add 24)
                 const avgBedNorm = recent.reduce((s: number, d) => {
                   const h = d.bedtimeHour;
